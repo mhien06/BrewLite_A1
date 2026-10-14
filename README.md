@@ -109,7 +109,7 @@ Task chỉ được đánh dấu Done sau khi đáp ứng tiêu chí chấp nh�
 - CORS cho phép origin `http://localhost:3000`.
 - `npm audit --omit=dev`: không có cảnh báo ở cả hai ứng dụng tại thời điểm kiểm tra.
 - Frontend có 5 cảnh báo mức high trong dependencies phát triển của ESLint (chuỗi braces/micromatch/fast-glob). npm đề xuất hạ major eslint-config-next; chưa áp dụng vì không tương thích cấu hình hiện tại. Cần theo dõi bản sửa upstream.
-- Chưa commit, push, review hoặc merge; chưa đánh dấu task Done.
+
 
 ## Tài liệu công nghệ
 
