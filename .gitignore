@@ -1,4 +1,18 @@
-node_modules/ 
-.env 
-.next/ 
-dist/ 
+# Dependencies
+node_modules/
+# Build and tests
+.next/
+out/
+dist/
+coverage/
+*.tsbuildinfo
+# Local environment
+.env
+.env.*
+!.env.example
+# Local tooling
+*.log
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
