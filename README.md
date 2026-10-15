@@ -104,11 +104,12 @@ Backend chạy tại <http://localhost:3001>. Dừng ứng dụng bằng `Ctrl +
 
 Ví dụ:
 
-````powershell
+```powershell
 $products = Invoke-RestMethod http://localhost:3001/products
 $products
 
 Invoke-RestMethod "http://localhost:3001/products/$($products[0].id)"
+```
 
 ## Biến môi trường
 
