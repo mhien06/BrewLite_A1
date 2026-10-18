@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { Product } from '@/types/product';
 
 interface ProductCardProps {
@@ -80,7 +81,13 @@ export default function ProductCard({ product }: ProductCardProps) {
       <div className="flex flex-1 flex-col justify-between p-5">
         <div>
           <h3 className="line-clamp-1 text-base font-bold text-amber-950 transition-colors group-hover:text-amber-800 sm:text-lg">
-            {product.name}
+            <Link
+              href={`/products/${product.id}`}
+              className="after:absolute after:inset-0 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-amber-700"
+              aria-label={`Xem chi tiết ${product.name}`}
+            >
+              {product.name}
+            </Link>
           </h3>
           <p className="mt-1 text-xs text-stone-500">
             Mã món: #{String(product.id).padStart(3, '0')}
