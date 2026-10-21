@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { useCartStore } from '@/stores/cart.store';
 import type { CartSize, CartSizeId, CartTopping } from '@/types/cart';
 import type { Product } from '@/types/product';
@@ -28,6 +29,8 @@ const formatPrice = (price: number) =>
   }).format(price);
 
 export default function ProductOptions({ product }: ProductOptionsProps) {
+  const router = useRouter();
+
   const [size, setSize] = useState<CartSizeId>('M');
   const [toppings, setToppings] = useState<string[]>([]);
   const [message, setMessage] = useState('');
@@ -80,7 +83,7 @@ export default function ProductOptions({ product }: ProductOptionsProps) {
       unitPrice: total,
     });
 
-    setMessage('Đã thêm sản phẩm vào giỏ hàng.');
+    router.push('/');
   };
 
   const canAddToCart =
