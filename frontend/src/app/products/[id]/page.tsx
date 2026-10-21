@@ -70,7 +70,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
             lựa chọn của bạn.
           </p>
 
-          <ProductOptions basePrice={product.price} />
+          <ProductOptions product={product} />
         </div>
       </article>
     </main>

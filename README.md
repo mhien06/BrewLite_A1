@@ -6,7 +6,7 @@
 
 Khởi tạo frontend Next.js (TypeScript, Tailwind CSS) và backend NestJS (TypeScript). Frontend hiển thị trang chào; backend có `GET /` trả `Hello World!`.
 
-Chức năng Menu đã được triển khai trong T03, tích hợp với Products API từ T02. PostgreSQL và Prisma đã được bổ sung trong T02. Các chức năng giỏ hàng, đơn hàng, đăng nhập và thanh toán sẽ được triển khai ở những task tiếp theo. Zustand và Docker Compose sẽ được bổ sung theo kế hoạch của dự án.
+Products API được triển khai trong T02; Menu Page trong T03; Product Detail trong T04; Cart và Zustand trong T05. Các chức năng đơn hàng, đăng nhập và thanh toán sẽ được triển khai ở những task tiếp theo. Docker Compose sẽ được bổ sung theo kế hoạch của dự án.
 
 ## Phạm vi T02 - Thành
 
@@ -22,28 +22,65 @@ Xây dựng trang Thực đơn (Menu Page) tại frontend Next.js App Router, k�
 - Xử lý đầy đủ và chỉn chu các trạng thái: Loading skeleton shimmer, Empty state (danh sách rỗng), Error boundary (lỗi kết nối kèm nút thử lại) và Out of stock (hết hàng).
 - Sử dụng TypeScript nghiêm ngặt, Next.js Server Components kết hợp Client Components tái sử dụng, semantic HTML.
 
+## Phạm vi T04 - Product Detail
+
+Xây dựng trang chi tiết sản phẩm tại route động `/products/[id]`, tích hợp trực tiếp với Products API:
+
+- Gọi `GET /products/:id` để lấy dữ liệu sản phẩm thực tế.
+- Hiển thị ảnh, tên, giá cơ bản và số lượng tồn kho.
+- Cho phép chọn kích cỡ S, M, L và nhiều topping.
+- Tự động cập nhật giá theo kích cỡ và topping đã chọn.
+- Xử lý ID không hợp lệ, sản phẩm không tồn tại và lỗi kết nối API.
+- Giao diện responsive, đồng bộ với Menu Page và thương hiệu BrewLite.
+
+## Phạm vi T05 - Cart + Zustand
+
+Xây dựng giỏ hàng phía frontend bằng Zustand:
+
+- Thêm sản phẩm cùng kích cỡ và topping đã chọn vào giỏ hàng.
+- Tự động gộp các CartItem có cùng sản phẩm, kích cỡ và topping.
+- Tách thành dòng mới khi kích cỡ hoặc topping khác nhau.
+- Tăng, giảm số lượng và xóa CartItem.
+- Không cho tổng số lượng của một sản phẩm vượt quá tồn kho.
+- Hiển thị tổng số lượng trên badge ở Header.
+- Hiển thị đúng đơn giá, thành tiền từng dòng và tổng tiền tại `/cart`.
+- Có empty state khi giỏ hàng không có sản phẩm.
+- Kiểm thử Cart store bằng Vitest.
+
 ## Cấu trúc
 
 ```text
 frontend/
 ├── src/
 │   ├── app/
-│   │   ├── layout.tsx          # Root layout, Header & Footer toàn trang
-│   │   ├── page.tsx            # Menu Page Server Component gọi API GET /products
-│   │   ├── loading.tsx         # Skeleton Loading tự động trong App Router
-│   │   ├── error.tsx           # Error Boundary xử lý lỗi kết nối thân thiện
-│   │   └── globals.css         # Tailwind CSS v4 & bảng màu chủ đạo cà phê
+│   │   ├── cart/
+│   │   │   └── page.tsx            # Trang giỏ hàng T05
+│   │   ├── products/
+│   │   │   └── [id]/
+│   │   │       ├── page.tsx        # Trang chi tiết sản phẩm T04
+│   │   │       └── not-found.tsx   # Giao diện sản phẩm không tồn tại
+│   │   ├── layout.tsx              # Root layout, Header và Footer
+│   │   ├── page.tsx                # Menu Page gọi GET /products
+│   │   ├── loading.tsx             # Loading skeleton
+│   │   ├── error.tsx               # Error Boundary
+│   │   └── globals.css             # Tailwind CSS và màu chủ đạo
 │   ├── components/
-│   │   ├── Header.tsx          # Navbar nhận diện thương hiệu BrewLite, responsive
-│   │   ├── ProductCard.tsx     # Thẻ sản phẩm (giá VND, badge kho, fallback ảnh)
-│   │   └── ProductGrid.tsx     # Lưới responsive và empty state khi chưa có món
+│   │   ├── Header.tsx              # Header và Cart quantity badge
+│   │   ├── ProductCard.tsx         # Thẻ sản phẩm
+│   │   ├── ProductGrid.tsx         # Lưới sản phẩm responsive
+│   │   └── ProductOptions.tsx      # Chọn size, topping và Add to Cart
 │   ├── services/
-│   │   └── products.service.ts # Service fetch API GET /products & type guard validation
+│   │   └── products.service.ts     # Gọi và kiểm tra dữ liệu Products API
+│   ├── stores/
+│   │   ├── cart.store.ts           # Zustand Cart store
+│   │   └── cart.store.spec.ts      # Unit Test cho Cart store
 │   └── types/
-│       └── product.ts          # TypeScript interface Product
-├── next.config.ts              # Cấu hình Next.js (remotePatterns cho placehold.co)
-└── .env.example                # Biến môi trường mẫu NEXT_PUBLIC_API_URL
-backend/                        # NestJS, Prisma, PostgreSQL, src và test
+│       ├── product.ts              # Product interface
+│       └── cart.ts                 # CartItem, CartSize và CartTopping
+├── next.config.ts                  # Cấu hình Next.js
+├── vitest.config.mts               # Cấu hình Vitest
+└── .env.example                    # NEXT_PUBLIC_API_URL
+backend/                            # NestJS, Prisma, PostgreSQL và tests
 ```
 
 Hai ứng dụng có `package.json` và `package-lock.json` riêng; chạy npm trong thư mục tương ứng.
@@ -154,6 +191,7 @@ Next.js đọc `.env.local`. Backend đọc `.env` trong thư mục `backend`. C
 ```powershell
 cd frontend
 npm run lint
+npm test
 npm run build
 
 cd ../backend
@@ -161,7 +199,7 @@ npm run lint
 npm run build
 npm test
 npm run test:e2e
-````
+```
 
 ## Chạy bản production
 
@@ -256,6 +294,36 @@ npm run lint    # Kiểm tra chuẩn mã nguồn bằng ESLint (đạt 0 lỗi, 
 npm run build   # Build production với Next.js Turbopack
 ```
 
+## Hướng dẫn kiểm thử Product Detail và Cart (T04–T05)
+
+Trước khi kiểm thử, cần chạy PostgreSQL, Backend tại `http://localhost:3001` và Frontend tại `http://localhost:3000`.
+
+### Kiểm thử T04 - Product Detail
+
+1. Mở trang Menu tại <http://localhost:3000>.
+2. Chọn một sản phẩm để mở route `/products/[id]`.
+3. Kiểm tra ảnh, tên, tồn kho và giá sản phẩm.
+4. Chọn lần lượt size S, M, L và các topping.
+5. Xác nhận tổng giá thay đổi đúng theo lựa chọn.
+6. Truy cập một ID không tồn tại để kiểm tra giao diện Not Found.
+
+### Kiểm thử T05 - Cart + Zustand
+
+1. Chọn size và topping tại trang chi tiết, sau đó nhấn **Thêm vào giỏ hàng**.
+2. Thêm lại cùng cấu hình; Cart phải gộp thành một dòng và tăng quantity.
+3. Thêm sản phẩm với size hoặc topping khác; Cart phải tạo dòng mới.
+4. Mở `/cart`, kiểm tra tăng, giảm và xóa CartItem.
+5. Xác nhận quantity badge, thành tiền từng dòng và tổng tiền cập nhật chính xác.
+6. Xóa toàn bộ sản phẩm để kiểm tra empty state.
+7. Kiểm tra giới hạn stock bằng nút tăng quantity.
+
+Chạy kiểm thử tự động cho Cart store:
+
+```powershell
+cd frontend
+npm test
+```
+
 ## Quy trình nhóm
 
 Dự án gồm 10 task và 3 Sprint, từ 14/10/2026 đến 04/11/2026.
@@ -263,6 +331,8 @@ Dự án gồm 10 task và 3 Sprint, từ 14/10/2026 đến 04/11/2026.
 - T01 sử dụng branch `task-1/init-project`.
 - T02 sử dụng branch `task-2/products-api`.
 - T03 sử dụng branch `task-3/menu-page`.
+- T04 sử dụng branch `task-4/product-detail`.
+- T05 sử dụng branch `task-5/cart`.
 
 Quy trình:
 
@@ -302,6 +372,27 @@ Task chỉ được đánh dấu Done sau khi đáp ứng Acceptance Criteria, k
 - Tích hợp thành công với API thực tế `GET /products` từ backend NestJS.
 - Giao diện responsive kiểm tra trực quan đạt chuẩn trên 4 kích thước viewport: 375px (Mobile), 768px (Tablet), 1024px (Laptop) và 1440px (Desktop).
 - Hoạt động chính xác trên tất cả các kịch bản: hiển thị thực đơn, hết hàng, loading skeleton, danh sách rỗng, lỗi kết nối và fallback ảnh lỗi.
+
+## Kết quả kiểm tra T04 (18/10/2026)
+
+- Route động `/products/[id]` hiển thị đúng chi tiết sản phẩm từ `GET /products/:id`.
+- Hiển thị đầy đủ ảnh, tên, giá cơ bản và số lượng tồn kho.
+- Lựa chọn size S, M, L và topping hoạt động chính xác.
+- Tổng giá được cập nhật ngay theo kích cỡ và topping.
+- ID không hợp lệ và sản phẩm không tồn tại được xử lý bằng giao diện phù hợp.
+- Frontend lint và production build đạt.
+
+## Kết quả kiểm tra T05 (20/10/2026)
+
+- Cart state được quản lý bằng Zustand.
+- Thêm, cập nhật quantity và xóa CartItem hoạt động chính xác.
+- CartItem cùng sản phẩm, size và topping được gộp; cấu hình khác được tách thành dòng mới.
+- Quantity badge bằng tổng quantity của toàn bộ CartItem.
+- Đơn giá, thành tiền từng dòng và tổng tiền được tính chính xác.
+- Giới hạn stock và empty state hoạt động đúng.
+- Kiểm thử thủ công toàn bộ Acceptance Criteria đạt.
+- Unit Test Cart store bằng Vitest đạt `4/4`.
+- Frontend lint và production build đạt.
 
 ## Tài liệu công nghệ
 
