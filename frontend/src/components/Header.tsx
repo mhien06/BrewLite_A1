@@ -42,7 +42,7 @@ export default function Header() {
                 Brew<span className="text-amber-600">Lite</span>
               </span>
               <span className="hidden rounded-full bg-amber-200/70 px-2 py-0.5 text-xs font-semibold text-amber-800 sm:inline-block">
-                Menu
+                Thực đơn
               </span>
             </div>
             <p className="hidden text-xs text-stone-600 sm:block">
