@@ -25,12 +25,12 @@ export default function CartPage() {
         href="/"
         className="inline-flex min-w-40 items-center justify-center rounded-full border border-[#ead8c7] bg-white px-6 py-3 text-sm font-bold text-[#492214] transition hover:border-[#492214] hover:bg-[#fffaf5]"
       >
-        ← Menu
+        ← Thực đơn
       </Link>
 
       <header className="mt-8">
         <p className="text-xs font-bold tracking-wide text-[#f39a3f] uppercase">
-          Your Cart
+          Giỏ hàng
         </p>
         <h1 className="mt-2 text-4xl font-extrabold tracking-tight text-[#40241b] sm:text-5xl">
           Giỏ hàng của bạn
