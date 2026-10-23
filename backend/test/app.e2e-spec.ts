@@ -1,11 +1,13 @@
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
 import request from 'supertest';
 import { App } from 'supertest/types.js';
 import { AppModule } from './../src/app.module.js';
+import { PrismaService } from '../src/prisma/prisma.service.js';
 
 describe('BrewLite API (e2e)', () => {
   let app: INestApplication<App>;
+  let prisma: PrismaService;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -13,7 +15,15 @@ describe('BrewLite API (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
     await app.init();
+    prisma = app.get(PrismaService);
   });
 
   it('/ (GET)', () => {
@@ -69,6 +79,56 @@ describe('BrewLite API (e2e)', () => {
 
   it('/products/:id returns 400 for invalid id', () => {
     return request(app.getHttpServer()).get('/products/abc').expect(400);
+  });
+
+  it('POST /orders creates a pending order with a server-calculated total', async () => {
+    const productsResponse = await request(app.getHttpServer())
+      .get('/products')
+      .expect(200);
+    const product = productsResponse.body[0] as { id: number; price: number };
+
+    const response = await request(app.getHttpServer())
+      .post('/orders')
+      .send({
+        items: [
+          {
+            productId: product.id,
+            size: 'M',
+            quantity: 2,
+            toppings: ['pearls'],
+          },
+        ],
+      })
+      .expect(201);
+
+    expect(response.body).toEqual(
+      expect.objectContaining({
+        id: expect.any(Number),
+        status: 'PENDING',
+        total: (product.price + 5_000 + 8_000) * 2,
+        items: [
+          expect.objectContaining({
+            productId: product.id,
+            size: 'M',
+            toppings: ['pearls'],
+            quantity: 2,
+            unitPrice: product.price + 13_000,
+            lineTotal: (product.price + 13_000) * 2,
+          }),
+        ],
+      }),
+    );
+
+    await prisma.order.delete({ where: { id: response.body.id as number } });
+  });
+
+  it('POST /orders rejects an invalid cart without creating an order', async () => {
+    await request(app.getHttpServer())
+      .post('/orders')
+      .send({
+        items: [{ productId: 1, size: 'XL', quantity: 0, toppings: ['syrup'] }],
+      })
+      .expect(400);
   });
 
   afterAll(async () => {

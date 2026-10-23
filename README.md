@@ -6,7 +6,7 @@
 
 Khởi tạo frontend Next.js (TypeScript, Tailwind CSS) và backend NestJS (TypeScript). Frontend hiển thị trang chào; backend có `GET /` trả `Hello World!`.
 
-Products API được triển khai trong T02; Menu Page trong T03; Product Detail trong T04; Cart và Zustand trong T05. Các chức năng đơn hàng, đăng nhập và thanh toán sẽ được triển khai ở những task tiếp theo. Docker Compose sẽ được bổ sung theo kế hoạch của dự án.
+Products API được triển khai trong T02; Menu Page trong T03; Product Detail trong T04; Cart và Zustand trong T05; API tạo đơn hàng trong T06. Đăng nhập, thanh toán, lịch sử đơn và Docker Compose sẽ được triển khai ở những task tiếp theo.
 
 ## Phạm vi T02 - Thành
 
@@ -46,6 +46,47 @@ Xây dựng giỏ hàng phía frontend bằng Zustand:
 - Hiển thị đúng đơn giá, thành tiền từng dòng và tổng tiền tại `/cart`.
 - Có empty state khi giỏ hàng không có sản phẩm.
 - Kiểm thử Cart store bằng Vitest.
+
+## Phạm vi T06 - API tạo đơn hàng
+
+Backend cung cấp `POST /orders` để nhận giỏ hàng và tạo đơn:
+
+- Request gồm danh sách `{ productId, size, quantity, toppings }`; `size` là `S`, `M` hoặc `L`, topping gửi bằng ID (`pearls`, `cream`, `jelly`).
+- NestJS `ValidationPipe` cùng DTO `class-validator` từ chối request sai kiểu, thiếu món, size/topping không hỗ trợ hoặc thuộc tính thừa.
+- Backend lấy giá gốc từ PostgreSQL, tự tính phụ phí size/topping, kiểm tra sản phẩm tồn tại và tổng số lượng không vượt tồn kho.
+- Đơn và các dòng món được lưu cùng transaction ở trạng thái `PENDING`; response trả mã đơn, trạng thái, tổng tiền và chi tiết từng dòng.
+
+Sau khi cập nhật source, áp dụng migration T06 lên PostgreSQL một lần:
+
+```powershell
+cd backend
+npm run prisma:deploy
+```
+
+Kiểm thử DTO và nghiệp vụ tạo đơn:
+
+```powershell
+cd backend
+npm test
+```
+
+Ví dụ gọi API:
+
+```powershell
+$body = @{
+  items = @(
+    @{
+      productId = 1
+      size = 'M'
+      quantity = 2
+      toppings = @('pearls')
+    }
+  )
+} | ConvertTo-Json -Depth 5
+
+Invoke-RestMethod -Method Post -Uri 'http://localhost:3001/orders' `
+  -ContentType 'application/json' -Body $body
+```
 
 ## Cấu trúc
 
@@ -333,6 +374,7 @@ Dự án gồm 10 task và 3 Sprint, từ 14/10/2026 đến 04/11/2026.
 - T03 sử dụng branch `task-3/menu-page`.
 - T04 sử dụng branch `task-4/product-detail`.
 - T05 sử dụng branch `task-5/cart`.
+- T06 sử dụng branch `task-6/orders-api`.
 
 Quy trình:
 
@@ -393,6 +435,13 @@ Task chỉ được đánh dấu Done sau khi đáp ứng Acceptance Criteria, k
 - Kiểm thử thủ công toàn bộ Acceptance Criteria đạt.
 - Unit Test Cart store bằng Vitest đạt `4/4`.
 - Frontend lint và production build đạt.
+
+## Kết quả kiểm tra T06 (23/10/2026)
+
+- `POST /orders` validate giỏ hàng, xác nhận sản phẩm và tồn kho, tự tính giá ở backend, lưu đơn cùng OrderItem ở trạng thái `PENDING`.
+- Schema và migration PostgreSQL cho Order/OrderItem đã được áp dụng.
+- DTO unit test, service unit test đạt; backend E2E đạt `7/7`.
+- Backend lint, build và Prisma schema validation đạt.
 
 ## Tài liệu công nghệ
 
