@@ -7,12 +7,22 @@ datasource db {
   provider = "postgresql"
 }
 
+model User {
+  id            Int      @id @default(autoincrement())
+  email         String   @unique
+  name          String   @default("KHACH HANG")
+  passwordHash  String
+  loyaltyPoints Int      @default(0)
+  createdAt     DateTime @default(now())
+  orders        Order[]
+}
+
 model Product {
-  id       Int    @id @default(autoincrement())
-  name     String
-  price    Int
-  imageUrl String
-  stock    Int    @default(0)
+  id         Int         @id @default(autoincrement())
+  name       String
+  price      Int
+  imageUrl   String
+  stock      Int         @default(0)
   orderItems OrderItem[]
 }
 
@@ -22,10 +32,14 @@ enum OrderStatus {
 
 model Order {
   id        Int         @id @default(autoincrement())
+  userId    Int
+  user      User        @relation(fields: [userId], references: [id], onDelete: Restrict)
   status    OrderStatus @default(PENDING)
   total     Int
   createdAt DateTime    @default(now())
   items     OrderItem[]
+
+  @@index([userId])
 }
 
 model OrderItem {

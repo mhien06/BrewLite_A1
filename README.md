@@ -6,7 +6,7 @@
 
 Khởi tạo frontend Next.js (TypeScript, Tailwind CSS) và backend NestJS (TypeScript). Frontend hiển thị trang chào; backend có `GET /` trả `Hello World!`.
 
-Products API được triển khai trong T02; Menu Page trong T03; Product Detail trong T04; Cart và Zustand trong T05; API tạo đơn hàng trong T06. Đăng nhập, thanh toán, lịch sử đơn và Docker Compose sẽ được triển khai ở những task tiếp theo.
+Products API được triển khai trong T02; Menu Page trong T03; Product Detail trong T04; Cart và Zustand trong T05; API tạo đơn hàng trong T06; đăng ký, đăng nhập và bảo vệ API bằng JWT trong T07. Thanh toán và lịch sử đơn vẫn sẽ được triển khai ở những task tiếp theo.
 
 ## Phạm vi T02 - Thành
 
@@ -65,9 +65,44 @@ npm run prisma:deploy
 
 Nút **Thanh toán** ở trang giỏ hàng hiện chưa hoạt động. T06 mới cung cấp API tạo đơn ở backend, chưa nối thao tác tạo đơn từ giao diện. Để kiểm tra phần này, làm theo mục [Hướng dẫn kiểm thử API tạo đơn (T06)](#hướng-dẫn-kiểm-thử-api-tạo-đơn-t06) bên dưới.
 
-## Cấu trúc dự án đến T06
+## Phạm vi T07 - Đăng ký, đăng nhập và JWT
 
-Các thư mục và file chính hiện có trong dự án. Phần `orders/` và migration `add_orders` được bổ sung ở T06 để nhận giỏ hàng và lưu đơn vào PostgreSQL.
+Backend cung cấp đăng ký tài khoản, đăng nhập và endpoint thông tin người dùng hiện tại. Tên đăng ký phải viết HOA; email đăng ký phải có đuôi `@gmail.com`; mật khẩu được băm bằng bcrypt trước khi lưu. Đăng ký không tự đăng nhập; người dùng cần đăng nhập bằng email và mật khẩu vừa tạo.
+
+| Method | Endpoint | Kết quả |
+| ------ | -------- | ------- |
+| POST | `/auth/register` | Tạo tài khoản; trả HTTP 201, không cấp JWT |
+| POST | `/auth/login` | Đăng nhập; trả HTTP 200 cùng `accessToken` và thông tin người dùng |
+| GET | `/auth/me` | Trả thông tin tài khoản hiện tại; yêu cầu Bearer JWT |
+| POST | `/orders` | Tạo đơn hàng; yêu cầu Bearer JWT |
+
+Request đăng ký gồm `name`, `email`, `password`; request đăng nhập gồm `email`, `password`. Dữ liệu không hợp lệ trả HTTP 400, email đã được dùng trả HTTP 409, thông tin đăng nhập sai hoặc thiếu JWT hợp lệ trả HTTP 401.
+
+`JwtAuthGuard` bảo vệ `GET /auth/me` và `POST /orders`. Gửi token đăng nhập trong header `Authorization: Bearer <accessToken>`. Guard xác minh chữ ký và thời hạn token, sau đó xác nhận người dùng vẫn tồn tại trong database trước khi cho phép gọi controller.
+
+`JWT_SECRET` là bắt buộc; backend dừng khởi động nếu biến này bị thiếu và không dùng khóa dự phòng. Tạo chuỗi ngẫu nhiên riêng cho từng môi trường, không dùng giá trị mẫu và không commit `backend/.env`:
+
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(64).toString('hex'))"
+```
+
+Đặt chuỗi kết quả vào `JWT_SECRET` trong `backend/.env`. `JWT_EXPIRES_IN` cấu hình thời hạn token, mặc định `7d`. Nếu mật khẩu database từng được commit hoặc chia sẻ, hãy đổi mật khẩu đó và cập nhật `DATABASE_URL` trong file `.env` cục bộ.
+
+Migration T07 tạo bảng user cho database hiện có và đồng bộ sequence ID để các user mới nhận ID chưa sử dụng. Để chạy và kiểm thử:
+
+```powershell
+cd backend
+Copy-Item .env.example .env
+# Thay YOUR_PASSWORD và change-me... bằng thông tin riêng, đặc biệt tạo JWT_SECRET ngẫu nhiên.
+npm run prisma:deploy
+npm run start:dev
+```
+
+Mở terminal khác tại `backend` để chạy `npm test`, `npm run test:e2e`, `npm run lint` và `npm run build`. E2E đọc cấu hình `.env` nếu có nhưng không ghi đè các biến môi trường đã được cung cấp.
+
+## Cấu trúc dự án đến T07
+
+Các thư mục và file chính hiện có trong dự án. Phần `orders/` và migration `add_orders` được bổ sung ở T06; phần `auth/` và migration `add_users` được bổ sung ở T07 để quản lý tài khoản và bảo vệ API.
 
 ```text
 BrewLite-Scrum/
@@ -177,6 +212,8 @@ Trong `backend/.env`, thay `YOUR_PASSWORD` bằng mật khẩu PostgreSQL:
 PORT=3001
 FRONTEND_URL=http://localhost:3000
 DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/brewlite_scrum?schema=public"
+JWT_SECRET=change-me-to-a-long-random-string
+JWT_EXPIRES_IN=7d
 ```
 
 Áp dụng migration và thêm dữ liệu mẫu:
@@ -242,6 +279,8 @@ Invoke-RestMethod "http://localhost:3001/products/$($products[0].id)"
 | backend  | PORT                | 3001                  | Cổng HTTP của backend                                  |
 | backend  | FRONTEND_URL        | http://localhost:3000 | Origin được phép gọi API qua CORS                      |
 | backend  | DATABASE_URL        | Không có              | Chuỗi kết nối PostgreSQL; chỉ lưu trong `backend/.env` |
+| backend  | JWT_SECRET          | Bắt buộc              | Khóa bí mật riêng để ký và xác minh JWT; không commit   |
+| backend  | JWT_EXPIRES_IN      | 7d                    | Thời hạn JWT, ví dụ `1h`, `7d`                          |
 
 Next.js đọc `.env.local`. Backend đọc `.env` trong thư mục `backend`. Các file env thật không được đưa lên Git, chỉ commit `.env.example`.
 

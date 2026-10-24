@@ -23,7 +23,7 @@ const TOPPING_PRICE: Record<string, number> = {
 export class OrdersService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async create(dto: CreateOrderDto) {
+  async create(userId: number, dto: CreateOrderDto) {
     return this.prisma.$transaction(async (transaction) => {
       const productIds = [...new Set(dto.items.map((item) => item.productId))];
       const products = await transaction.product.findMany({
@@ -75,12 +75,14 @@ export class OrdersService {
 
       return transaction.order.create({
         data: {
+          userId,
           status: OrderStatus.PENDING,
           total,
           items: { create: orderItems },
         },
         select: {
           id: true,
+          userId: true,
           status: true,
           total: true,
           createdAt: true,
