@@ -1,6 +1,8 @@
 'use client';
 
+import { useEffect } from 'react';
 import Link from 'next/link';
+import { useAuthStore } from '@/stores/auth.store';
 import {
   selectTotalQuantity,
   useCartStore,
@@ -8,6 +10,14 @@ import {
 
 export default function Header() {
   const totalQuantity = useCartStore(selectTotalQuantity);
+  const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const logout = useAuthStore((state) => state.logout);
+  const initialize = useAuthStore((state) => state.initialize);
+
+  useEffect(() => {
+    initialize();
+  }, [initialize]);
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-amber-900/10 bg-amber-50/80 backdrop-blur-md">
@@ -17,7 +27,7 @@ export default function Header() {
           className="flex min-w-0 items-center gap-2.5 sm:gap-3"
           aria-label="Về trang thực đơn BrewLite"
         >
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-amber-700 via-amber-800 to-amber-950 text-amber-100 shadow-md shadow-amber-950/15 ring-1 ring-amber-600/30 sm:h-11 sm:w-11">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-amber-700 via-amber-800 to-amber-950 text-amber-100 shadow-md shadow-amber-950/15 ring-1 ring-amber-600/30 sm:h-11 sm:w-11">
             <svg
               className="h-5 w-5 sm:h-6 sm:w-6"
               viewBox="0 0 24 24"
@@ -51,32 +61,66 @@ export default function Header() {
           </div>
         </Link>
 
-        <Link
-          href="/cart"
-          className="relative inline-flex items-center gap-2 rounded-full border border-amber-900/10 bg-amber-100 px-4 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-200"
-          aria-label={`Giỏ hàng có ${totalQuantity} sản phẩm`}
-        >
-          <svg
-            className="h-5 w-5"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
+        <div className="flex items-center gap-2 sm:gap-3">
+          {isAuthenticated && user ? (
+            <div className="flex items-center gap-2">
+              <div className="flex min-w-0 max-w-40 flex-col items-end text-right">
+                <span className="max-w-40 truncate text-xs font-bold text-amber-950">
+                  {user.name}
+                </span>
+                <span className="hidden text-[11px] font-semibold text-amber-700 sm:inline">
+                  {user.loyaltyPoints} điểm tích lũy
+                </span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  logout();
+                  window.dispatchEvent(new Event('brewlite:logout'));
+                }}
+                className="inline-flex items-center rounded-full border border-amber-900/15 bg-white px-3 py-1.5 text-xs font-bold text-amber-950 transition hover:bg-amber-100 sm:px-3.5 sm:py-2"
+                aria-label="Đăng xuất"
+              >
+                Đăng xuất
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/login"
+              className="inline-flex items-center rounded-full border border-amber-900/15 bg-white px-3.5 py-1.5 text-xs font-bold text-amber-950 transition hover:bg-amber-100 sm:px-4 sm:py-2 sm:text-sm"
+              aria-label="Đăng nhập vào tài khoản"
+            >
+              Đăng nhập
+            </Link>
+          )}
+
+          <Link
+            href="/cart"
+            className="relative inline-flex items-center gap-2 rounded-full border border-amber-900/10 bg-amber-100 px-3.5 py-1.5 text-xs font-bold text-amber-950 transition hover:bg-amber-200 sm:px-4 sm:py-2 sm:text-sm"
+            aria-label={`Giỏ hàng có ${totalQuantity} sản phẩm`}
           >
-            <circle cx="9" cy="20" r="1" />
-            <circle cx="19" cy="20" r="1" />
-            <path d="M3 4h2l2.4 10.5a2 2 0 0 0 2 1.5h7.8a2 2 0 0 0 2-1.6L21 7H6" />
-          </svg>
+            <svg
+              className="h-4 w-4 sm:h-5 sm:w-5"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="9" cy="20" r="1" />
+              <circle cx="19" cy="20" r="1" />
+              <path d="M3 4h2l2.4 10.5a2 2 0 0 0 2 1.5h7.8a2 2 0 0 0 2-1.6L21 7H6" />
+            </svg>
 
-          <span className="hidden sm:inline">Giỏ hàng</span>
+            <span className="hidden sm:inline">Giỏ hàng</span>
 
-          <span className="inline-flex min-w-6 items-center justify-center rounded-full bg-amber-800 px-1.5 py-0.5 text-xs font-extrabold text-white">
-            {totalQuantity}
-          </span>
-        </Link>
+            <span className="inline-flex min-w-5 items-center justify-center rounded-full bg-amber-800 px-1.5 py-0.5 text-xs font-extrabold text-white sm:min-w-6">
+              {totalQuantity}
+            </span>
+          </Link>
+        </div>
       </div>
     </header>
   );
