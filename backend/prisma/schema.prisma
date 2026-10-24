@@ -13,4 +13,33 @@ model Product {
   price    Int
   imageUrl String
   stock    Int    @default(0)
+  orderItems OrderItem[]
+}
+
+enum OrderStatus {
+  PENDING
+}
+
+model Order {
+  id        Int         @id @default(autoincrement())
+  status    OrderStatus @default(PENDING)
+  total     Int
+  createdAt DateTime    @default(now())
+  items     OrderItem[]
+}
+
+model OrderItem {
+  id        Int      @id @default(autoincrement())
+  orderId   Int
+  productId Int
+  size      String
+  toppings  String[] @default([])
+  quantity  Int
+  unitPrice Int
+  lineTotal Int
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([productId])
 }
