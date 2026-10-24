@@ -63,62 +63,67 @@ cd backend
 npm run prisma:deploy
 ```
 
-Kiểm thử thủ công API tạo đơn bằng Postman hoặc PowerShell: gửi giỏ hàng hợp lệ và xác nhận HTTP 201, mã đơn, trạng thái `PENDING`, tổng tiền và dữ liệu Order/OrderItem trong PostgreSQL. Thử giỏ rỗng, quantity không hợp lệ, size/topping không hỗ trợ, sản phẩm không tồn tại và số lượng vượt tồn kho; các request lỗi không được tạo đơn.
+Nút **Thanh toán** ở trang giỏ hàng hiện chưa hoạt động. T06 mới cung cấp API tạo đơn ở backend, chưa nối thao tác tạo đơn từ giao diện. Để kiểm tra phần này, làm theo mục [Hướng dẫn kiểm thử API tạo đơn (T06)](#hướng-dẫn-kiểm-thử-api-tạo-đơn-t06) bên dưới.
 
-Code kiểm thử tự động riêng của T06 được giữ trên máy cá nhân, không nằm trong phần mã nguồn bàn giao. Các lệnh test backend bên dưới chỉ chạy những bài test còn được lưu trong repository.
+## Cấu trúc dự án đến T06
 
-Ví dụ gọi API:
-
-```powershell
-$body = @{
-  items = @(
-    @{
-      productId = 1
-      size = 'M'
-      quantity = 2
-      toppings = @('pearls')
-    }
-  )
-} | ConvertTo-Json -Depth 5
-
-Invoke-RestMethod -Method Post -Uri 'http://localhost:3001/orders' `
-  -ContentType 'application/json' -Body $body
-```
-
-## Cấu trúc
+Các thư mục và file chính hiện có trong dự án. Phần `orders/` và migration `add_orders` được bổ sung ở T06 để nhận giỏ hàng và lưu đơn vào PostgreSQL.
 
 ```text
-frontend/
-├── src/
-│   ├── app/
-│   │   ├── cart/
-│   │   │   └── page.tsx            # Trang giỏ hàng T05
-│   │   ├── products/
-│   │   │   └── [id]/
-│   │   │       ├── page.tsx        # Trang chi tiết sản phẩm T04
-│   │   │       └── not-found.tsx   # Giao diện sản phẩm không tồn tại
-│   │   ├── layout.tsx              # Root layout, Header và Footer
-│   │   ├── page.tsx                # Menu Page gọi GET /products
-│   │   ├── loading.tsx             # Loading skeleton
-│   │   ├── error.tsx               # Error Boundary
-│   │   └── globals.css             # Tailwind CSS và màu chủ đạo
-│   ├── components/
-│   │   ├── Header.tsx              # Header và Cart quantity badge
-│   │   ├── ProductCard.tsx         # Thẻ sản phẩm
-│   │   ├── ProductGrid.tsx         # Lưới sản phẩm responsive
-│   │   └── ProductOptions.tsx      # Chọn size, topping và Add to Cart
-│   ├── services/
-│   │   └── products.service.ts     # Gọi và kiểm tra dữ liệu Products API
-│   ├── stores/
-│   │   ├── cart.store.ts           # Zustand Cart store
-│   │   └── cart.store.spec.ts      # Unit Test cho Cart store
-│   └── types/
-│       ├── product.ts              # Product interface
-│       └── cart.ts                 # CartItem, CartSize và CartTopping
-├── next.config.ts                  # Cấu hình Next.js
-├── vitest.config.mts               # Cấu hình Vitest
-└── .env.example                    # NEXT_PUBLIC_API_URL
-backend/                            # NestJS, Prisma, PostgreSQL và tests
+BrewLite-Scrum/
+├── frontend/                         # Giao diện Next.js
+│   ├── src/
+│   │   ├── app/
+│   │   │   ├── page.tsx               # Trang Menu gọi GET /products (T03)
+│   │   │   ├── products/[id]/         # Chi tiết sản phẩm, trang không tìm thấy (T04)
+│   │   │   ├── cart/page.tsx          # Trang giỏ hàng (T05)
+│   │   │   ├── layout.tsx             # Bố cục chung, Header và Footer
+│   │   │   ├── loading.tsx            # Giao diện đang tải
+│   │   │   ├── error.tsx              # Giao diện lỗi và thử lại
+│   │   │   └── globals.css            # Tailwind CSS và kiểu giao diện chung
+│   │   ├── components/                # Header, thẻ sản phẩm, lưới món, chọn size/topping
+│   │   ├── services/
+│   │   │   └── products.service.ts    # Gọi và kiểm tra dữ liệu API sản phẩm
+│   │   ├── stores/
+│   │   │   ├── cart.store.ts          # Quản lý giỏ hàng bằng Zustand
+│   │   │   └── cart.store.spec.ts     # Kiểm thử giỏ hàng
+│   │   └── types/                     # Kiểu dữ liệu sản phẩm và giỏ hàng
+│   ├── public/products/               # Ảnh đồ uống
+│   ├── next.config.ts                 # Cấu hình Next.js
+│   ├── vitest.config.mts              # Cấu hình kiểm thử frontend
+│   ├── .env.example                   # Mẫu URL backend
+│   ├── package.json                   # Thư viện và lệnh chạy frontend
+│   └── package-lock.json              # Phiên bản thư viện đã khóa
+├── backend/                          # REST API NestJS
+│   ├── src/
+│   │   ├── products/                  # Controller, service, module sản phẩm (T02)
+│   │   ├── orders/                    # API tạo đơn (T06)
+│   │   │   ├── dto/
+│   │   │   │   ├── create-order.dto.ts       # Kiểm tra danh sách món
+│   │   │   │   └── create-order-item.dto.ts  # Kiểm tra sản phẩm, size, topping, số lượng
+│   │   │   ├── orders.controller.ts   # Nhận POST /orders
+│   │   │   ├── orders.service.ts      # Kiểm tra tồn kho, tính tiền và lưu đơn
+│   │   │   └── orders.module.ts       # Khai báo module đơn hàng
+│   │   ├── prisma/                    # Module và service kết nối database
+│   │   ├── app.controller.ts          # Endpoint GET / ban đầu
+│   │   ├── app.controller.spec.ts     # Kiểm thử endpoint ban đầu
+│   │   ├── app.service.ts             # Xử lý lời chào ban đầu
+│   │   ├── app.module.ts              # Kết nối các module của ứng dụng
+│   │   └── main.ts                    # Khởi động backend, validation và CORS
+│   ├── prisma/
+│   │   ├── migrations/
+│   │   │   ├── 20261015124827_init_products/  # Tạo bảng Product (T02)
+│   │   │   └── 20261023120000_add_orders/     # Tạo Order và OrderItem (T06)
+│   │   ├── schema.prisma              # Mô hình Product, Order và OrderItem
+│   │   └── seed.ts                    # Thêm món mẫu, cập nhật ảnh món đã có
+│   ├── test/app.e2e-spec.ts           # Kiểm thử E2E đang có trong repo
+│   ├── prisma7.config.ts              # Cấu hình Prisma, migration và seed
+│   ├── vitest.config.ts               # Cấu hình unit test backend
+│   ├── vitest.config.e2e.ts           # Cấu hình E2E backend
+│   ├── .env.example                   # Mẫu cấu hình cổng, CORS và database
+│   ├── package.json                   # Thư viện và lệnh chạy backend
+│   └── package-lock.json              # Phiên bản thư viện đã khóa
+└── README.md                          # Giới thiệu, cài đặt, chạy và kiểm thử
 ```
 
 Hai ứng dụng có `package.json` và `package-lock.json` riêng; chạy npm trong thư mục tương ứng.
@@ -148,13 +153,23 @@ cd ..
 
 Chỉ sao chép file env ở lần đầu để tránh ghi đè cấu hình đã có.
 
-### Khởi tạo database cho T02
+### Khởi tạo database
+
+Bật dịch vụ PostgreSQL trước khi tạo database hoặc chạy backend. Trên Windows, mở **Services**, tìm dịch vụ PostgreSQL đã cài và chọn **Start** nếu dịch vụ đang dừng.
 
 Chỉ tạo database một lần:
 
 ```powershell
 psql -U postgres -d postgres -c "CREATE DATABASE brewlite_scrum;"
 ```
+
+Nếu PowerShell báo không nhận lệnh `psql`, bạn có thể tạo database bằng **pgAdmin**:
+
+1. Mở pgAdmin và kết nối tới PostgreSQL trên máy bằng tài khoản `postgres` cùng mật khẩu đã đặt khi cài.
+2. Nhấp phải vào **Databases**, chọn **Create → Database…**.
+3. Nhập tên `brewlite_scrum`, chọn **Save**.
+
+Chọn một trong hai cách trên; nếu database đã tồn tại thì bỏ qua bước tạo. Nếu muốn dùng `psql`, thêm thư mục `bin` của PostgreSQL vào PATH rồi mở lại PowerShell.
 
 Trong `backend/.env`, thay `YOUR_PASSWORD` bằng mật khẩu PostgreSQL:
 
@@ -173,27 +188,33 @@ npm run prisma:seed
 cd ..
 ```
 
-Lệnh seed tạo lại dữ liệu mẫu trong bảng `Product`.
+Lệnh seed thêm các món mẫu chưa có trong bảng `Product`. Với món đã có cùng tên, seed chỉ cập nhật đường dẫn ảnh; giá và tồn kho hiện có được giữ nguyên. Các migration trong lệnh `prisma:deploy` bao gồm cả bảng sản phẩm và bảng đơn hàng của T06.
 
 ## Chạy phát triển
 
-Terminal 1:
+Chạy theo thứ tự **PostgreSQL → backend → frontend**. Trang Menu cần gọi API sản phẩm nên backend phải sẵn sàng trước khi mở frontend.
 
-```powershell
-cd frontend
-npm run dev
-```
-
-Mở <http://localhost:3000> để xem frontend BrewLite.
-
-Terminal 2:
+Sau khi hoàn tất phần cài đặt và khởi tạo database, mở terminal thứ nhất tại thư mục gốc dự án để chạy backend:
 
 ```powershell
 cd backend
 npm run start:dev
 ```
 
-Backend chạy tại <http://localhost:3001>. Dừng ứng dụng bằng `Ctrl + C`.
+Giữ terminal này chạy. Trong terminal thứ hai, kiểm tra API:
+
+```powershell
+Invoke-RestMethod http://localhost:3001/products
+```
+
+Khi API trả về danh sách sản phẩm, chạy frontend từ thư mục gốc trong terminal thứ hai:
+
+```powershell
+cd frontend
+npm run dev
+```
+
+Mở <http://localhost:3000> để dùng BrewLite. Backend chạy tại <http://localhost:3001>. Dừng từng ứng dụng bằng `Ctrl + C` trong terminal tương ứng.
 
 ## Products API
 
@@ -265,7 +286,7 @@ npm run start:prod
 ### 2. Yêu cầu môi trường & Dịch vụ
 
 Menu Page gọi API thật từ backend, do đó cần:
-1. **PostgreSQL** đang chạy và đã khởi tạo bảng `Product` kèm seed dữ liệu mẫu (xem mục *Khởi tạo database cho T02*).
+1. **PostgreSQL** đang chạy và đã khởi tạo bảng `Product` kèm seed dữ liệu mẫu (xem mục *Khởi tạo database*).
 2. **Backend NestJS** đang chạy tại <http://localhost:3001>.
 3. **Frontend Next.js** chạy tại <http://localhost:3000>.
 
@@ -361,6 +382,103 @@ Chạy kiểm thử tự động cho Cart store:
 cd frontend
 npm test
 ```
+
+## Hướng dẫn kiểm thử API tạo đơn (T06)
+
+Phần này kiểm tra bằng tay qua API, không cần chạy test tự động. Chỉ cần PostgreSQL và backend đang chạy; frontend không cần mở vì nút Thanh toán chưa kết nối với API tạo đơn.
+
+### 1. Chuẩn bị sản phẩm
+
+Mở một terminal PowerShell khác, giữ terminal backend chạy. Lấy danh sách sản phẩm và chọn một món còn ít nhất 2 phần:
+
+```powershell
+$products = @(Invoke-RestMethod http://localhost:3001/products)
+$products | Format-Table id, name, price, stock
+$product = $products | Where-Object { $_.stock -ge 2 } | Select-Object -First 1
+if ($null -eq $product) {
+  throw 'Cần ít nhất một sản phẩm có stock >= 2 để thử ví dụ này.'
+}
+```
+
+Nếu chưa có sản phẩm, chạy seed theo phần cài đặt. Nếu các món đều hết hàng, chuẩn bị lại tồn kho trên database thử nghiệm; chạy seed không đặt lại tồn kho của món đã có.
+
+### 2. Gửi giỏ hàng hợp lệ
+
+Tiếp tục trong cùng terminal để dùng sản phẩm vừa chọn:
+
+```powershell
+$payload = @{
+  items = @(
+    @{
+      productId = $product.id
+      size = 'M'
+      quantity = 2
+      toppings = @('pearls')
+    }
+  )
+}
+$body = $payload | ConvertTo-Json -Depth 5
+$response = Invoke-WebRequest -UseBasicParsing -Method Post `
+  -Uri 'http://localhost:3001/orders' `
+  -ContentType 'application/json; charset=utf-8' -Body $body
+$response.StatusCode
+$order = $response.Content | ConvertFrom-Json
+$order | ConvertTo-Json -Depth 5
+$expectedTotal = ($product.price + 5000 + 8000) * 2
+$expectedTotal
+```
+
+Kết quả cần đối chiếu:
+
+- HTTP `201`, có mã đơn `id`, trạng thái `PENDING` và thời điểm tạo `createdAt`.
+- Dòng món có đúng `productId`, size `M`, quantity `2` và topping `pearls`.
+- `unitPrice` bằng giá gốc cộng 5.000đ cho size M và 8.000đ cho trân châu.
+- `lineTotal` và `total` đều bằng `$expectedTotal`.
+
+Ví dụ món giá 29.000đ thì đơn trên có tổng tiền 84.000đ. Phụ phí size S/M/L lần lượt là 0đ/5.000đ/10.000đ; topping `pearls` là 8.000đ, `cream` là 10.000đ và `jelly` là 7.000đ.
+
+Nếu dùng **Postman**, chọn `POST http://localhost:3001/orders`, vào **Body → raw → JSON**. Chạy `$body` trong PowerShell để xem JSON của ví dụ trên, chép nội dung đó vào Postman rồi bấm **Send**. ID phải lấy từ `GET /products`, không mặc định là 1.
+
+### 3. Kiểm tra đơn đã lưu trong database
+
+Trong pgAdmin, chọn database `brewlite_scrum` rồi mở **Query Tool**. Thay `MA_DON` bằng giá trị `$order.id` vừa nhận:
+
+```sql
+SELECT "id", "status", "total", "createdAt"
+FROM "Order"
+WHERE "id" = MA_DON;
+
+SELECT "productId", "size", "toppings", "quantity", "unitPrice", "lineTotal"
+FROM "OrderItem"
+WHERE "orderId" = MA_DON;
+```
+
+Phải có một đơn và một dòng món với nội dung khớp response. Mỗi lần gửi request hợp lệ sẽ tạo một đơn mới. T06 chỉ kiểm tra tồn kho khi tạo đơn, chưa trừ hoặc giữ hàng và chưa xử lý thanh toán.
+
+### 4. Thử dữ liệu không hợp lệ
+
+Trong Postman, bắt đầu lại từ JSON hợp lệ ở bước 2 cho mỗi trường hợp. Chỉ thay dữ liệu được nêu trong bảng rồi gửi lại:
+
+| Trường hợp | Dữ liệu gửi | Kết quả mong đợi |
+| --- | --- | --- |
+| Giỏ rỗng | Body là `{"items": []}` | HTTP 400 |
+| Thiếu giỏ hàng | Body là `{}` | HTTP 400 |
+| Số lượng không hợp lệ | Đổi `quantity` thành `0`, `-1`, `1.5` hoặc chuỗi `"2"`; thử từng giá trị | HTTP 400 |
+| Size không hỗ trợ | Đổi `size` thành `"XL"` | HTTP 400 |
+| Topping không hỗ trợ | Đổi `toppings` thành `["syrup"]` | HTTP 400 |
+| Topping bị lặp | Đổi `toppings` thành `["pearls", "pearls"]` | HTTP 400 |
+| Sản phẩm không tồn tại | Dùng một ID số nguyên dương chưa có trong database | HTTP 404 |
+| Vượt tồn kho | Đặt `quantity` bằng `stock + 1` của sản phẩm đã chọn | HTTP 400 |
+| Tổng số lượng vượt kho | Gửi hai dòng cùng `productId`, mỗi dòng quantity bằng stock của món đó | HTTP 400 |
+| Tự gửi giá từ client | Thêm thuộc tính `"total": 1` ở cấp ngoài, cạnh `items` | HTTP 400 |
+
+Response lỗi phải có thông báo phù hợp. Để xác nhận request lỗi không lưu đơn, chạy câu SQL dưới đây trước và sau khi thử; số đơn phải giữ nguyên. Thực hiện lúc không có người khác tạo đơn trong cùng database.
+
+```sql
+SELECT COUNT(*) AS order_count FROM "Order";
+```
+
+Có thể ghi lại trường hợp thử, kết quả thực tế và ảnh response để nhóm đối chiếu khi review.
 
 ## Quy trình nhóm
 
