@@ -16,3 +16,6 @@ coverage/
 Thumbs.db
 .idea/
 .vscode/
+
+# Personal test backups
+.local-tests/

@@ -63,12 +63,9 @@ cd backend
 npm run prisma:deploy
 ```
 
-Kiểm thử DTO và nghiệp vụ tạo đơn:
+Kiểm thử thủ công API tạo đơn bằng Postman hoặc PowerShell: gửi giỏ hàng hợp lệ và xác nhận HTTP 201, mã đơn, trạng thái `PENDING`, tổng tiền và dữ liệu Order/OrderItem trong PostgreSQL. Thử giỏ rỗng, quantity không hợp lệ, size/topping không hỗ trợ, sản phẩm không tồn tại và số lượng vượt tồn kho; các request lỗi không được tạo đơn.
 
-```powershell
-cd backend
-npm test
-```
+Code kiểm thử tự động riêng của T06 được giữ trên máy cá nhân, không nằm trong phần mã nguồn bàn giao. Các lệnh test backend bên dưới chỉ chạy những bài test còn được lưu trong repository.
 
 Ví dụ gọi API:
 
@@ -440,7 +437,7 @@ Task chỉ được đánh dấu Done sau khi đáp ứng Acceptance Criteria, k
 
 - `POST /orders` validate giỏ hàng, xác nhận sản phẩm và tồn kho, tự tính giá ở backend, lưu đơn cùng OrderItem ở trạng thái `PENDING`.
 - Schema và migration PostgreSQL cho Order/OrderItem đã được áp dụng.
-- DTO unit test, service unit test đạt; backend E2E đạt `7/7`.
+- DTO unit test, service unit test đạt; backend E2E đạt `7/7` tại thời điểm kiểm tra. Code test riêng của T06 sau đó được tách để lưu trên máy cá nhân; kết quả này không phải số lượng test hiện có trong repository.
 - Backend lint, build và Prisma schema validation đạt.
 
 ## Tài liệu công nghệ
