@@ -1,4 +1,11 @@
-import { IsEmail, IsNotEmpty, IsString, Matches, MinLength } from 'class-validator';
+import {
+  IsByteLength,
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  Matches,
+  MinLength,
+} from 'class-validator';
 
 export class RegisterDto {
   @IsString({ message: 'Tên người dùng phải là chuỗi ký tự.' })
@@ -18,5 +25,6 @@ export class RegisterDto {
 
   @IsString({ message: 'Mật khẩu phải là chuỗi ký tự.' })
   @MinLength(6, { message: 'Mật khẩu phải có ít nhất 6 ký tự.' })
+  @IsByteLength(0, 72, { message: 'Mật khẩu không được vượt quá 72 byte.' })
   password!: string;
 }

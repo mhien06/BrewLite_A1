@@ -8,6 +8,7 @@ export default defineConfig({
     globals: true,
     root: './',
     include: ['**/*.spec.ts'],
+    setupFiles: ['./test/setup-jwt-secret.ts'],
     testTimeout: 30000,
     hookTimeout: 30000,
   },

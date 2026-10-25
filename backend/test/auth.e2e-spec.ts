@@ -176,6 +176,17 @@ describe('Auth & Protected Orders API (e2e)', () => {
         .expect(400);
     });
 
+    it('từ chối mật khẩu đăng ký vượt quá 72 byte UTF-8 (400)', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/register')
+        .send({
+          name: 'LE THI C',
+          email: 'longpassword@gmail.com',
+          password: 'é'.repeat(37),
+        })
+        .expect(400);
+    });
+
     it('từ chối khi email đã tồn tại (409 Conflict)', async () => {
       await request(app.getHttpServer())
         .post('/auth/register')
@@ -199,6 +210,7 @@ describe('Auth & Protected Orders API (e2e)', () => {
         .expect(200);
 
       expect(res.body).toHaveProperty('accessToken');
+      expect(res.body.accessToken).toEqual(expect.any(String));
       expect(res.body.user).toMatchObject({
         id: 1,
         email: 'existing@gmail.com',
@@ -214,6 +226,16 @@ describe('Auth & Protected Orders API (e2e)', () => {
           password: 'wrongPassword',
         })
         .expect(401);
+    });
+
+    it('từ chối mật khẩu đăng nhập vượt quá 72 byte UTF-8 (400)', async () => {
+      await request(app.getHttpServer())
+        .post('/auth/login')
+        .send({
+          email: 'existing@gmail.com',
+          password: 'é'.repeat(37),
+        })
+        .expect(400);
     });
 
     it('từ chối đăng nhập khi email không tồn tại (401)', async () => {
