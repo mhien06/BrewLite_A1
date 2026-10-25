@@ -210,7 +210,7 @@ export default function CartPage() {
                 </p>
                 <Link
                   href="/login"
-                  className="mt-2 inline-flex items-center rounded-full bg-[#f6a14a] px-3.5 py-1 font-bold text-[#40241b] transition hover:bg-[#f29435]"
+                  className="mt-3 flex w-full items-center justify-center rounded-full bg-[#f6a14a] px-4 py-2 text-center font-bold text-[#40241b] transition hover:bg-[#f29435]"
                 >
                   Đăng nhập ngay
                 </Link>
