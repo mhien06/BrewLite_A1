@@ -2,6 +2,7 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
+import { useAuthStore } from '@/stores/auth.store';
 import {
   selectTotalPrice,
   useCartStore,
@@ -18,6 +19,8 @@ export default function CartPage() {
   const updateQuantity = useCartStore((state) => state.updateQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
   const totalPrice = useCartStore(selectTotalPrice);
+  const user = useAuthStore((state) => state.user);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -191,6 +194,28 @@ export default function CartPage() {
                 </dd>
               </div>
             </dl>
+
+            {isAuthenticated && user ? (
+              <div className="mt-4 rounded-xl bg-amber-50 p-3.5 text-xs text-amber-950">
+                <p className="font-bold">Đã đăng nhập: {user.email}</p>
+                <p className="mt-0.5 text-amber-700">
+                  Điểm tích lũy: {user.loyaltyPoints} điểm
+                </p>
+              </div>
+            ) : (
+              <div className="mt-4 rounded-xl border border-amber-300/60 bg-amber-50/70 p-3.5 text-xs text-amber-900">
+                <p className="font-bold">Chưa đăng nhập</p>
+                <p className="mt-0.5 text-stone-600">
+                  Đăng nhập để liên kết đơn hàng và tích lũy điểm thưởng.
+                </p>
+                <Link
+                  href="/login"
+                  className="mt-3 flex w-full items-center justify-center rounded-full bg-[#f6a14a] px-4 py-2 text-center font-bold text-[#40241b] transition hover:bg-[#f29435]"
+                >
+                  Đăng nhập ngay
+                </Link>
+              </div>
+            )}
 
             <button
               type="button"

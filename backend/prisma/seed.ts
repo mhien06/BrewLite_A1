@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import bcrypt from 'bcrypt';
 import { PrismaPg } from '@prisma/adapter-pg';
 import { PrismaClient } from '../src/generated/prisma/client.js';
 
@@ -54,6 +55,23 @@ async function main() {
         data: product,
       });
     }
+  }
+
+  const demoEmail = 'customer@gmail.com';
+  const existingUser = await prisma.user.findUnique({
+    where: { email: demoEmail },
+  });
+
+  if (!existingUser) {
+    const passwordHash = await bcrypt.hash('password123', 10);
+    await prisma.user.create({
+      data: {
+        email: demoEmail,
+        name: 'NGUYEN VAN A',
+        passwordHash,
+        loyaltyPoints: 100,
+      },
+    });
   }
 }
 

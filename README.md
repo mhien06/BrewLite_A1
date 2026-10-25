@@ -6,7 +6,7 @@
 
 Khởi tạo frontend Next.js (TypeScript, Tailwind CSS) và backend NestJS (TypeScript). Frontend hiển thị trang chào; backend có `GET /` trả `Hello World!`.
 
-Products API được triển khai trong T02; Menu Page trong T03; Product Detail trong T04; Cart và Zustand trong T05; API tạo đơn hàng trong T06. Đăng nhập, thanh toán, lịch sử đơn và Docker Compose sẽ được triển khai ở những task tiếp theo.
+Products API được triển khai trong T02; Menu Page trong T03; Product Detail trong T04; Cart và Zustand trong T05; API tạo đơn hàng trong T06; đăng ký, đăng nhập và bảo vệ API bằng JWT trong T07. Thanh toán và lịch sử đơn vẫn sẽ được triển khai ở những task tiếp theo.
 
 ## Phạm vi T02 - Thành
 
@@ -65,9 +65,48 @@ npm run prisma:deploy
 
 Nút **Thanh toán** ở trang giỏ hàng hiện chưa hoạt động. T06 mới cung cấp API tạo đơn ở backend, chưa nối thao tác tạo đơn từ giao diện. Để kiểm tra phần này, làm theo mục [Hướng dẫn kiểm thử API tạo đơn (T06)](#hướng-dẫn-kiểm-thử-api-tạo-đơn-t06) bên dưới.
 
-## Cấu trúc dự án đến T06
+## Phạm vi T07 - Đăng ký, đăng nhập và JWT
 
-Các thư mục và file chính hiện có trong dự án. Phần `orders/` và migration `add_orders` được bổ sung ở T06 để nhận giỏ hàng và lưu đơn vào PostgreSQL.
+Backend cung cấp đăng ký tài khoản, đăng nhập và endpoint thông tin người dùng hiện tại. Tên đăng ký phải viết HOA; email đăng ký phải có đuôi `@gmail.com`; mật khẩu được băm bằng bcrypt trước khi lưu. Đăng ký không tự đăng nhập; người dùng cần đăng nhập bằng email và mật khẩu vừa tạo.
+
+Mật khẩu đăng ký phải dài ít nhất 6 ký tự; mật khẩu ở cả đăng ký và đăng nhập không được vượt quá 72 byte UTF-8. Giới hạn này tránh bcrypt bỏ qua phần mật khẩu vượt quá 72 byte.
+
+| Method | Endpoint | Kết quả |
+| ------ | -------- | ------- |
+| POST | `/auth/register` | Tạo tài khoản; trả HTTP 201, không cấp JWT |
+| POST | `/auth/login` | Đăng nhập; trả HTTP 200 cùng `accessToken` và thông tin người dùng |
+| GET | `/auth/me` | Trả thông tin tài khoản hiện tại; yêu cầu Bearer JWT |
+| POST | `/orders` | Tạo đơn hàng; yêu cầu Bearer JWT |
+
+Request đăng ký gồm `name`, `email`, `password`; request đăng nhập gồm `email`, `password`. Dữ liệu không hợp lệ trả HTTP 400, email đã được dùng trả HTTP 409, thông tin đăng nhập sai hoặc thiếu JWT hợp lệ trả HTTP 401.
+
+Để gọi `POST /orders`, trước tiên đăng nhập và lấy `accessToken` từ response, sau đó gửi header `Authorization: Bearer <accessToken>`. Ví dụ T06 không gửi token sẽ bị chặn bằng HTTP 401.
+
+`JwtAuthGuard` bảo vệ `GET /auth/me` và `POST /orders`. Gửi token đăng nhập trong header `Authorization: Bearer <accessToken>`. Guard xác minh chữ ký và thời hạn token, sau đó xác nhận người dùng vẫn tồn tại trong database trước khi cho phép gọi controller.
+
+`JWT_SECRET` là bắt buộc; backend dừng khởi động nếu biến này bị thiếu và không dùng khóa dự phòng. Tạo chuỗi ngẫu nhiên riêng cho từng môi trường, không dùng giá trị mẫu và không commit `backend/.env`:
+
+```powershell
+node -e "console.log(require('node:crypto').randomBytes(64).toString('hex'))"
+```
+
+Đặt chuỗi kết quả vào `JWT_SECRET` trong `backend/.env`. `JWT_EXPIRES_IN` cấu hình thời hạn token, mặc định `7d`. Nếu mật khẩu database từng được commit hoặc chia sẻ, hãy đổi mật khẩu đó và cập nhật `DATABASE_URL` trong file `.env` cục bộ.
+
+Migration T07 tạo bảng user cho database hiện có và đồng bộ sequence ID để các user mới nhận ID chưa sử dụng. Để chạy và kiểm thử:
+
+```powershell
+cd backend
+Copy-Item .env.example .env
+# Thay YOUR_PASSWORD và change-me... bằng thông tin riêng, đặc biệt tạo JWT_SECRET ngẫu nhiên.
+npm run prisma:deploy
+npm run start:dev
+```
+
+Mở terminal khác tại `backend` để chạy `npm test`, `npm run test:e2e`, `npm run lint` và `npm run build`. E2E đọc cấu hình `.env` nếu có nhưng không ghi đè các biến môi trường đã được cung cấp.
+
+## Cấu trúc dự án đến T07
+
+Các thư mục và file chính hiện có trong dự án. Phần `orders/` và migration `add_orders` được bổ sung ở T06; phần `auth/` và migration `add_users` được bổ sung ở T07 để quản lý tài khoản và bảo vệ API.
 
 ```text
 BrewLite-Scrum/
@@ -177,6 +216,8 @@ Trong `backend/.env`, thay `YOUR_PASSWORD` bằng mật khẩu PostgreSQL:
 PORT=3001
 FRONTEND_URL=http://localhost:3000
 DATABASE_URL="postgresql://postgres:YOUR_PASSWORD@localhost:5432/brewlite_scrum?schema=public"
+JWT_SECRET=change-me-to-a-long-random-string
+JWT_EXPIRES_IN=7d
 ```
 
 Áp dụng migration và thêm dữ liệu mẫu:
@@ -242,6 +283,8 @@ Invoke-RestMethod "http://localhost:3001/products/$($products[0].id)"
 | backend  | PORT                | 3001                  | Cổng HTTP của backend                                  |
 | backend  | FRONTEND_URL        | http://localhost:3000 | Origin được phép gọi API qua CORS                      |
 | backend  | DATABASE_URL        | Không có              | Chuỗi kết nối PostgreSQL; chỉ lưu trong `backend/.env` |
+| backend  | JWT_SECRET          | Bắt buộc              | Khóa bí mật riêng để ký và xác minh JWT; không commit   |
+| backend  | JWT_EXPIRES_IN      | 7d                    | Thời hạn JWT, ví dụ `1h`, `7d`                          |
 
 Next.js đọc `.env.local`. Backend đọc `.env` trong thư mục `backend`. Các file env thật không được đưa lên Git, chỉ commit `.env.example`.
 
@@ -402,7 +445,25 @@ if ($null -eq $product) {
 
 Nếu chưa có sản phẩm, chạy seed theo phần cài đặt. Nếu các món đều hết hàng, chuẩn bị lại tồn kho trên database thử nghiệm; chạy seed không đặt lại tồn kho của món đã có.
 
-### 2. Gửi giỏ hàng hợp lệ
+### 2. Đăng nhập để lấy JWT
+
+`POST /orders` yêu cầu tài khoản đã đăng nhập. Dùng email và mật khẩu của tài khoản đã đăng ký theo [hướng dẫn T07](#hướng-dẫn-kiểm-thử-đăng-ký-đăng-nhập-và-guard-tạo-đơn-t07), hoặc thay hai giá trị mẫu dưới đây bằng tài khoản của bạn:
+
+```powershell
+$credentials = @{
+  email = 'your-account@gmail.com'
+  password = 'your-password'
+}
+$login = Invoke-RestMethod -Method Post `
+  -Uri 'http://localhost:3001/auth/login' `
+  -ContentType 'application/json; charset=utf-8' `
+  -Body ($credentials | ConvertTo-Json)
+$token = $login.accessToken
+```
+
+Đăng nhập thành công trả HTTP `200` và `accessToken`. Nếu bỏ qua bước này hoặc không gửi token, `POST /orders` sẽ trả HTTP `401`.
+
+### 3. Gửi giỏ hàng hợp lệ
 
 Tiếp tục trong cùng terminal để dùng sản phẩm vừa chọn:
 
@@ -420,7 +481,8 @@ $payload = @{
 $body = $payload | ConvertTo-Json -Depth 5
 $response = Invoke-WebRequest -UseBasicParsing -Method Post `
   -Uri 'http://localhost:3001/orders' `
-  -ContentType 'application/json; charset=utf-8' -Body $body
+  -ContentType 'application/json; charset=utf-8' `
+  -Headers @{ Authorization = "Bearer $token" } -Body $body
 $response.StatusCode
 $order = $response.Content | ConvertFrom-Json
 $order | ConvertTo-Json -Depth 5
@@ -437,9 +499,9 @@ Kết quả cần đối chiếu:
 
 Ví dụ món giá 29.000đ thì đơn trên có tổng tiền 84.000đ. Phụ phí size S/M/L lần lượt là 0đ/5.000đ/10.000đ; topping `pearls` là 8.000đ, `cream` là 10.000đ và `jelly` là 7.000đ.
 
-Nếu dùng **Postman**, chọn `POST http://localhost:3001/orders`, vào **Body → raw → JSON**. Chạy `$body` trong PowerShell để xem JSON của ví dụ trên, chép nội dung đó vào Postman rồi bấm **Send**. ID phải lấy từ `GET /products`, không mặc định là 1.
+Nếu dùng **Postman**, chọn `POST http://localhost:3001/orders`, vào **Authorization → Bearer Token** và dán `accessToken` nhận từ bước đăng nhập; vào **Body → raw → JSON** để gửi giỏ hàng. ID phải lấy từ `GET /products`, không mặc định là 1.
 
-### 3. Kiểm tra đơn đã lưu trong database
+### 4. Kiểm tra đơn đã lưu trong database
 
 Trong pgAdmin, chọn database `brewlite_scrum` rồi mở **Query Tool**. Thay `MA_DON` bằng giá trị `$order.id` vừa nhận:
 
@@ -455,9 +517,9 @@ WHERE "orderId" = MA_DON;
 
 Phải có một đơn và một dòng món với nội dung khớp response. Mỗi lần gửi request hợp lệ sẽ tạo một đơn mới. T06 chỉ kiểm tra tồn kho khi tạo đơn, chưa trừ hoặc giữ hàng và chưa xử lý thanh toán.
 
-### 4. Thử dữ liệu không hợp lệ
+### 5. Thử dữ liệu không hợp lệ
 
-Trong Postman, bắt đầu lại từ JSON hợp lệ ở bước 2 cho mỗi trường hợp. Chỉ thay dữ liệu được nêu trong bảng rồi gửi lại:
+Trong Postman, bắt đầu lại từ JSON hợp lệ ở bước 3 cho mỗi trường hợp. Chỉ thay dữ liệu được nêu trong bảng rồi gửi lại:
 
 | Trường hợp | Dữ liệu gửi | Kết quả mong đợi |
 | --- | --- | --- |
@@ -480,6 +542,130 @@ SELECT COUNT(*) AS order_count FROM "Order";
 
 Có thể ghi lại trường hợp thử, kết quả thực tế và ảnh response để nhóm đối chiếu khi review.
 
+## Hướng dẫn kiểm thử đăng ký, đăng nhập và guard tạo đơn (T07)
+
+Yêu cầu: PostgreSQL đã chạy, migration đã áp dụng, backend đang chạy tại `http://localhost:3001`, và `JWT_SECRET` đã được cấu hình riêng trong `backend/.env`. Frontend không cần chạy. Có thể dùng PowerShell theo các bước dưới đây hoặc gửi cùng request bằng Postman.
+
+### 1. Đăng ký tài khoản
+
+Tạo email riêng để có thể chạy lại hướng dẫn nhiều lần. Tên phải viết HOA, email phải kết thúc bằng `@gmail.com`, mật khẩu đăng ký dài ít nhất 6 ký tự và cả mật khẩu đăng ký/đăng nhập không được vượt quá 72 byte UTF-8:
+
+```powershell
+$email = "t07-$([guid]::NewGuid().ToString('N'))@gmail.com"
+$password = 'BrewLiteTest123!'
+$register = @{
+  name = 'BREWLITE TEST USER'
+  email = $email
+  password = $password
+}
+$registerResponse = Invoke-WebRequest -UseBasicParsing -Method Post `
+  -Uri 'http://localhost:3001/auth/register' `
+  -ContentType 'application/json; charset=utf-8' `
+  -Body ($register | ConvertTo-Json)
+$registerResponse.StatusCode
+$registeredUser = $registerResponse.Content | ConvertFrom-Json
+$registeredUser.user
+```
+
+Kết quả mong đợi: HTTP `201`, response có `user` nhưng không có `accessToken`. Mật khẩu dài hơn 72 byte phải bị từ chối bằng HTTP `400` ở cả `/auth/register` và `/auth/login`.
+
+### 2. Đăng nhập và kiểm tra JWT
+
+```powershell
+$credentials = @{ email = $email; password = $password }
+$loginResponse = Invoke-WebRequest -UseBasicParsing -Method Post `
+  -Uri 'http://localhost:3001/auth/login' `
+  -ContentType 'application/json; charset=utf-8' `
+  -Body ($credentials | ConvertTo-Json)
+$loginResponse.StatusCode
+$login = $loginResponse.Content | ConvertFrom-Json
+$token = $login.accessToken
+$login.user
+```
+
+Kết quả mong đợi: HTTP `200`, có `accessToken` và thông tin user với ID trùng `$registeredUser.user.id`. Gửi sai email hoặc mật khẩu trả HTTP `401`. Có thể xác nhận token hoạt động bằng endpoint hiện tại:
+
+```powershell
+Invoke-RestMethod -Method Get -Uri 'http://localhost:3001/auth/me' `
+  -Headers @{ Authorization = "Bearer $token" }
+```
+
+Kết quả mong đợi: thông tin tài khoản vừa đăng ký; thiếu hoặc sai token trả HTTP `401`.
+
+### 3. Kiểm tra guard của `POST /orders`
+
+Lấy sản phẩm còn hàng và chuẩn bị một đơn hợp lệ:
+
+```powershell
+$products = @(Invoke-RestMethod 'http://localhost:3001/products')
+$product = $products | Where-Object { $_.stock -ge 1 } | Select-Object -First 1
+if ($null -eq $product) {
+  throw 'Cần ít nhất một sản phẩm có stock >= 1 để thử ví dụ này.'
+}
+$orderBody = @{
+  items = @(@{
+    productId = $product.id
+    size = 'S'
+    quantity = 1
+    toppings = @()
+  })
+} | ConvertTo-Json -Depth 5
+```
+
+Thử thiếu token và token sai; cả hai request phải bị chặn trước khi tạo đơn với HTTP `401`:
+
+```powershell
+try {
+  Invoke-WebRequest -UseBasicParsing -Method Post -Uri 'http://localhost:3001/orders' `
+    -ContentType 'application/json; charset=utf-8' -Body $orderBody
+  throw 'Lỗi: request thiếu token không bị chặn.'
+} catch {
+  if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 401) {
+    throw
+  }
+  'Thiếu token: HTTP 401 như mong đợi.'
+}
+
+try {
+  Invoke-WebRequest -UseBasicParsing -Method Post -Uri 'http://localhost:3001/orders' `
+    -ContentType 'application/json; charset=utf-8' `
+    -Headers @{ Authorization = 'Bearer invalid-token' } -Body $orderBody
+  throw 'Lỗi: request dùng token sai không bị chặn.'
+} catch {
+  if (-not $_.Exception.Response -or [int]$_.Exception.Response.StatusCode -ne 401) {
+    throw
+  }
+  'Token sai: HTTP 401 như mong đợi.'
+}
+```
+
+Gửi lại cùng giỏ hàng với JWT hợp lệ:
+
+```powershell
+$orderResponse = Invoke-WebRequest -UseBasicParsing -Method Post `
+  -Uri 'http://localhost:3001/orders' `
+  -ContentType 'application/json; charset=utf-8' `
+  -Headers @{ Authorization = "Bearer $token" } -Body $orderBody
+$orderResponse.StatusCode
+$order = $orderResponse.Content | ConvertFrom-Json
+$order
+```
+
+Kết quả mong đợi: HTTP `201`, trạng thái `PENDING`, và `userId` của đơn bằng `$login.user.id`. Trong pgAdmin, xác nhận thông tin tài khoản và mật khẩu đã băm (không bằng plaintext) cùng đơn hàng:
+
+```sql
+SELECT "id", "email", left("passwordHash", 4) AS hash_prefix,
+       "passwordHash" <> 'BrewLiteTest123!' AS password_is_hashed
+FROM "User"
+WHERE "email" = 'EMAIL_DA_DANG_KY';
+
+SELECT "id", "userId", "status", "total", "createdAt"
+FROM "Order"
+WHERE "id" = MA_DON;
+```
+
+Thay `EMAIL_DA_DANG_KY` bằng `$email` và `MA_DON` bằng `$order.id`. Kết quả user phải có `hash_prefix` bắt đầu bằng `$2` và `password_is_hashed` là `true`; `userId` của đơn phải bằng ID user vừa đăng nhập. Request thiếu/sai token không tạo đơn.
+
 ## Quy trình nhóm
 
 Dự án gồm 10 task và 3 Sprint, từ 14/10/2026 đến 04/11/2026.
@@ -490,6 +676,7 @@ Dự án gồm 10 task và 3 Sprint, từ 14/10/2026 đến 04/11/2026.
 - T04 sử dụng branch `task-4/product-detail`.
 - T05 sử dụng branch `task-5/cart`.
 - T06 sử dụng branch `task-6/orders-api`.
+- T07 sử dụng branch `task-7/auth-jwt`.
 
 Quy trình:
 
