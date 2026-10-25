@@ -18,6 +18,16 @@ const storageMock = (() => {
   };
 })();
 
+function createDeferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((resolvePromise, rejectPromise) => {
+    resolve = resolvePromise;
+    reject = rejectPromise;
+  });
+  return { promise, resolve, reject };
+}
+
 Object.defineProperty(globalThis, 'localStorage', {
   value: storageMock,
   writable: true,
@@ -119,5 +129,129 @@ describe('useAuthStore', () => {
     expect(state.user).toBeNull();
     expect(state.token).toBeNull();
     expect(localStorage.getItem('brewlite_jwt_token')).toBeNull();
+  });
+
+  it('bỏ qua kết quả phiên cũ thành công nếu người dùng đăng xuất trong lúc chờ', async () => {
+    const request = createDeferred<{
+      id: number;
+      email: string;
+      name: string;
+      loyaltyPoints: number;
+    }>();
+    localStorage.setItem('brewlite_jwt_token', 'old-token');
+    vi.mocked(authService.getMeApi).mockReturnValue(request.promise);
+
+    const initialization = useAuthStore.getState().initialize();
+    useAuthStore.getState().logout();
+    request.resolve({
+      id: 1,
+      email: 'old@gmail.com',
+      name: 'OLD USER',
+      loyaltyPoints: 0,
+    });
+    await initialization;
+
+    expect(useAuthStore.getState()).toMatchObject({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+    expect(localStorage.getItem('brewlite_jwt_token')).toBeNull();
+  });
+
+  it('không xóa token phiên mới nếu kiểm tra phiên cũ thất bại sau khi đăng xuất', async () => {
+    const request = createDeferred<{
+      id: number;
+      email: string;
+      name: string;
+      loyaltyPoints: number;
+    }>();
+    localStorage.setItem('brewlite_jwt_token', 'old-token');
+    vi.mocked(authService.getMeApi).mockReturnValue(request.promise);
+
+    const initialization = useAuthStore.getState().initialize();
+    useAuthStore.getState().logout();
+    request.reject(new Error('Phiên cũ hết hạn.'));
+    await initialization;
+
+    expect(useAuthStore.getState()).toMatchObject({
+      user: null,
+      token: null,
+      isAuthenticated: false,
+      isLoading: false,
+    });
+    expect(localStorage.getItem('brewlite_jwt_token')).toBeNull();
+  });
+
+  it('không ghi đè tài khoản mới khi kiểm tra phiên cũ thành công muộn', async () => {
+    const request = createDeferred<{
+      id: number;
+      email: string;
+      name: string;
+      loyaltyPoints: number;
+    }>();
+    const newAccount = {
+      accessToken: 'new-token',
+      user: {
+        id: 2,
+        email: 'new@gmail.com',
+        name: 'NEW USER',
+        loyaltyPoints: 25,
+      },
+    };
+    localStorage.setItem('brewlite_jwt_token', 'old-token');
+    vi.mocked(authService.getMeApi).mockReturnValue(request.promise);
+    vi.mocked(authService.loginApi).mockResolvedValue(newAccount);
+
+    const initialization = useAuthStore.getState().initialize();
+    await useAuthStore.getState().login('new@gmail.com', 'password123');
+    request.resolve({
+      id: 1,
+      email: 'old@gmail.com',
+      name: 'OLD USER',
+      loyaltyPoints: 0,
+    });
+    await initialization;
+
+    expect(useAuthStore.getState()).toMatchObject({
+      user: newAccount.user,
+      token: 'new-token',
+      isAuthenticated: true,
+    });
+    expect(localStorage.getItem('brewlite_jwt_token')).toBe('new-token');
+  });
+
+  it('không xóa token hoặc tài khoản mới khi kiểm tra phiên cũ báo lỗi muộn', async () => {
+    const request = createDeferred<{
+      id: number;
+      email: string;
+      name: string;
+      loyaltyPoints: number;
+    }>();
+    const newAccount = {
+      accessToken: 'new-token',
+      user: {
+        id: 2,
+        email: 'new@gmail.com',
+        name: 'NEW USER',
+        loyaltyPoints: 25,
+      },
+    };
+    localStorage.setItem('brewlite_jwt_token', 'old-token');
+    vi.mocked(authService.getMeApi).mockReturnValue(request.promise);
+    vi.mocked(authService.loginApi).mockResolvedValue(newAccount);
+
+    const initialization = useAuthStore.getState().initialize();
+    await useAuthStore.getState().login('new@gmail.com', 'password123');
+    request.reject(new Error('Phiên cũ hết hạn.'));
+    await initialization;
+
+    expect(useAuthStore.getState()).toMatchObject({
+      user: newAccount.user,
+      token: 'new-token',
+      isAuthenticated: true,
+    });
+    expect(localStorage.getItem('brewlite_jwt_token')).toBe('new-token');
   });
 });

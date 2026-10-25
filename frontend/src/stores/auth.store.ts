@@ -3,6 +3,7 @@ import { getMeApi, loginApi, registerApi } from '@/services/auth.service';
 import { AuthState } from '@/types/auth';
 
 const TOKEN_KEY = 'brewlite_jwt_token';
+let sessionRevision = 0;
 
 const getStorage = () => {
   if (typeof window !== 'undefined' && window.localStorage) {
@@ -22,6 +23,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   error: null,
 
   initialize: async () => {
+    const revision = ++sessionRevision;
     const storage = getStorage();
     if (!storage) return;
     const token = storage.getItem(TOKEN_KEY);
@@ -30,8 +32,10 @@ export const useAuthStore = create<AuthState>((set) => ({
     set({ isLoading: true, token, isAuthenticated: true });
     try {
       const user = await getMeApi(token);
+      if (revision !== sessionRevision) return;
       set({ user, isLoading: false, isAuthenticated: true });
     } catch {
+      if (revision !== sessionRevision) return;
       storage.removeItem(TOKEN_KEY);
       set({
         token: null,
@@ -43,9 +47,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   login: async (email: string, password: string) => {
+    const revision = ++sessionRevision;
     set({ isLoading: true, error: null });
     try {
       const response = await loginApi(email, password);
+      if (revision !== sessionRevision) return false;
       const storage = getStorage();
       if (storage) {
         storage.setItem(TOKEN_KEY, response.accessToken);
@@ -59,6 +65,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
       return true;
     } catch (err) {
+      if (revision !== sessionRevision) return false;
       const message =
         err instanceof Error ? err.message : 'Đăng nhập không thành công.';
       set({
@@ -71,9 +78,11 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   register: async (name: string, email: string, password: string) => {
+    const revision = ++sessionRevision;
     set({ isLoading: true, error: null });
     try {
       await registerApi(name, email, password);
+      if (revision !== sessionRevision) return false;
       const storage = getStorage();
       if (storage) {
         storage.removeItem(TOKEN_KEY);
@@ -87,6 +96,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       });
       return true;
     } catch (err) {
+      if (revision !== sessionRevision) return false;
       const message =
         err instanceof Error ? err.message : 'Đăng ký không thành công.';
       set({
@@ -99,6 +109,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   },
 
   logout: () => {
+    sessionRevision += 1;
     const storage = getStorage();
     if (storage) {
       storage.removeItem(TOKEN_KEY);
@@ -107,6 +118,7 @@ export const useAuthStore = create<AuthState>((set) => ({
       user: null,
       token: null,
       isAuthenticated: false,
+      isLoading: false,
       error: null,
     });
   },
