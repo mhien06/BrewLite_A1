@@ -1,25 +1,19 @@
-'use client';
+"use client";
 
-import { useMemo, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import CheckoutOrderSummary from '@/components/CheckoutOrderSummary';
-import PaymentFailure from '@/components/PaymentFailure';
-import PaymentMethodPanel from '@/components/PaymentMethodPanel';
-import {
-  createOrderApi,
-  createPaymentApi,
-} from '@/services/checkout.service';
-import { useAuthStore } from '@/stores/auth.store';
+import { useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import CheckoutOrderSummary from "@/components/CheckoutOrderSummary";
+import PaymentFailure from "@/components/PaymentFailure";
+import PaymentMethodPanel from "@/components/PaymentMethodPanel";
+import { createOrderApi, createPaymentApi } from "@/services/checkout.service";
+import { useAuthStore } from "@/stores/auth.store";
 import {
   createCartFingerprint,
   useCheckoutStore,
-} from '@/stores/checkout.store';
-import {
-  selectTotalPrice,
-  useCartStore,
-} from '@/stores/cart.store';
-import type { PaymentMethod } from '@/types/checkout';
+} from "@/stores/checkout.store";
+import { selectTotalPrice, useCartStore } from "@/stores/cart.store";
+import type { PaymentMethod } from "@/types/checkout";
 
 export default function CheckoutPage() {
   const router = useRouter();
@@ -30,67 +24,55 @@ export default function CheckoutPage() {
 
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
-  const isAuthenticated = useAuthStore(
-    (state) => state.isAuthenticated,
-  );
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const isAuthLoading = useAuthStore((state) => state.isLoading);
 
-  const pendingOrder = useCheckoutStore(
-    (state) => state.pendingOrder,
-  );
-  const setPendingOrder = useCheckoutStore(
-    (state) => state.setPendingOrder,
-  );
+  const pendingOrder = useCheckoutStore((state) => state.pendingOrder);
+  const setPendingOrder = useCheckoutStore((state) => state.setPendingOrder);
   const clearPendingOrder = useCheckoutStore(
     (state) => state.clearPendingOrder,
   );
 
-  const [method, setMethod] =
-    useState<PaymentMethod>('WALLET');
+  const [method, setMethod] = useState<PaymentMethod>("WALLET");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentFailed, setPaymentFailed] = useState(false);
-  const [error, setError] = useState('');
-  const [serverTotal, setServerTotal] = useState<number | null>(
-    null,
-  );
+  const [error, setError] = useState("");
+  const [serverTotal, setServerTotal] = useState<number | null>(null);
 
-  const cartFingerprint = useMemo(
-    () => createCartFingerprint(items),
-    [items],
-  );
+  const cartFingerprint = useMemo(() => createCartFingerprint(items), [items]);
 
- const displayTotal =
-  pendingOrder !== null &&
-  pendingOrder.userId === user?.id &&
-  pendingOrder.cartFingerprint === cartFingerprint &&
-  serverTotal !== null
-    ? serverTotal
-    : totalPrice;
+  const displayTotal =
+    pendingOrder !== null &&
+    pendingOrder.userId === user?.id &&
+    pendingOrder.cartFingerprint === cartFingerprint &&
+    serverTotal !== null
+      ? serverTotal
+      : totalPrice;
 
   const handlePayment = async (simulateSuccess: boolean) => {
     if (isSubmitting) return;
 
     if (!token || !user) {
-      setError('Vui lòng đăng nhập trước khi thanh toán.');
+      setError("Vui lòng đăng nhập trước khi thanh toán.");
       return;
     }
 
     if (items.length === 0) {
-      setError('Giỏ hàng đang trống.');
+      setError("Giỏ hàng đang trống.");
       return;
     }
 
     setIsSubmitting(true);
-    setError('');
+    setError("");
 
     try {
       let orderId: number;
 
       if (
-  pendingOrder &&
-  pendingOrder.userId === user.id &&
-  pendingOrder.cartFingerprint === cartFingerprint
-) {
+        pendingOrder &&
+        pendingOrder.userId === user.id &&
+        pendingOrder.cartFingerprint === cartFingerprint
+      ) {
         orderId = pendingOrder.orderId;
       } else {
         const order = await createOrderApi(token, {
@@ -98,9 +80,7 @@ export default function CheckoutPage() {
             productId: item.productId,
             size: item.size.id,
             quantity: item.quantity,
-            toppings: item.toppings.map(
-              (topping) => topping.id,
-            ),
+            toppings: item.toppings.map((topping) => topping.id),
           })),
         });
 
@@ -117,10 +97,10 @@ export default function CheckoutPage() {
 
       setServerTotal(payment.total);
 
-      if (payment.status === 'PAID') {
+      if (payment.status === "PAID") {
         clearCart();
         clearPendingOrder();
-        router.push('/');
+        router.push("/");
         return;
       }
 
@@ -129,7 +109,7 @@ export default function CheckoutPage() {
       setError(
         checkoutError instanceof Error
           ? checkoutError.message
-          : 'Không thể xử lý thanh toán.',
+          : "Không thể xử lý thanh toán.",
       );
     } finally {
       setIsSubmitting(false);
@@ -196,9 +176,7 @@ export default function CheckoutPage() {
           ← Thanh toán
         </button>
 
-        <PaymentFailure
-          onRetry={() => setPaymentFailed(false)}
-        />
+        <PaymentFailure onRetry={() => setPaymentFailed(false)} />
       </main>
     );
   }
@@ -237,7 +215,7 @@ export default function CheckoutPage() {
           error={error}
           onMethodChange={(nextMethod) => {
             setMethod(nextMethod);
-            setError('');
+            setError("");
           }}
           onSubmit={handlePayment}
         />
