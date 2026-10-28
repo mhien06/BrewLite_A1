@@ -28,6 +28,13 @@ model Product {
 
 enum OrderStatus {
   PENDING
+  PAID
+  PAYMENT_FAILED
+}
+
+enum PaymentMethod {
+  WALLET
+  CARD
 }
 
 model Order {
@@ -35,6 +42,8 @@ model Order {
   userId    Int
   user      User        @relation(fields: [userId], references: [id], onDelete: Restrict)
   status    OrderStatus @default(PENDING)
+  paymentMethod PaymentMethod?
+  paidAt       DateTime?
   total     Int
   createdAt DateTime    @default(now())
   items     OrderItem[]
