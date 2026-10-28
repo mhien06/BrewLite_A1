@@ -104,9 +104,30 @@ npm run start:dev
 
 Mở terminal khác tại `backend` để chạy `npm test`, `npm run test:e2e`, `npm run lint` và `npm run build`. E2E đọc cấu hình `.env` nếu có nhưng không ghi đè các biến môi trường đã được cung cấp.
 
-## Cấu trúc dự án đến T07
+## Phạm vi Backend T08 - Payments API
+
+- `POST /payments` được bảo vệ bằng JWT.
+- Hỗ trợ `WALLET` và `CARD`.
+- Thành công cập nhật `PAID`; thất bại cập nhật `PAYMENT_FAILED`.
+- Cho phép retry đơn `PAYMENT_FAILED`.
+- Đơn đã `PAID` trả HTTP `409`.
+- Backend kiểm tra quyền sở hữu và lấy `total` từ database.
+
+## Phạm vi Frontend T08 - Checkout
+
+- Thêm route `/checkout` theo thiết kế Figma.
+- Tạo đơn thật qua `POST /orders`, sau đó thanh toán qua `POST /payments`.
+- Hỗ trợ `WALLET`, `CARD` và mô phỏng thanh toán thành công hoặc thất bại.
+- Giữ nguyên giỏ hàng khi `PAYMENT_FAILED` và cho phép retry cùng Order ID.
+- Tạo Order mới khi nội dung giỏ hàng thay đổi.
+- Chỉ xóa giỏ hàng khi trạng thái là `PAID`.
+- Xử lý loading, lỗi API, chống gửi lặp và responsive Mobile.
+
+## Cấu trúc dự án đến T08
 
 Các thư mục và file chính hiện có trong dự án. Phần `orders/` và migration `add_orders` được bổ sung ở T06; phần `auth/` và migration `add_users` được bổ sung ở T07 để quản lý tài khoản và bảo vệ API.
+
+Frontend T08 bổ sung `frontend/src/app/checkout/page.tsx`, các component `CheckoutOrderSummary`, `PaymentMethodPanel`, `PaymentFailure`, cùng `checkout.service`, `checkout.store`, type và Unit Test tương ứng. Backend T08 bổ sung thư mục `backend/src/payments/` và migration `20261028032924_add_payments`.
 
 ```text
 BrewLite-Scrum/
@@ -666,6 +687,19 @@ WHERE "id" = MA_DON;
 
 Thay `EMAIL_DA_DANG_KY` bằng `$email` và `MA_DON` bằng `$order.id`. Kết quả user phải có `hash_prefix` bắt đầu bằng `$2` và `password_is_hashed` là `true`; `userId` của đơn phải bằng ID user vừa đăng nhập. Request thiếu/sai token không tạo đơn.
 
+## Hướng dẫn gọi Payments API (Backend T08)
+
+- Đăng nhập lấy JWT, rồi gọi `POST /orders` để lấy Order ID thật.
+- Endpoint: `POST /payments`.
+- Header: `Authorization: Bearer <accessToken>`.
+- Request: `{"orderId":1,"method":"WALLET","simulateSuccess":true}`.
+- `method` nhận `WALLET` hoặc `CARD`.
+- Backend lấy `total` từ database.
+- Response gồm `id`, `userId`, `status`, `paymentMethod`, `total`, `paidAt`, `createdAt`.
+- Thành công trả `200` với `PAID`.
+- Thất bại trả `200` với `PAYMENT_FAILED` và được retry cùng Order ID.
+- Đơn đã `PAID` trả `409`; thiếu JWT trả `401`; request sai trả `400`; không tìm thấy Order trả `404`.
+
 ## Quy trình nhóm
 
 Dự án gồm 10 task và 3 Sprint, từ 14/10/2026 đến 04/11/2026.
@@ -744,6 +778,25 @@ Task chỉ được đánh dấu Done sau khi đáp ứng Acceptance Criteria, k
 - Schema và migration PostgreSQL cho Order/OrderItem đã được áp dụng.
 - DTO unit test, service unit test đạt; backend E2E đạt `7/7` tại thời điểm kiểm tra. Code test riêng của T06 sau đó được tách để lưu trên máy cá nhân; kết quả này không phải số lượng test hiện có trong repository.
 - Backend lint, build và Prisma schema validation đạt.
+
+## Kết quả kiểm tra Backend T08 (28/10/2026)
+
+- Migration Payments áp dụng thành công trên PostgreSQL thật.
+- Luồng `PENDING → PAYMENT_FAILED → PAID` hoạt động đúng.
+- Retry sử dụng lại cùng Order ID.
+- Thanh toán lại đơn `PAID` trả HTTP `409`.
+- Backend lint và build đạt.
+- Unit Test đạt `22/22`; E2E Test đạt `27/27`.
+
+## Kết quả kiểm tra Frontend T08 (28/10/2026)
+
+- Luồng Cart → Checkout → Payment hoạt động với PostgreSQL thật.
+- Retry `PAYMENT_FAILED → PAID` sử dụng lại cùng Order ID.
+- Giỏ thay đổi sau lỗi tạo Order mới với tổng tiền chính xác.
+- Thanh toán thất bại giữ nguyên giỏ; thành công xóa giỏ.
+- Giao diện Desktop và Mobile `375 × 812` đạt.
+- Frontend lint và production build đạt.
+- Unit Test đạt `19/19`.
 
 ## Tài liệu công nghệ
 
