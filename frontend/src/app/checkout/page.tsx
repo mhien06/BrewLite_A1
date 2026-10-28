@@ -59,16 +59,18 @@ export default function CheckoutPage() {
     [items],
   );
 
-  const displayTotal =
-    pendingOrder?.cartFingerprint === cartFingerprint &&
-    serverTotal !== null
-      ? serverTotal
-      : totalPrice;
+ const displayTotal =
+  pendingOrder !== null &&
+  pendingOrder.userId === user?.id &&
+  pendingOrder.cartFingerprint === cartFingerprint &&
+  serverTotal !== null
+    ? serverTotal
+    : totalPrice;
 
   const handlePayment = async (simulateSuccess: boolean) => {
     if (isSubmitting) return;
 
-    if (!token) {
+    if (!token || !user) {
       setError('Vui lòng đăng nhập trước khi thanh toán.');
       return;
     }
@@ -85,9 +87,10 @@ export default function CheckoutPage() {
       let orderId: number;
 
       if (
-        pendingOrder &&
-        pendingOrder.cartFingerprint === cartFingerprint
-      ) {
+  pendingOrder &&
+  pendingOrder.userId === user.id &&
+  pendingOrder.cartFingerprint === cartFingerprint
+) {
         orderId = pendingOrder.orderId;
       } else {
         const order = await createOrderApi(token, {
@@ -103,7 +106,7 @@ export default function CheckoutPage() {
 
         orderId = order.id;
         setServerTotal(order.total);
-        setPendingOrder(order.id, cartFingerprint);
+        setPendingOrder(user.id, order.id, cartFingerprint);
       }
 
       const payment = await createPaymentApi(token, {

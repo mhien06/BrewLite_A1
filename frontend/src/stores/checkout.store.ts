@@ -2,13 +2,18 @@ import { create } from 'zustand';
 import type { CartItem } from '@/types/cart';
 
 interface PendingOrder {
+  userId: number;
   orderId: number;
   cartFingerprint: string;
 }
 
 interface CheckoutStore {
   pendingOrder: PendingOrder | null;
-  setPendingOrder: (orderId: number, cartFingerprint: string) => void;
+  setPendingOrder: (
+  userId: number,
+  orderId: number,
+  cartFingerprint: string,
+) => void;
   clearPendingOrder: () => void;
 }
 
@@ -21,13 +26,14 @@ export const createCartFingerprint = (items: CartItem[]) =>
 export const useCheckoutStore = create<CheckoutStore>((set) => ({
   pendingOrder: null,
 
-  setPendingOrder: (orderId, cartFingerprint) =>
-    set({
-      pendingOrder: {
-        orderId,
-        cartFingerprint,
-      },
-    }),
+  setPendingOrder: (userId, orderId, cartFingerprint) =>
+  set({
+    pendingOrder: {
+      userId,
+      orderId,
+      cartFingerprint,
+    },
+  }),
 
   clearPendingOrder: () => set({ pendingOrder: null }),
 }));

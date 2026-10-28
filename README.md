@@ -123,9 +123,11 @@ Mở terminal khác tại `backend` để chạy `npm test`, `npm run test:e2e`,
 - Chỉ xóa giỏ hàng khi trạng thái là `PAID`.
 - Xử lý loading, lỗi API, chống gửi lặp và responsive Mobile.
 
-## Cấu trúc dự án đến Backend T08
+## Cấu trúc dự án đến T08
 
 Các thư mục và file chính hiện có trong dự án. Phần `orders/` và migration `add_orders` được bổ sung ở T06; phần `auth/` và migration `add_users` được bổ sung ở T07 để quản lý tài khoản và bảo vệ API.
+
+Frontend T08 bổ sung `frontend/src/app/checkout/page.tsx`, các component `CheckoutOrderSummary`, `PaymentMethodPanel`, `PaymentFailure`, cùng `checkout.service`, `checkout.store`, type và Unit Test tương ứng. Backend T08 bổ sung thư mục `backend/src/payments/` và migration `20261028032924_add_payments`.
 
 ```text
 BrewLite-Scrum/

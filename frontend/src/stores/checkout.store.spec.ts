@@ -23,12 +23,13 @@ describe('checkout store', () => {
   });
 
   it('stores and clears a pending order', () => {
-    useCheckoutStore.getState().setPendingOrder(10, 'cart-1');
+    useCheckoutStore.getState().setPendingOrder(1, 10, 'cart-1');
 
     expect(useCheckoutStore.getState().pendingOrder).toEqual({
-      orderId: 10,
-      cartFingerprint: 'cart-1',
-    });
+  userId: 1,
+  orderId: 10,
+  cartFingerprint: 'cart-1',
+});
 
     useCheckoutStore.getState().clearPendingOrder();
     expect(useCheckoutStore.getState().pendingOrder).toBeNull();
