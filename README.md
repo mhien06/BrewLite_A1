@@ -113,6 +113,16 @@ Mở terminal khác tại `backend` để chạy `npm test`, `npm run test:e2e`,
 - Đơn đã `PAID` trả HTTP `409`.
 - Backend kiểm tra quyền sở hữu và lấy `total` từ database.
 
+## Phạm vi Frontend T08 - Checkout
+
+- Thêm route `/checkout` theo thiết kế Figma.
+- Tạo đơn thật qua `POST /orders`, sau đó thanh toán qua `POST /payments`.
+- Hỗ trợ `WALLET`, `CARD` và mô phỏng thanh toán thành công hoặc thất bại.
+- Giữ nguyên giỏ hàng khi `PAYMENT_FAILED` và cho phép retry cùng Order ID.
+- Tạo Order mới khi nội dung giỏ hàng thay đổi.
+- Chỉ xóa giỏ hàng khi trạng thái là `PAID`.
+- Xử lý loading, lỗi API, chống gửi lặp và responsive Mobile.
+
 ## Cấu trúc dự án đến Backend T08
 
 Các thư mục và file chính hiện có trong dự án. Phần `orders/` và migration `add_orders` được bổ sung ở T06; phần `auth/` và migration `add_users` được bổ sung ở T07 để quản lý tài khoản và bảo vệ API.
@@ -775,6 +785,16 @@ Task chỉ được đánh dấu Done sau khi đáp ứng Acceptance Criteria, k
 - Thanh toán lại đơn `PAID` trả HTTP `409`.
 - Backend lint và build đạt.
 - Unit Test đạt `22/22`; E2E Test đạt `27/27`.
+
+## Kết quả kiểm tra Frontend T08 (28/10/2026)
+
+- Luồng Cart → Checkout → Payment hoạt động với PostgreSQL thật.
+- Retry `PAYMENT_FAILED → PAID` sử dụng lại cùng Order ID.
+- Giỏ thay đổi sau lỗi tạo Order mới với tổng tiền chính xác.
+- Thanh toán thất bại giữ nguyên giỏ; thành công xóa giỏ.
+- Giao diện Desktop và Mobile `375 × 812` đạt.
+- Frontend lint và production build đạt.
+- Unit Test đạt `19/19`.
 
 ## Tài liệu công nghệ
 

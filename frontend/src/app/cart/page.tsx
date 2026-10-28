@@ -217,14 +217,21 @@ export default function CartPage() {
               </div>
             )}
 
-            <button
-              type="button"
-              disabled
-              title="Chức năng thanh toán được triển khai ở task tiếp theo"
-              className="mt-5 w-full rounded-full bg-[#f6a14a] px-5 py-3.5 text-sm font-extrabold text-[#40241b] disabled:cursor-not-allowed"
-            >
-              Thanh toán
-            </button>
+            {isAuthenticated && user ? (
+  <Link
+    href="/checkout"
+    className="mt-5 flex w-full items-center justify-center rounded-full bg-[#f6a14a] px-5 py-3.5 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435]"
+  >
+    Thanh toán
+  </Link>
+) : (
+  <Link
+    href="/login"
+    className="mt-5 flex w-full items-center justify-center rounded-full bg-[#f6a14a] px-5 py-3.5 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435]"
+  >
+    Đăng nhập để thanh toán
+  </Link>
+)}
 
             <Link
               href="/"

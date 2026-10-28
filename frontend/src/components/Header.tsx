@@ -64,7 +64,7 @@ export default function Header() {
         <div className="flex items-center gap-2 sm:gap-3">
           {isAuthenticated && user ? (
             <div className="flex items-center gap-2">
-              <div className="flex min-w-0 max-w-40 flex-col items-end text-right">
+              <div className="hidden min-w-0 max-w-40 flex-col items-end text-right sm:flex">
                 <span className="max-w-40 truncate text-xs font-bold text-amber-950">
                   {user.name}
                 </span>
