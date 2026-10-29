@@ -15,6 +15,7 @@ Tích hợp PostgreSQL và Prisma để lưu trữ sản phẩm. Backend cung c�
 ## Phạm vi T03 - Menu Page
 
 Xây dựng trang Thực đơn (Menu Page) tại frontend Next.js App Router, kết nối trực tiếp với Products API từ backend:
+
 - Gọi API thật `GET /products` để lấy danh sách đồ uống (không hardcode).
 - Hiển thị danh sách sản phẩm dạng responsive grid thích ứng đa màn hình (từ mobile 375px đến desktop 1440px).
 - Thẻ sản phẩm hiển thị đầy đủ: tên món, giá định dạng tiền tệ VND (`Intl.NumberFormat`), ảnh minh họa kèm fallback an toàn, trạng thái còn hàng/tạm hết hàng.
@@ -71,12 +72,12 @@ Backend cung cấp đăng ký tài khoản, đăng nhập và endpoint thông ti
 
 Mật khẩu đăng ký phải dài ít nhất 6 ký tự; mật khẩu ở cả đăng ký và đăng nhập không được vượt quá 72 byte UTF-8. Giới hạn này tránh bcrypt bỏ qua phần mật khẩu vượt quá 72 byte.
 
-| Method | Endpoint | Kết quả |
-| ------ | -------- | ------- |
-| POST | `/auth/register` | Tạo tài khoản; trả HTTP 201, không cấp JWT |
-| POST | `/auth/login` | Đăng nhập; trả HTTP 200 cùng `accessToken` và thông tin người dùng |
-| GET | `/auth/me` | Trả thông tin tài khoản hiện tại; yêu cầu Bearer JWT |
-| POST | `/orders` | Tạo đơn hàng; yêu cầu Bearer JWT |
+| Method | Endpoint         | Kết quả                                                            |
+| ------ | ---------------- | ------------------------------------------------------------------ |
+| POST   | `/auth/register` | Tạo tài khoản; trả HTTP 201, không cấp JWT                         |
+| POST   | `/auth/login`    | Đăng nhập; trả HTTP 200 cùng `accessToken` và thông tin người dùng |
+| GET    | `/auth/me`       | Trả thông tin tài khoản hiện tại; yêu cầu Bearer JWT               |
+| POST   | `/orders`        | Tạo đơn hàng; yêu cầu Bearer JWT                                   |
 
 Request đăng ký gồm `name`, `email`, `password`; request đăng nhập gồm `email`, `password`. Dữ liệu không hợp lệ trả HTTP 400, email đã được dùng trả HTTP 409, thông tin đăng nhập sai hoặc thiếu JWT hợp lệ trả HTTP 401.
 
@@ -306,8 +307,8 @@ Invoke-RestMethod "http://localhost:3001/products/$($products[0].id)"
 | backend  | PORT                | 3001                  | Cổng HTTP của backend                                  |
 | backend  | FRONTEND_URL        | http://localhost:3000 | Origin được phép gọi API qua CORS                      |
 | backend  | DATABASE_URL        | Không có              | Chuỗi kết nối PostgreSQL; chỉ lưu trong `backend/.env` |
-| backend  | JWT_SECRET          | Bắt buộc              | Khóa bí mật riêng để ký và xác minh JWT; không commit   |
-| backend  | JWT_EXPIRES_IN      | 7d                    | Thời hạn JWT, ví dụ `1h`, `7d`                          |
+| backend  | JWT_SECRET          | Bắt buộc              | Khóa bí mật riêng để ký và xác minh JWT; không commit  |
+| backend  | JWT_EXPIRES_IN      | 7d                    | Thời hạn JWT, ví dụ `1h`, `7d`                         |
 
 Next.js đọc `.env.local`. Backend đọc `.env` trong thư mục `backend`. Các file env thật không được đưa lên Git, chỉ commit `.env.example`.
 
@@ -352,7 +353,8 @@ npm run start:prod
 ### 2. Yêu cầu môi trường & Dịch vụ
 
 Menu Page gọi API thật từ backend, do đó cần:
-1. **PostgreSQL** đang chạy và đã khởi tạo bảng `Product` kèm seed dữ liệu mẫu (xem mục *Khởi tạo database*).
+
+1. **PostgreSQL** đang chạy và đã khởi tạo bảng `Product` kèm seed dữ liệu mẫu (xem mục _Khởi tạo database_).
 2. **Backend NestJS** đang chạy tại <http://localhost:3001>.
 3. **Frontend Next.js** chạy tại <http://localhost:3000>.
 
@@ -366,31 +368,36 @@ Copy-Item .env.example .env.local
 ```
 
 Nội dung `frontend/.env.local`:
+
 ```env
 NEXT_PUBLIC_API_URL=http://localhost:3001
 ```
 
-*Lưu ý:* `products.service.ts` được lập trình với cơ chế fallback tự động về `http://localhost:3001` nếu biến môi trường chưa được thiết lập.
+_Lưu ý:_ `products.service.ts` được lập trình với cơ chế fallback tự động về `http://localhost:3001` nếu biến môi trường chưa được thiết lập.
 
 ### 4. Các bước khởi chạy và kiểm tra
 
 **Bước 1: Khởi động Backend và kiểm tra dữ liệu API**
 
 Terminal 1:
+
 ```powershell
 cd backend
 npm run start:dev
 ```
 
 Kiểm tra API `GET /products` bằng PowerShell:
+
 ```powershell
 Invoke-RestMethod http://localhost:3001/products
 ```
+
 Kết quả mong đợi: Trả về mảng JSON chứa các sản phẩm mẫu (`Cà phê sữa`, `Bạc xỉu`, `Trà đào`, `Matcha latte`).
 
 **Bước 2: Khởi động Frontend**
 
 Terminal 2:
+
 ```powershell
 cd frontend
 npm run dev
@@ -400,14 +407,14 @@ Mở trình duyệt truy cập: <http://localhost:3000>.
 
 ### 5. Các trạng thái giao diện đã triển khai
 
-| Trạng thái | Thành phần / File | Mô tả hành vi thực tế |
-| --- | --- | --- |
-| **Bình thường (Success)** | `page.tsx`, `ProductGrid.tsx`, `ProductCard.tsx` | Hiển thị Hero Banner và lưới sản phẩm responsive (1 cột mobile, 2 cột tablet, 3-4 cột desktop). Giá bán định dạng VND chuẩn (`Intl.NumberFormat('vi-VN')`). Badge *"Còn hàng"* xanh ngọc. |
-| **Tải trang (Loading)** | `loading.tsx` | Next.js App Router tự động hiển thị Skeleton Shimmer loader tương ứng cấu trúc trang trong lúc chờ API phản hồi. |
-| **Danh sách rỗng (Empty)** | `ProductGrid.tsx` | Khi API trả về mảng rỗng `[]`, hiển thị giao diện thông báo thân thiện: *"Chưa có sản phẩm nào. Hiện tại thực đơn của BrewLite đang được chuẩn bị..."*. |
-| **Lỗi kết nối (Error)** | `error.tsx` | Khi backend không phản hồi hoặc fetch thất bại, giao diện hiển thị thông báo lỗi thân thiện kèm nút bấm **"Thử tải lại"** (`reset()`), không để lộ thông tin kỹ thuật nhạy cảm ra màn hình người dùng. |
-| **Tạm hết hàng (Out of stock)** | `ProductCard.tsx` | Khi sản phẩm có `stock <= 0`, hiển thị badge *"Tạm hết hàng"*, làm mờ card (opacity 75%) và nhãn *"Hẹn lần sau"*. |
-| **Fallback ảnh lỗi** | `ProductCard.tsx` | Khi URL hình ảnh lỗi hoặc không tải được, component tự động chuyển sang ảnh vector minh họa cốc cà phê sắc nét. |
+| Trạng thái                      | Thành phần / File                                | Mô tả hành vi thực tế                                                                                                                                                                                  |
+| ------------------------------- | ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Bình thường (Success)**       | `page.tsx`, `ProductGrid.tsx`, `ProductCard.tsx` | Hiển thị Hero Banner và lưới sản phẩm responsive (1 cột mobile, 2 cột tablet, 3-4 cột desktop). Giá bán định dạng VND chuẩn (`Intl.NumberFormat('vi-VN')`). Badge _"Còn hàng"_ xanh ngọc.              |
+| **Tải trang (Loading)**         | `loading.tsx`                                    | Next.js App Router tự động hiển thị Skeleton Shimmer loader tương ứng cấu trúc trang trong lúc chờ API phản hồi.                                                                                       |
+| **Danh sách rỗng (Empty)**      | `ProductGrid.tsx`                                | Khi API trả về mảng rỗng `[]`, hiển thị giao diện thông báo thân thiện: _"Chưa có sản phẩm nào. Hiện tại thực đơn của BrewLite đang được chuẩn bị..."_.                                                |
+| **Lỗi kết nối (Error)**         | `error.tsx`                                      | Khi backend không phản hồi hoặc fetch thất bại, giao diện hiển thị thông báo lỗi thân thiện kèm nút bấm **"Thử tải lại"** (`reset()`), không để lộ thông tin kỹ thuật nhạy cảm ra màn hình người dùng. |
+| **Tạm hết hàng (Out of stock)** | `ProductCard.tsx`                                | Khi sản phẩm có `stock <= 0`, hiển thị badge _"Tạm hết hàng"_, làm mờ card (opacity 75%) và nhãn _"Hẹn lần sau"_.                                                                                      |
+| **Fallback ảnh lỗi**            | `ProductCard.tsx`                                | Khi URL hình ảnh lỗi hoặc không tải được, component tự động chuyển sang ảnh vector minh họa cốc cà phê sắc nét.                                                                                        |
 
 ### 6. Lệnh kiểm tra chất lượng mã nguồn Frontend
 
@@ -544,18 +551,18 @@ Phải có một đơn và một dòng món với nội dung khớp response. M�
 
 Trong Postman, bắt đầu lại từ JSON hợp lệ ở bước 3 cho mỗi trường hợp. Chỉ thay dữ liệu được nêu trong bảng rồi gửi lại:
 
-| Trường hợp | Dữ liệu gửi | Kết quả mong đợi |
-| --- | --- | --- |
-| Giỏ rỗng | Body là `{"items": []}` | HTTP 400 |
-| Thiếu giỏ hàng | Body là `{}` | HTTP 400 |
-| Số lượng không hợp lệ | Đổi `quantity` thành `0`, `-1`, `1.5` hoặc chuỗi `"2"`; thử từng giá trị | HTTP 400 |
-| Size không hỗ trợ | Đổi `size` thành `"XL"` | HTTP 400 |
-| Topping không hỗ trợ | Đổi `toppings` thành `["syrup"]` | HTTP 400 |
-| Topping bị lặp | Đổi `toppings` thành `["pearls", "pearls"]` | HTTP 400 |
-| Sản phẩm không tồn tại | Dùng một ID số nguyên dương chưa có trong database | HTTP 404 |
-| Vượt tồn kho | Đặt `quantity` bằng `stock + 1` của sản phẩm đã chọn | HTTP 400 |
-| Tổng số lượng vượt kho | Gửi hai dòng cùng `productId`, mỗi dòng quantity bằng stock của món đó | HTTP 400 |
-| Tự gửi giá từ client | Thêm thuộc tính `"total": 1` ở cấp ngoài, cạnh `items` | HTTP 400 |
+| Trường hợp             | Dữ liệu gửi                                                              | Kết quả mong đợi |
+| ---------------------- | ------------------------------------------------------------------------ | ---------------- |
+| Giỏ rỗng               | Body là `{"items": []}`                                                  | HTTP 400         |
+| Thiếu giỏ hàng         | Body là `{}`                                                             | HTTP 400         |
+| Số lượng không hợp lệ  | Đổi `quantity` thành `0`, `-1`, `1.5` hoặc chuỗi `"2"`; thử từng giá trị | HTTP 400         |
+| Size không hỗ trợ      | Đổi `size` thành `"XL"`                                                  | HTTP 400         |
+| Topping không hỗ trợ   | Đổi `toppings` thành `["syrup"]`                                         | HTTP 400         |
+| Topping bị lặp         | Đổi `toppings` thành `["pearls", "pearls"]`                              | HTTP 400         |
+| Sản phẩm không tồn tại | Dùng một ID số nguyên dương chưa có trong database                       | HTTP 404         |
+| Vượt tồn kho           | Đặt `quantity` bằng `stock + 1` của sản phẩm đã chọn                     | HTTP 400         |
+| Tổng số lượng vượt kho | Gửi hai dòng cùng `productId`, mỗi dòng quantity bằng stock của món đó   | HTTP 400         |
+| Tự gửi giá từ client   | Thêm thuộc tính `"total": 1` ở cấp ngoài, cạnh `items`                   | HTTP 400         |
 
 Response lỗi phải có thông báo phù hợp. Để xác nhận request lỗi không lưu đơn, chạy câu SQL dưới đây trước và sau khi thử; số đơn phải giữ nguyên. Thực hiện lúc không có người khác tạo đơn trong cùng database.
 
@@ -723,7 +730,6 @@ SELECT "id", "status", "paymentMethod", "total"
 FROM "Order"
 ORDER BY "id" DESC
 LIMIT 5;
-
 ```
 
 - Chọn **Quay lại thanh toán** và thanh toán thành công mà không sửa giỏ.

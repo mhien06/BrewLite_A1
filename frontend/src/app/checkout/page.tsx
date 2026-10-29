@@ -14,21 +14,18 @@ import {
   useCheckoutStore,
 } from "@/stores/checkout.store";
 import { selectTotalPrice, useCartStore } from "@/stores/cart.store";
-import type {
-  PaymentMethod,
-  PaymentResponse,
-} from "@/types/checkout";
+import type { PaymentMethod, PaymentResponse } from "@/types/checkout";
 
 export default function CheckoutPage() {
   const isMountedRef = useRef(true);
 
-useEffect(() => {
-  isMountedRef.current = true;
+  useEffect(() => {
+    isMountedRef.current = true;
 
-  return () => {
-    isMountedRef.current = false;
-  };
-}, []);
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
   const items = useCartStore((state) => state.items);
   const totalPrice = useCartStore(selectTotalPrice);
   const clearCart = useCartStore((state) => state.clearCart);
@@ -47,8 +44,9 @@ useEffect(() => {
   const [method, setMethod] = useState<PaymentMethod>("WALLET");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentFailed, setPaymentFailed] = useState(false);
-  const [paymentSuccess, setPaymentSuccess] =
-  useState<PaymentResponse | null>(null);
+  const [paymentSuccess, setPaymentSuccess] = useState<PaymentResponse | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const [serverTotal, setServerTotal] = useState<number | null>(null);
 
@@ -63,99 +61,99 @@ useEffect(() => {
       : totalPrice;
 
   const handlePayment = async (simulateSuccess: boolean) => {
-  if (isSubmitting) return;
+    if (isSubmitting) return;
 
-  if (!token || !user) {
-    setError("Vui lòng đăng nhập trước khi thanh toán.");
-    return;
-  }
+    if (!token || !user) {
+      setError("Vui lòng đăng nhập trước khi thanh toán.");
+      return;
+    }
 
-  if (items.length === 0) {
-    setError("Giỏ hàng đang trống.");
-    return;
-  }
+    if (items.length === 0) {
+      setError("Giỏ hàng đang trống.");
+      return;
+    }
 
-  const submittedContext = {
-    userId: user.id,
-    token,
-    cartFingerprint,
-  };
+    const submittedContext = {
+      userId: user.id,
+      token,
+      cartFingerprint,
+    };
 
-  const isCurrentSubmission = () => {
-    const currentAuth = useAuthStore.getState();
+    const isCurrentSubmission = () => {
+      const currentAuth = useAuthStore.getState();
 
-    return (
-      isMountedRef.current &&
-      isCheckoutContextCurrent(
-        submittedContext,
-        currentAuth.user?.id,
-        currentAuth.token,
-        useCartStore.getState().items,
-      )
-    );
-  };
+      return (
+        isMountedRef.current &&
+        isCheckoutContextCurrent(
+          submittedContext,
+          currentAuth.user?.id,
+          currentAuth.token,
+          useCartStore.getState().items,
+        )
+      );
+    };
 
-  setIsSubmitting(true);
-  setError("");
+    setIsSubmitting(true);
+    setError("");
 
-  try {
-    let orderId: number;
+    try {
+      let orderId: number;
 
-    if (
-      pendingOrder &&
-      pendingOrder.userId === user.id &&
-      pendingOrder.cartFingerprint === cartFingerprint
-    ) {
-      orderId = pendingOrder.orderId;
-    } else {
-      const order = await createOrderApi(token, {
-        items: items.map((item) => ({
-          productId: item.productId,
-          size: item.size.id,
-          quantity: item.quantity,
-          toppings: item.toppings.map((topping) => topping.id),
-        })),
+      if (
+        pendingOrder &&
+        pendingOrder.userId === user.id &&
+        pendingOrder.cartFingerprint === cartFingerprint
+      ) {
+        orderId = pendingOrder.orderId;
+      } else {
+        const order = await createOrderApi(token, {
+          items: items.map((item) => ({
+            productId: item.productId,
+            size: item.size.id,
+            quantity: item.quantity,
+            toppings: item.toppings.map((topping) => topping.id),
+          })),
+        });
+
+        if (!isCurrentSubmission()) return;
+
+        orderId = order.id;
+        setServerTotal(order.total);
+        setPendingOrder(user.id, order.id, cartFingerprint);
+      }
+
+      const payment = await createPaymentApi(token, {
+        orderId,
+        method,
+        simulateSuccess,
       });
 
       if (!isCurrentSubmission()) return;
 
-      orderId = order.id;
-      setServerTotal(order.total);
-      setPendingOrder(user.id, order.id, cartFingerprint);
+      setServerTotal(payment.total);
+
+      if (payment.status === "PAID") {
+        setPaymentSuccess(payment);
+        clearCart();
+        clearPendingOrder();
+        return;
+      }
+
+      setPaymentFailed(true);
+    } catch (checkoutError) {
+      if (!isCurrentSubmission()) return;
+
+      setError(
+        checkoutError instanceof Error
+          ? checkoutError.message
+          : "Không thể xử lý thanh toán.",
+      );
+    } finally {
+      if (isMountedRef.current) {
+        setIsSubmitting(false);
+      }
     }
-
-    const payment = await createPaymentApi(token, {
-      orderId,
-      method,
-      simulateSuccess,
-    });
-
-    if (!isCurrentSubmission()) return;
-
-    setServerTotal(payment.total);
-
-    if (payment.status === "PAID") {
-  setPaymentSuccess(payment);
-  clearCart();
-  clearPendingOrder();
-  return;
-}
-
-    setPaymentFailed(true);
-  } catch (checkoutError) {
-    if (!isCurrentSubmission()) return;
-
-    setError(
-      checkoutError instanceof Error
-        ? checkoutError.message
-        : "Không thể xử lý thanh toán.",
-    );
-  } finally {
-    if (isMountedRef.current) {
-      setIsSubmitting(false);
-    }
-  }
-};
+  };
 
   if (isAuthLoading) {
     return (
@@ -188,12 +186,12 @@ useEffect(() => {
     );
   }
   if (paymentSuccess) {
-  return (
-    <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
-      <PaymentSuccess payment={paymentSuccess} />
-    </main>
-  );
-}
+    return (
+      <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <PaymentSuccess payment={paymentSuccess} />
+      </main>
+    );
+  }
   if (items.length === 0) {
     return (
       <main className="mx-auto w-full max-w-7xl px-4 py-16 text-center sm:px-6 lg:px-8">

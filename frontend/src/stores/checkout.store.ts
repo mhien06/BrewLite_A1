@@ -22,6 +22,7 @@ export const createCartFingerprint = (items: CartItem[]) =>
     .map((item) => `${item.key}:${item.quantity}`)
     .sort()
     .join("|");
+
 export interface CheckoutContextSnapshot {
   userId: number;
   token: string;

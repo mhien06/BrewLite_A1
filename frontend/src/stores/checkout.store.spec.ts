@@ -51,29 +51,27 @@ describe("checkout store", () => {
     );
   });
   it("rejects a late response when session or cart has changed", () => {
-  const submittedItems = [item("1:M:", 1)];
-  const submitted = {
-    userId: 1,
-    token: "token-a",
-    cartFingerprint: createCartFingerprint(submittedItems),
-  };
+    const submittedItems = [item("1:M:", 1)];
+    const submitted = {
+      userId: 1,
+      token: "token-a",
+      cartFingerprint: createCartFingerprint(submittedItems),
+    };
 
-  expect(
-    isCheckoutContextCurrent(submitted, 1, "token-a", submittedItems),
-  ).toBe(true);
+    expect(
+      isCheckoutContextCurrent(submitted, 1, "token-a", submittedItems),
+    ).toBe(true);
 
-  expect(
-    isCheckoutContextCurrent(submitted, 2, "token-a", submittedItems),
-  ).toBe(false);
+    expect(
+      isCheckoutContextCurrent(submitted, 2, "token-a", submittedItems),
+    ).toBe(false);
 
-  expect(
-    isCheckoutContextCurrent(submitted, 1, "token-b", submittedItems),
-  ).toBe(false);
+    expect(
+      isCheckoutContextCurrent(submitted, 1, "token-b", submittedItems),
+    ).toBe(false);
 
-  expect(
-    isCheckoutContextCurrent(submitted, 1, "token-a", [
-      item("1:M:", 2),
-    ]),
-  ).toBe(false);
+    expect(
+      isCheckoutContextCurrent(submitted, 1, "token-a", [item("1:M:", 2)]),
+    ).toBe(false);
   });
 });
