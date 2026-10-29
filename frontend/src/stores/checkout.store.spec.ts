@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import {
   createCartFingerprint,
+  isCheckoutContextCurrent,
   useCheckoutStore,
 } from "@/stores/checkout.store";
 import type { CartItem } from "@/types/cart";
@@ -48,5 +49,31 @@ describe("checkout store", () => {
     expect(createCartFingerprint([item("1:M:", 1)])).not.toBe(
       createCartFingerprint([item("1:M:", 2)]),
     );
+  });
+  it("rejects a late response when session or cart has changed", () => {
+  const submittedItems = [item("1:M:", 1)];
+  const submitted = {
+    userId: 1,
+    token: "token-a",
+    cartFingerprint: createCartFingerprint(submittedItems),
+  };
+
+  expect(
+    isCheckoutContextCurrent(submitted, 1, "token-a", submittedItems),
+  ).toBe(true);
+
+  expect(
+    isCheckoutContextCurrent(submitted, 2, "token-a", submittedItems),
+  ).toBe(false);
+
+  expect(
+    isCheckoutContextCurrent(submitted, 1, "token-b", submittedItems),
+  ).toBe(false);
+
+  expect(
+    isCheckoutContextCurrent(submitted, 1, "token-a", [
+      item("1:M:", 2),
+    ]),
+  ).toBe(false);
   });
 });

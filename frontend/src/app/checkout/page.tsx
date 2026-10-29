@@ -1,23 +1,34 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import CheckoutOrderSummary from "@/components/CheckoutOrderSummary";
 import PaymentFailure from "@/components/PaymentFailure";
+import PaymentSuccess from "@/components/PaymentSuccess";
 import PaymentMethodPanel from "@/components/PaymentMethodPanel";
 import { createOrderApi, createPaymentApi } from "@/services/checkout.service";
 import { useAuthStore } from "@/stores/auth.store";
 import {
   createCartFingerprint,
+  isCheckoutContextCurrent,
   useCheckoutStore,
 } from "@/stores/checkout.store";
 import { selectTotalPrice, useCartStore } from "@/stores/cart.store";
-import type { PaymentMethod } from "@/types/checkout";
+import type {
+  PaymentMethod,
+  PaymentResponse,
+} from "@/types/checkout";
 
 export default function CheckoutPage() {
-  const router = useRouter();
+  const isMountedRef = useRef(true);
 
+useEffect(() => {
+  isMountedRef.current = true;
+
+  return () => {
+    isMountedRef.current = false;
+  };
+}, []);
   const items = useCartStore((state) => state.items);
   const totalPrice = useCartStore(selectTotalPrice);
   const clearCart = useCartStore((state) => state.clearCart);
@@ -36,6 +47,8 @@ export default function CheckoutPage() {
   const [method, setMethod] = useState<PaymentMethod>("WALLET");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentFailed, setPaymentFailed] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] =
+  useState<PaymentResponse | null>(null);
   const [error, setError] = useState("");
   const [serverTotal, setServerTotal] = useState<number | null>(null);
 
@@ -50,71 +63,99 @@ export default function CheckoutPage() {
       : totalPrice;
 
   const handlePayment = async (simulateSuccess: boolean) => {
-    if (isSubmitting) return;
+  if (isSubmitting) return;
 
-    if (!token || !user) {
-      setError("Vui lòng đăng nhập trước khi thanh toán.");
-      return;
-    }
+  if (!token || !user) {
+    setError("Vui lòng đăng nhập trước khi thanh toán.");
+    return;
+  }
 
-    if (items.length === 0) {
-      setError("Giỏ hàng đang trống.");
-      return;
-    }
+  if (items.length === 0) {
+    setError("Giỏ hàng đang trống.");
+    return;
+  }
 
-    setIsSubmitting(true);
-    setError("");
+  const submittedContext = {
+    userId: user.id,
+    token,
+    cartFingerprint,
+  };
 
-    try {
-      let orderId: number;
+  const isCurrentSubmission = () => {
+    const currentAuth = useAuthStore.getState();
 
-      if (
-        pendingOrder &&
-        pendingOrder.userId === user.id &&
-        pendingOrder.cartFingerprint === cartFingerprint
-      ) {
-        orderId = pendingOrder.orderId;
-      } else {
-        const order = await createOrderApi(token, {
-          items: items.map((item) => ({
-            productId: item.productId,
-            size: item.size.id,
-            quantity: item.quantity,
-            toppings: item.toppings.map((topping) => topping.id),
-          })),
-        });
+    return (
+      isMountedRef.current &&
+      isCheckoutContextCurrent(
+        submittedContext,
+        currentAuth.user?.id,
+        currentAuth.token,
+        useCartStore.getState().items,
+      )
+    );
+  };
 
-        orderId = order.id;
-        setServerTotal(order.total);
-        setPendingOrder(user.id, order.id, cartFingerprint);
-      }
+  setIsSubmitting(true);
+  setError("");
 
-      const payment = await createPaymentApi(token, {
-        orderId,
-        method,
-        simulateSuccess,
+  try {
+    let orderId: number;
+
+    if (
+      pendingOrder &&
+      pendingOrder.userId === user.id &&
+      pendingOrder.cartFingerprint === cartFingerprint
+    ) {
+      orderId = pendingOrder.orderId;
+    } else {
+      const order = await createOrderApi(token, {
+        items: items.map((item) => ({
+          productId: item.productId,
+          size: item.size.id,
+          quantity: item.quantity,
+          toppings: item.toppings.map((topping) => topping.id),
+        })),
       });
 
-      setServerTotal(payment.total);
+      if (!isCurrentSubmission()) return;
 
-      if (payment.status === "PAID") {
-        clearCart();
-        clearPendingOrder();
-        router.push("/");
-        return;
-      }
+      orderId = order.id;
+      setServerTotal(order.total);
+      setPendingOrder(user.id, order.id, cartFingerprint);
+    }
 
-      setPaymentFailed(true);
-    } catch (checkoutError) {
-      setError(
-        checkoutError instanceof Error
-          ? checkoutError.message
-          : "Không thể xử lý thanh toán.",
-      );
-    } finally {
+    const payment = await createPaymentApi(token, {
+      orderId,
+      method,
+      simulateSuccess,
+    });
+
+    if (!isCurrentSubmission()) return;
+
+    setServerTotal(payment.total);
+
+    if (payment.status === "PAID") {
+  setPaymentSuccess(payment);
+  clearCart();
+  clearPendingOrder();
+  return;
+}
+
+    setPaymentFailed(true);
+  } catch (checkoutError) {
+    if (!isCurrentSubmission()) return;
+
+    setError(
+      checkoutError instanceof Error
+        ? checkoutError.message
+        : "Không thể xử lý thanh toán.",
+    );
+  } finally {
+    if (isMountedRef.current) {
       setIsSubmitting(false);
     }
-  };
+  }
+};
 
   if (isAuthLoading) {
     return (
@@ -146,7 +187,13 @@ export default function CheckoutPage() {
       </main>
     );
   }
-
+  if (paymentSuccess) {
+  return (
+    <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <PaymentSuccess payment={paymentSuccess} />
+    </main>
+  );
+}
   if (items.length === 0) {
     return (
       <main className="mx-auto w-full max-w-7xl px-4 py-16 text-center sm:px-6 lg:px-8">

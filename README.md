@@ -6,7 +6,7 @@
 
 Khởi tạo frontend Next.js (TypeScript, Tailwind CSS) và backend NestJS (TypeScript). Frontend hiển thị trang chào; backend có `GET /` trả `Hello World!`.
 
-Products API được triển khai trong T02; Menu Page trong T03; Product Detail trong T04; Cart và Zustand trong T05; API tạo đơn hàng trong T06; đăng ký, đăng nhập và bảo vệ API bằng JWT trong T07. Thanh toán và lịch sử đơn vẫn sẽ được triển khai ở những task tiếp theo.
+Products API được triển khai trong T02; Menu Page trong T03; Product Detail trong T04; Cart và Zustand trong T05; API tạo đơn hàng trong T06; đăng ký, đăng nhập và bảo vệ API bằng JWT trong T07. Payments API và Checkout UI được triển khai trong T08. Trang xác nhận đầy đủ và lịch sử đơn được triển khai ở task tiếp theo.
 
 ## Phạm vi T02 - Thành
 
@@ -63,7 +63,7 @@ cd backend
 npm run prisma:deploy
 ```
 
-Nút **Thanh toán** ở trang giỏ hàng hiện chưa hoạt động. T06 mới cung cấp API tạo đơn ở backend, chưa nối thao tác tạo đơn từ giao diện. Để kiểm tra phần này, làm theo mục [Hướng dẫn kiểm thử API tạo đơn (T06)](#hướng-dẫn-kiểm-thử-api-tạo-đơn-t06) bên dưới.
+Từ T08, nút **Thanh toán** tại trang giỏ hàng đã mở route `/checkout`, gọi `POST /orders` để tạo đơn và `POST /payments` để thanh toán. Mục [Hướng dẫn kiểm thử API tạo đơn (T06)](#hướng-dẫn-kiểm-thử-api-tạo-đơn-t06) bên dưới vẫn được giữ để kiểm tra API tạo đơn độc lập.
 
 ## Phạm vi T07 - Đăng ký, đăng nhập và JWT
 
@@ -121,16 +121,18 @@ Mở terminal khác tại `backend` để chạy `npm test`, `npm run test:e2e`,
 - Giữ nguyên giỏ hàng khi `PAYMENT_FAILED` và cho phép retry cùng Order ID.
 - Tạo Order mới khi nội dung giỏ hàng thay đổi.
 - Chỉ xóa giỏ hàng khi trạng thái là `PAID`.
+- Chỉ áp dụng response thanh toán khi phiên đăng nhập và giỏ hàng vẫn khớp lần gửi request.
+- Hiển thị xác nhận thanh toán thành công với mã đơn và trạng thái `PAID`.
 - Xử lý loading, lỗi API, chống gửi lặp và responsive Mobile.
 
 ## Cấu trúc dự án đến T08
 
 Các thư mục và file chính hiện có trong dự án. Phần `orders/` và migration `add_orders` được bổ sung ở T06; phần `auth/` và migration `add_users` được bổ sung ở T07 để quản lý tài khoản và bảo vệ API.
 
-Frontend T08 bổ sung `frontend/src/app/checkout/page.tsx`, các component `CheckoutOrderSummary`, `PaymentMethodPanel`, `PaymentFailure`, cùng `checkout.service`, `checkout.store`, type và Unit Test tương ứng. Backend T08 bổ sung thư mục `backend/src/payments/` và migration `20261028032924_add_payments`.
+Frontend T08 bổ sung `frontend/src/app/checkout/page.tsx`, các component `CheckoutOrderSummary`, `PaymentMethodPanel`, `PaymentFailure`, `PaymentSuccess`, cùng `checkout.service`, `checkout.store`, type và Unit Test tương ứng. Backend T08 bổ sung thư mục `backend/src/payments/` và migration `20261028032924_add_payments`.
 
 ```text
-BrewLite-Scrum/
+BrewLite_A1/
 ├── frontend/                         # Giao diện Next.js
 │   ├── src/
 │   │   ├── app/
@@ -449,7 +451,7 @@ npm test
 
 ## Hướng dẫn kiểm thử API tạo đơn (T06)
 
-Phần này kiểm tra bằng tay qua API, không cần chạy test tự động. Chỉ cần PostgreSQL và backend đang chạy; frontend không cần mở vì nút Thanh toán chưa kết nối với API tạo đơn.
+Phần này kiểm tra độc lập API T06, không cần chạy test tự động hoặc mở frontend. Để kiểm tra luồng giao diện đã tích hợp ở T08, xem mục **Hướng dẫn kiểm thử Checkout trên web (Frontend T08)** bên dưới.
 
 ### 1. Chuẩn bị sản phẩm
 
@@ -700,6 +702,39 @@ Thay `EMAIL_DA_DANG_KY` bằng `$email` và `MA_DON` bằng `$order.id`. Kết q
 - Thất bại trả `200` với `PAYMENT_FAILED` và được retry cùng Order ID.
 - Đơn đã `PAID` trả `409`; thiếu JWT trả `401`; request sai trả `400`; không tìm thấy Order trả `404`.
 
+## Hướng dẫn kiểm thử Checkout trên web (Frontend T08)
+
+Bật PostgreSQL, backend và frontend; sau đó đăng nhập, thêm món vào giỏ và mở `/cart`.
+
+### 1. Thanh toán thành công
+
+- Chọn **Thanh toán**, chọn `WALLET` hoặc `CARD`, rồi nhấn **Xác nhận thanh toán**.
+- Kết quả phải hiển thị **Thanh toán thành công**, trạng thái `PAID` và mã đơn.
+- Giỏ hàng chỉ được xóa sau khi nhận trạng thái `PAID`.
+
+### 2. Thanh toán thất bại và retry cùng đơn
+
+- Tại Checkout, nhấn **Mô phỏng thanh toán lỗi**.
+- Kết quả phải hiển thị `PAYMENT_FAILED` và giỏ hàng vẫn được giữ nguyên.
+- Ghi lại ID đơn mới nhất trong PostgreSQL:
+
+```sql
+SELECT "id", "status", "paymentMethod", "total"
+FROM "Order"
+ORDER BY "id" DESC
+LIMIT 5;
+
+```
+
+- Chọn **Quay lại thanh toán** và thanh toán thành công mà không sửa giỏ.
+- Mã đơn trên màn hình xác nhận phải trùng ID vừa ghi lại; trạng thái chuyển thành `PAID`.
+
+### 3. Sửa giỏ tạo đơn mới
+
+- Tạo một lần thanh toán thất bại và ghi lại ID đơn.
+- Quay về giỏ hàng, thay đổi số lượng hoặc tùy chọn món rồi mở Checkout lại.
+- Thanh toán thành công phải trả một mã đơn mới, khác ID của đơn trước.
+
 ## Quy trình nhóm
 
 Dự án gồm 10 task và 3 Sprint, từ 14/10/2026 đến 04/11/2026.
@@ -796,7 +831,7 @@ Task chỉ được đánh dấu Done sau khi đáp ứng Acceptance Criteria, k
 - Thanh toán thất bại giữ nguyên giỏ; thành công xóa giỏ.
 - Giao diện Desktop và Mobile `375 × 812` đạt.
 - Frontend lint và production build đạt.
-- Unit Test đạt `19/19`.
+- Unit Test đạt `20/20`.
 
 ## Tài liệu công nghệ
 
