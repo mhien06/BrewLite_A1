@@ -1,23 +1,31 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import CheckoutOrderSummary from "@/components/CheckoutOrderSummary";
 import PaymentFailure from "@/components/PaymentFailure";
+import PaymentSuccess from "@/components/PaymentSuccess";
 import PaymentMethodPanel from "@/components/PaymentMethodPanel";
 import { createOrderApi, createPaymentApi } from "@/services/checkout.service";
 import { useAuthStore } from "@/stores/auth.store";
 import {
   createCartFingerprint,
+  isCheckoutContextCurrent,
   useCheckoutStore,
 } from "@/stores/checkout.store";
 import { selectTotalPrice, useCartStore } from "@/stores/cart.store";
-import type { PaymentMethod } from "@/types/checkout";
+import type { PaymentMethod, PaymentResponse } from "@/types/checkout";
 
 export default function CheckoutPage() {
-  const router = useRouter();
+  const isMountedRef = useRef(true);
 
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
   const items = useCartStore((state) => state.items);
   const totalPrice = useCartStore(selectTotalPrice);
   const clearCart = useCartStore((state) => state.clearCart);
@@ -36,6 +44,9 @@ export default function CheckoutPage() {
   const [method, setMethod] = useState<PaymentMethod>("WALLET");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentFailed, setPaymentFailed] = useState(false);
+  const [paymentSuccess, setPaymentSuccess] = useState<PaymentResponse | null>(
+    null,
+  );
   const [error, setError] = useState("");
   const [serverTotal, setServerTotal] = useState<number | null>(null);
 
@@ -62,6 +73,26 @@ export default function CheckoutPage() {
       return;
     }
 
+    const submittedContext = {
+      userId: user.id,
+      token,
+      cartFingerprint,
+    };
+
+    const isCurrentSubmission = () => {
+      const currentAuth = useAuthStore.getState();
+
+      return (
+        isMountedRef.current &&
+        isCheckoutContextCurrent(
+          submittedContext,
+          currentAuth.user?.id,
+          currentAuth.token,
+          useCartStore.getState().items,
+        )
+      );
+    };
+
     setIsSubmitting(true);
     setError("");
 
@@ -84,6 +115,8 @@ export default function CheckoutPage() {
           })),
         });
 
+        if (!isCurrentSubmission()) return;
+
         orderId = order.id;
         setServerTotal(order.total);
         setPendingOrder(user.id, order.id, cartFingerprint);
@@ -95,24 +128,30 @@ export default function CheckoutPage() {
         simulateSuccess,
       });
 
+      if (!isCurrentSubmission()) return;
+
       setServerTotal(payment.total);
 
       if (payment.status === "PAID") {
+        setPaymentSuccess(payment);
         clearCart();
         clearPendingOrder();
-        router.push("/");
         return;
       }
 
       setPaymentFailed(true);
     } catch (checkoutError) {
+      if (!isCurrentSubmission()) return;
+
       setError(
         checkoutError instanceof Error
           ? checkoutError.message
           : "Không thể xử lý thanh toán.",
       );
     } finally {
-      setIsSubmitting(false);
+      if (isMountedRef.current) {
+        setIsSubmitting(false);
+      }
     }
   };
 
@@ -146,7 +185,13 @@ export default function CheckoutPage() {
       </main>
     );
   }
-
+  if (paymentSuccess) {
+    return (
+      <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+        <PaymentSuccess payment={paymentSuccess} />
+      </main>
+    );
+  }
   if (items.length === 0) {
     return (
       <main className="mx-auto w-full max-w-7xl px-4 py-16 text-center sm:px-6 lg:px-8">

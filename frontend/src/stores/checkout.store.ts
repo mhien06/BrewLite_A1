@@ -23,6 +23,22 @@ export const createCartFingerprint = (items: CartItem[]) =>
     .sort()
     .join("|");
 
+export interface CheckoutContextSnapshot {
+  userId: number;
+  token: string;
+  cartFingerprint: string;
+}
+
+export const isCheckoutContextCurrent = (
+  submitted: CheckoutContextSnapshot,
+  currentUserId: number | undefined,
+  currentToken: string | null,
+  currentItems: CartItem[],
+) =>
+  submitted.userId === currentUserId &&
+  submitted.token === currentToken &&
+  submitted.cartFingerprint === createCartFingerprint(currentItems);
+
 export const useCheckoutStore = create<CheckoutStore>((set) => ({
   pendingOrder: null,
 
