@@ -4,12 +4,18 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { OrderStatus } from '../generated/prisma/client.js';
+import { LoyaltyService } from '../loyalty/loyalty.service.js';
+import { OrderStateService } from '../orders/order-state.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CreatePaymentDto } from './dto/create-payment.dto.js';
 
 @Injectable()
 export class PaymentsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly orderState: OrderStateService,
+    private readonly loyalty: LoyaltyService,
+  ) {}
 
   async create(userId: number, dto: CreatePaymentDto) {
     const order = await this.prisma.order.findFirst({
@@ -35,22 +41,33 @@ export class PaymentsService {
       ? OrderStatus.PAID
       : OrderStatus.PAYMENT_FAILED;
 
-    return this.prisma.order.update({
-      where: { id: order.id },
-      data: {
+    return this.prisma.$transaction(async (tx) => {
+      const updatedOrder = await this.orderState.transition(
+        order.id,
         status,
-        paymentMethod: dto.method,
-        paidAt: status === OrderStatus.PAID ? new Date() : null,
-      },
-      select: {
-        id: true,
-        userId: true,
-        status: true,
-        paymentMethod: true,
-        total: true,
-        paidAt: true,
-        createdAt: true,
-      },
+        tx,
+        {
+          paymentMethod: dto.method,
+          paidAt: status === OrderStatus.PAID ? new Date() : null,
+        },
+      );
+
+      if (status === OrderStatus.PAID) {
+        await this.loyalty.awardPointsForPaidOrder(tx, updatedOrder);
+      }
+
+      return tx.order.findUniqueOrThrow({
+        where: { id: order.id },
+        select: {
+          id: true,
+          userId: true,
+          status: true,
+          paymentMethod: true,
+          total: true,
+          paidAt: true,
+          createdAt: true,
+        },
+      });
     });
   }
 }
