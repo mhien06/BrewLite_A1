@@ -820,6 +820,37 @@ Task chỉ được đánh dấu Done sau khi đáp ứng Acceptance Criteria, k
 - DTO unit test, service unit test đạt; backend E2E đạt `7/7` tại thời điểm kiểm tra. Code test riêng của T06 sau đó được tách để lưu trên máy cá nhân; kết quả này không phải số lượng test hiện có trong repository.
 - Backend lint, build và Prisma schema validation đạt.
 
+## Kết quả kiểm tra T07 (kiểm tra lại ngày 30/10/2026)
+
+Kiểm tra lại trên `main` tại commit `bb86eab`. Code đăng ký, đăng nhập, JWT, Auth store và các file test T07 được đối chiếu với nhánh `task-7/auth-jwt` tại commit `b6035c4`; các file này giống nhau trên hai nhánh.
+
+| Phần kiểm tra | Kết quả | Nội dung đã kiểm tra |
+| --- | --- | --- |
+| Backend unit test T07 | Đạt `16/16`, trong 4 file | Auth controller/service, băm và so sánh mật khẩu, email trùng, thông tin user, JWT strategy và cấu hình khóa bí mật |
+| Backend API test T07 | Đạt `15/15`, trong `test/auth.e2e-spec.ts` | Đăng ký, đăng nhập, validation, `GET /auth/me` và guard của `POST /orders` |
+| Frontend Auth store | Đạt `9/9`, trong `src/stores/auth.store.spec.ts` | Lưu token khi đăng nhập; đăng ký giữ trạng thái chưa đăng nhập; đăng xuất xóa token; bỏ qua response phiên cũ khi đăng xuất hoặc đổi tài khoản |
+
+Các trường hợp API đã đạt:
+
+- Đăng ký hợp lệ trả HTTP `201`, có thông tin user và chưa cấp JWT; tài khoản vừa tạo đăng nhập được.
+- Tên hoặc email sai định dạng, mật khẩu đăng ký quá ngắn, mật khẩu đăng ký/đăng nhập vượt 72 byte UTF-8 trả HTTP `400`; email trùng trả HTTP `409`.
+- Đăng nhập đúng trả HTTP `200` kèm JWT; sai email hoặc mật khẩu trả HTTP `401`.
+- `GET /auth/me` trả đúng tài khoản khi có JWT hợp lệ; thiếu JWT trả HTTP `401`.
+- `POST /orders` từ chối thiếu/sai JWT bằng HTTP `401`; JWT hợp lệ tạo đơn HTTP `201`, trạng thái `PENDING` và đúng `userId`.
+
+Chạy lại riêng các test T07 từ thư mục gốc dự án:
+
+```powershell
+cd backend
+npm test -- src/auth
+npm run test:e2e -- test/auth.e2e-spec.ts
+
+cd ../frontend
+npm test -- src/stores/auth.store.spec.ts
+```
+
+Bộ API test T07 dùng NestJS, ValidationPipe, JWT và bcrypt cùng Prisma mock; Auth store dùng API mock và localStorage giả lập. Kết quả trên là kiểm thử tự động của phần T07, không phải tổng số test của dự án hoặc kết quả thử giao diện và PostgreSQL thật. Cách kiểm tra thủ công API/database nằm trong [hướng dẫn T07](#hướng-dẫn-kiểm-thử-đăng-ký-đăng-nhập-và-guard-tạo-đơn-t07).
+
 ## Kết quả kiểm tra Backend T08 (28/10/2026)
 
 - Migration Payments áp dụng thành công trên PostgreSQL thật.
