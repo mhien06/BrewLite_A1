@@ -8,13 +8,14 @@ datasource db {
 }
 
 model User {
-  id            Int      @id @default(autoincrement())
-  email         String   @unique
-  name          String   @default("KHACH HANG")
-  passwordHash  String
-  loyaltyPoints Int      @default(0)
-  createdAt     DateTime @default(now())
-  orders        Order[]
+  id                  Int                  @id @default(autoincrement())
+  email               String               @unique
+  name                String               @default("KHACH HANG")
+  passwordHash        String
+  loyaltyPoints       Int                  @default(0)
+  createdAt           DateTime             @default(now())
+  orders              Order[]
+  loyaltyTransactions LoyaltyTransaction[]
 }
 
 model Product {
@@ -30,6 +31,15 @@ enum OrderStatus {
   PENDING
   PAID
   PAYMENT_FAILED
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum PromotionType {
+  PERCENT
+  FIXED_AMOUNT
 }
 
 enum PaymentMethod {
@@ -38,15 +48,19 @@ enum PaymentMethod {
 }
 
 model Order {
-  id        Int         @id @default(autoincrement())
-  userId    Int
-  user      User        @relation(fields: [userId], references: [id], onDelete: Restrict)
-  status    OrderStatus @default(PENDING)
-  paymentMethod PaymentMethod?
-  paidAt       DateTime?
-  total     Int
-  createdAt DateTime    @default(now())
-  items     OrderItem[]
+  id                 Int                 @id @default(autoincrement())
+  userId             Int
+  user               User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  status             OrderStatus         @default(PENDING)
+  paymentMethod      PaymentMethod?
+  paidAt             DateTime?
+  promotionCode      String?
+  subtotal           Int                 @default(0)
+  discountAmount     Int                 @default(0)
+  total              Int
+  createdAt          DateTime            @default(now())
+  items              OrderItem[]
+  loyaltyTransaction LoyaltyTransaction?
 
   @@index([userId])
 }
@@ -65,4 +79,29 @@ model OrderItem {
 
   @@index([orderId])
   @@index([productId])
+}
+
+model Promotion {
+  id            Int           @id @default(autoincrement())
+  code          String        @unique
+  type          PromotionType
+  value         Int
+  minOrderTotal Int
+  maxDiscount   Int?
+  startsAt      DateTime?
+  expiresAt     DateTime?
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+}
+
+model LoyaltyTransaction {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  orderId   Int      @unique
+  points    Int
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
 }

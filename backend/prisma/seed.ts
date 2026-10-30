@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import bcrypt from 'bcrypt';
 import { PrismaPg } from '@prisma/adapter-pg';
-import { PrismaClient } from '../src/generated/prisma/client.js';
+import { PrismaClient, PromotionType } from '../src/generated/prisma/client.js';
 
 const connectionString = process.env.DATABASE_URL;
 
@@ -56,6 +56,43 @@ async function main() {
       });
     }
   }
+
+  await prisma.promotion.upsert({
+    where: { code: 'BREW10' },
+    update: {
+      type: PromotionType.PERCENT,
+      value: 10,
+      minOrderTotal: 50_000,
+      maxDiscount: 20_000,
+      isActive: true,
+    },
+    create: {
+      code: 'BREW10',
+      type: PromotionType.PERCENT,
+      value: 10,
+      minOrderTotal: 50_000,
+      maxDiscount: 20_000,
+      isActive: true,
+    },
+  });
+
+  await prisma.promotion.upsert({
+    where: { code: 'GIAM15K' },
+    update: {
+      type: PromotionType.FIXED_AMOUNT,
+      value: 15_000,
+      minOrderTotal: 60_000,
+      maxDiscount: null,
+      isActive: true,
+    },
+    create: {
+      code: 'GIAM15K',
+      type: PromotionType.FIXED_AMOUNT,
+      value: 15_000,
+      minOrderTotal: 60_000,
+      isActive: true,
+    },
+  });
 
   const demoEmail = 'customer@gmail.com';
   const existingUser = await prisma.user.findUnique({
