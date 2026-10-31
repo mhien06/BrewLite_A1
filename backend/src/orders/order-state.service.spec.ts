@@ -49,6 +49,18 @@ describe('OrderStateService', () => {
     expect(() => service.assertTransition(from, to)).toThrow(ConflictException);
   });
 
+  it('does not attempt a database update for an invalid transition', async () => {
+    prisma.order.findUnique.mockResolvedValue({
+      id: 8,
+      status: OrderStatus.COMPLETED,
+    });
+
+    await expect(service.transition(8, OrderStatus.CANCELLED)).rejects.toThrow(
+      ConflictException,
+    );
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
   it('updates only if the previously read status is still current', async () => {
     prisma.order.findUnique.mockResolvedValueOnce({
       id: 8,
