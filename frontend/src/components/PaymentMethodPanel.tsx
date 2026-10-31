@@ -2,6 +2,8 @@ import type { PaymentMethod } from '@/types/checkout';
 
 interface PaymentMethodPanelProps {
   method: PaymentMethod;
+  subtotal?: number;
+  discountAmount?: number;
   total: number;
   isSubmitting: boolean;
   error: string;
@@ -17,6 +19,8 @@ const formatPrice = (price: number) =>
 
 export default function PaymentMethodPanel({
   method,
+  subtotal,
+  discountAmount = 0,
   total,
   isSubmitting,
   error,
@@ -62,13 +66,15 @@ export default function PaymentMethodPanel({
         <div className="flex justify-between gap-4">
           <dt className="text-[#9a7c6b]">Tạm tính</dt>
           <dd className="font-extrabold text-[#40241b]">
-            {formatPrice(total)}
+            {formatPrice(subtotal ?? total)}
           </dd>
         </div>
         <div className="flex justify-between gap-4">
           <dt className="text-[#9a7c6b]">Khuyến mãi</dt>
-          <dd className="font-extrabold text-[#40241b]">
-            {formatPrice(0)}
+          <dd className="font-extrabold text-[#6f9b68]">
+            {discountAmount > 0
+              ? `-${formatPrice(discountAmount)}`
+              : formatPrice(0)}
           </dd>
         </div>
         <div className="flex justify-between gap-4">

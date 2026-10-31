@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  Headers,
   HttpCode,
   HttpStatus,
   Post,
@@ -21,7 +22,11 @@ export class PaymentsController {
 
   @Post()
   @HttpCode(HttpStatus.OK)
-  create(@CurrentUser() user: AuthUser, @Body() dto: CreatePaymentDto) {
-    return this.paymentsService.create(user.id, dto);
+  create(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreatePaymentDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.paymentsService.create(user.id, dto, idempotencyKey);
   }
 }

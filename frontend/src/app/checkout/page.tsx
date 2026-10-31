@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import CheckoutOrderSummary from "@/components/CheckoutOrderSummary";
 import PaymentFailure from "@/components/PaymentFailure";
 import PaymentSuccess from "@/components/PaymentSuccess";
@@ -16,7 +17,20 @@ import {
 import { selectTotalPrice, useCartStore } from "@/stores/cart.store";
 import type { PaymentMethod, PaymentResponse } from "@/types/checkout";
 
+function calculatePreviewDiscount(rawCode: string, subtotal: number): number {
+  const code = rawCode.trim().replace(/\s+/g, "").toUpperCase();
+  if (code === "BREW10" && subtotal >= 50_000) {
+    return Math.min(Math.floor((subtotal * 10) / 100), 20_000, subtotal);
+  }
+  if (code === "GIAM15K" && subtotal >= 60_000) {
+    return Math.min(15_000, subtotal);
+  }
+  return 0;
+}
+
 export default function CheckoutPage() {
+  const router = useRouter();
+  const submittingRef = useRef(false);
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -42,6 +56,7 @@ export default function CheckoutPage() {
   );
 
   const [method, setMethod] = useState<PaymentMethod>("WALLET");
+  const [promotionCode, setPromotionCode] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentFailed, setPaymentFailed] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState<PaymentResponse | null>(
@@ -49,19 +64,47 @@ export default function CheckoutPage() {
   );
   const [error, setError] = useState("");
   const [serverTotal, setServerTotal] = useState<number | null>(null);
+  const [serverDiscount, setServerDiscount] = useState<number | null>(null);
 
-  const cartFingerprint = useMemo(() => createCartFingerprint(items), [items]);
+  const normalizedPromo = useMemo(
+    () => promotionCode.trim().replace(/\s+/g, "").toUpperCase(),
+    [promotionCode],
+  );
 
-  const displayTotal =
+  const baseCartFingerprint = useMemo(
+    () => createCartFingerprint(items),
+    [items],
+  );
+  const cartFingerprint = useMemo(
+    () =>
+      normalizedPromo
+        ? `${baseCartFingerprint}|promo:${normalizedPromo}`
+        : baseCartFingerprint,
+    [baseCartFingerprint, normalizedPromo],
+  );
+
+  const previewDiscount = useMemo(
+    () => calculatePreviewDiscount(promotionCode, totalPrice),
+    [promotionCode, totalPrice],
+  );
+
+  const isPendingOrderCurrent =
     pendingOrder !== null &&
     pendingOrder.userId === user?.id &&
-    pendingOrder.cartFingerprint === cartFingerprint &&
-    serverTotal !== null
+    pendingOrder.cartFingerprint === cartFingerprint;
+
+  const displayDiscount =
+    isPendingOrderCurrent && serverDiscount !== null
+      ? serverDiscount
+      : previewDiscount;
+
+  const displayTotal =
+    isPendingOrderCurrent && serverTotal !== null
       ? serverTotal
-      : totalPrice;
+      : Math.max(0, totalPrice - previewDiscount);
 
   const handlePayment = async (simulateSuccess: boolean) => {
-    if (isSubmitting) return;
+    if (submittingRef.current) return;
 
     if (!token || !user) {
       setError("Vui lòng đăng nhập trước khi thanh toán.");
@@ -76,7 +119,7 @@ export default function CheckoutPage() {
     const submittedContext = {
       userId: user.id,
       token,
-      cartFingerprint,
+      cartFingerprint: baseCartFingerprint,
     };
 
     const isCurrentSubmission = () => {
@@ -93,6 +136,7 @@ export default function CheckoutPage() {
       );
     };
 
+    submittingRef.current = true;
     setIsSubmitting(true);
     setError("");
 
@@ -106,6 +150,7 @@ export default function CheckoutPage() {
       ) {
         orderId = pendingOrder.orderId;
       } else {
+        const trimmedPromo = promotionCode.trim();
         const order = await createOrderApi(token, {
           items: items.map((item) => ({
             productId: item.productId,
@@ -113,29 +158,43 @@ export default function CheckoutPage() {
             quantity: item.quantity,
             toppings: item.toppings.map((topping) => topping.id),
           })),
+          ...(trimmedPromo ? { promotionCode: trimmedPromo } : {}),
         });
 
         if (!isCurrentSubmission()) return;
 
         orderId = order.id;
         setServerTotal(order.total);
+        setServerDiscount(order.discountAmount ?? 0);
         setPendingOrder(user.id, order.id, cartFingerprint);
       }
 
-      const payment = await createPaymentApi(token, {
-        orderId,
-        method,
-        simulateSuccess,
-      });
+      const idempotencyKey = useCheckoutStore
+        .getState()
+        .getPaymentKey(user.id, orderId, method, simulateSuccess);
+
+      const payment = await createPaymentApi(
+        token,
+        {
+          orderId,
+          method,
+          simulateSuccess,
+        },
+        idempotencyKey,
+      );
 
       if (!isCurrentSubmission()) return;
 
+      useCheckoutStore.getState().clearPaymentAttempt();
       setServerTotal(payment.total);
 
       if (payment.status === "PAID") {
         setPaymentSuccess(payment);
         clearCart();
         clearPendingOrder();
+        // Trang xác nhận lấy lại đơn từ API; reload vẫn giữ được kết quả.
+        router.replace(`/order-confirmation?orderId=${payment.id}`);
+        void useAuthStore.getState().initialize();
         return;
       }
 
@@ -149,6 +208,7 @@ export default function CheckoutPage() {
           : "Không thể xử lý thanh toán.",
       );
     } finally {
+      submittingRef.current = false;
       if (isMountedRef.current) {
         setIsSubmitting(false);
       }
@@ -251,10 +311,18 @@ export default function CheckoutPage() {
         <CheckoutOrderSummary
           items={items}
           loyaltyPoints={user.loyaltyPoints}
+          promotionCode={promotionCode}
+          disabled={isSubmitting}
+          onPromotionCodeChange={(nextCode) => {
+            setPromotionCode(nextCode);
+            setError("");
+          }}
         />
 
         <PaymentMethodPanel
           method={method}
+          subtotal={totalPrice}
+          discountAmount={displayDiscount}
           total={displayTotal}
           isSubmitting={isSubmitting}
           error={error}

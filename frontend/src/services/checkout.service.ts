@@ -43,6 +43,7 @@ async function postApi<T>(
   token: string,
   body: unknown,
   defaultMessage: string,
+  extraHeaders: Record<string, string> = {},
 ): Promise<T> {
   const endpoint = `${API_BASE_URL.replace(/\/$/, '')}${path}`;
 
@@ -52,6 +53,7 @@ async function postApi<T>(
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
       Accept: 'application/json',
+      ...extraHeaders,
     },
     body: JSON.stringify(body),
   });
@@ -79,11 +81,14 @@ export function createOrderApi(
 export function createPaymentApi(
   token: string,
   request: CreatePaymentRequest,
+  idempotencyKey?: string,
 ): Promise<PaymentResponse> {
+  const trimmedKey = idempotencyKey?.trim();
   return postApi(
     '/payments',
     token,
     request,
     'Không thể xử lý thanh toán.',
+    trimmedKey ? { 'Idempotency-Key': trimmedKey } : {},
   );
 }

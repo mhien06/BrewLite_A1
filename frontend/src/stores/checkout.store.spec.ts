@@ -74,4 +74,13 @@ describe("checkout store", () => {
       isCheckoutContextCurrent(submitted, 1, "token-a", [item("1:M:", 2)]),
     ).toBe(false);
   });
+  it("reuses an uncertain payment key but creates a new key after a known failure", () => {
+    const store = useCheckoutStore.getState();
+    store.clearPaymentAttempt();
+    const firstKey = store.getPaymentKey(1, 10, "WALLET", false);
+    expect(store.getPaymentKey(1, 10, "WALLET", false)).toBe(firstKey);
+    store.clearPaymentAttempt();
+    expect(store.getPaymentKey(1, 10, "WALLET", true)).not.toBe(firstKey);
+    expect(store.getPaymentKey(2, 10, "WALLET", true)).not.toBe(firstKey);
+  });
 });
