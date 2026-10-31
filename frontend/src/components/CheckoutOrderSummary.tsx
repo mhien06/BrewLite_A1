@@ -3,6 +3,9 @@ import type { CartItem } from '@/types/cart';
 interface CheckoutOrderSummaryProps {
   items: CartItem[];
   loyaltyPoints: number;
+  promotionCode?: string;
+  disabled?: boolean;
+  onPromotionCodeChange?: (code: string) => void;
 }
 
 const formatPrice = (price: number) =>
@@ -14,6 +17,9 @@ const formatPrice = (price: number) =>
 export default function CheckoutOrderSummary({
   items,
   loyaltyPoints,
+  promotionCode = '',
+  disabled = false,
+  onPromotionCodeChange,
 }: CheckoutOrderSummaryProps) {
   return (
     <section className="rounded-[22px] border border-[#ead8c7] bg-white p-5 sm:p-6">
@@ -60,13 +66,16 @@ export default function CheckoutOrderSummary({
           Mã
           <input
             type="text"
-            value="Chưa áp dụng"
-            disabled
-            className="mt-2 w-full rounded-xl border border-[#ead8c7] bg-white px-4 py-3 text-sm text-[#9a7c6b]"
+            value={promotionCode}
+            disabled={disabled}
+            placeholder="Nhập mã (VD: BREW10, GIAM15K)"
+            onChange={(e) => onPromotionCodeChange?.(e.target.value)}
+            className="mt-2 w-full rounded-xl border border-[#ead8c7] bg-white px-4 py-3 text-sm text-[#40241b] placeholder:text-[#9a7c6b] focus:border-[#f6a14a] focus:outline-none disabled:cursor-not-allowed disabled:opacity-60"
           />
         </label>
         <p className="mt-2 text-xs text-[#6f9b68]">
-          Khuyến mãi được triển khai ở task tiếp theo.
+          Gợi ý: BREW10 (giảm 10% cho đơn từ 50.000đ, tối đa 20.000đ) hoặc
+          GIAM15K (giảm 15.000đ cho đơn từ 60.000đ).
         </p>
       </div>
 
@@ -75,7 +84,7 @@ export default function CheckoutOrderSummary({
           Điểm thưởng: {loyaltyPoints} điểm
         </p>
         <p className="mt-2 text-xs text-[#9a7c6b]">
-          Chưa sử dụng điểm thưởng trong phiên bản Checkout này.
+          Mỗi 10.000đ thanh toán thành công sẽ tích lũy thêm 1 điểm thưởng.
         </p>
       </div>
     </section>

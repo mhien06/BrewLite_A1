@@ -114,46 +114,6 @@ Mở terminal khác tại `backend` để chạy `npm test`, `npm run test:e2e`,
 - Đơn đã `PAID` trả HTTP `409`.
 - Backend kiểm tra quyền sở hữu và lấy `total` từ database.
 
-## Backend T10A - Trạng thái đơn, khuyến mãi và điểm thưởng
-
-State Machine chỉ cho phép các chuyển trạng thái sau:
-
-```text
-PENDING       → PAID | PAYMENT_FAILED | CANCELLED
-PAYMENT_FAILED → PAID | PAYMENT_FAILED | PENDING | CANCELLED
-PAID          → PREPARING | CANCELLED
-PREPARING     → READY | CANCELLED
-READY         → COMPLETED
-COMPLETED, CANCELLED: trạng thái kết thúc
-```
-
-Tạo đơn vẫn gửi `items` như T06; có thể thêm `promotionCode`. Backend lấy giá sản phẩm và tự tính `subtotal`, `discountAmount`, `total`, không nhận tiền do client tự tính:
-
-```json
-{
-  "items": [{ "productId": 1, "size": "M", "quantity": 2, "toppings": ["pearls"] }],
-  "promotionCode": "BREW10"
-}
-```
-
-Response giữ các trường cũ và bổ sung `promotionCode`, `subtotal`, `discountAmount`. Ví dụ subtotal `84.000đ`, mã `BREW10` giảm `8.400đ`, `total` còn `75.600đ`. `BREW10` giảm 10% (đơn từ `50.000đ`, tối đa `20.000đ`); `GIAM15K` giảm `15.000đ` (đơn từ `60.000đ`). Chạy `cd backend; npm run prisma:seed` để upsert hai mã mẫu.
-
-Ví dụ response (các trường khác như `id`, `userId`, `status`, `createdAt`, `items` vẫn được giữ):
-
-```json
-{
-  "id": 101,
-  "userId": 7,
-  "status": "PENDING",
-  "promotionCode": "BREW10",
-  "subtotal": 84000,
-  "discountAmount": 8400,
-  "total": 75600
-}
-```
-
-Khi thanh toán thành công, điểm được cộng bằng `floor(total / 10.000)` trên số tiền sau giảm giá; thanh toán lỗi không cộng điểm. Mỗi đơn chỉ ghi nhận một lần. Chạy kiểm thử backend bằng `npm run prisma:generate`, `npm run lint`, `npm run build`, `npm test` và `npm run test:e2e` trong `backend`.
-
 ## Phạm vi Frontend T08 - Checkout
 
 - Thêm route `/checkout` theo thiết kế Figma.
@@ -166,11 +126,9 @@ Khi thanh toán thành công, điểm được cộng bằng `floor(total / 10.0
 - Hiển thị xác nhận thanh toán thành công với mã đơn và trạng thái `PAID`.
 - Xử lý loading, lỗi API, chống gửi lặp và responsive Mobile.
 
-## Cấu trúc dự án đến T08
+## Cấu trúc dự án
 
-Các thư mục và file chính hiện có trong dự án. Phần `orders/` và migration `add_orders` được bổ sung ở T06; phần `auth/` và migration `add_users` được bổ sung ở T07 để quản lý tài khoản và bảo vệ API.
-
-Frontend T08 bổ sung `frontend/src/app/checkout/page.tsx`, các component `CheckoutOrderSummary`, `PaymentMethodPanel`, `PaymentFailure`, `PaymentSuccess`, cùng `checkout.service`, `checkout.store`, type và Unit Test tương ứng. Backend T08 bổ sung thư mục `backend/src/payments/` và migration `20261028032924_add_payments`.
+Cấu trúc dưới đây phản ánh source hiện có sau T01–T08 và cấu hình triển khai T09.2. Nhánh này chưa bao gồm phần giao diện xác nhận/lịch sử T09.1.
 
 ```text
 BrewLite_A1/
@@ -180,6 +138,7 @@ BrewLite_A1/
 │   │   │   ├── page.tsx               # Trang Menu gọi GET /products (T03)
 │   │   │   ├── products/[id]/         # Chi tiết sản phẩm, trang không tìm thấy (T04)
 │   │   │   ├── cart/page.tsx          # Trang giỏ hàng (T05)
+│   │   │   ├── checkout/page.tsx      # Trang checkout (T08)
 │   │   │   ├── layout.tsx             # Bố cục chung, Header và Footer
 │   │   │   ├── loading.tsx            # Giao diện đang tải
 │   │   │   ├── error.tsx              # Giao diện lỗi và thử lại
@@ -194,17 +153,24 @@ BrewLite_A1/
 │   ├── public/products/               # Ảnh đồ uống
 │   ├── next.config.ts                 # Cấu hình Next.js
 │   ├── vitest.config.mts              # Cấu hình kiểm thử frontend
-│   ├── .env.example                   # Mẫu URL backend
+│   ├── Dockerfile                     # Image web
+│   ├── .dockerignore
+│   ├── .env.example                   # URL API local và server-side
 │   ├── package.json                   # Thư viện và lệnh chạy frontend
 │   └── package-lock.json              # Phiên bản thư viện đã khóa
 ├── backend/                          # REST API NestJS
 │   ├── src/
 │   │   ├── products/                  # Controller, service, module sản phẩm (T02)
+│   │   ├── auth/                      # Đăng ký, đăng nhập và JWT (T07)
+│   │   ├── payments/                  # Thanh toán + Idempotency-Key (T08/T10B)
+│   │   ├── inventory/                 # Công thức, kho nguyên liệu, optimistic locking (T10B)
+│   │   ├── promotions/                # Kiểm tra mã giảm giá (T10A)
+│   │   ├── loyalty/                   # Cộng điểm một lần cho mỗi đơn (T10A)
 │   │   ├── orders/                    # API tạo đơn (T06)
 │   │   │   ├── dto/
 │   │   │   │   ├── create-order.dto.ts       # Kiểm tra danh sách món
 │   │   │   │   └── create-order-item.dto.ts  # Kiểm tra sản phẩm, size, topping, số lượng
-│   │   │   ├── orders.controller.ts   # Nhận POST /orders
+│   │   │   ├── orders.controller.ts   # POST /orders, GET /orders/me và GET /orders/:id
 │   │   │   ├── orders.service.ts      # Kiểm tra tồn kho, tính tiền và lưu đơn
 │   │   │   └── orders.module.ts       # Khai báo module đơn hàng
 │   │   ├── prisma/                    # Module và service kết nối database
@@ -215,18 +181,31 @@ BrewLite_A1/
 │   │   └── main.ts                    # Khởi động backend, validation và CORS
 │   ├── prisma/
 │   │   ├── migrations/
-│   │   │   ├── 20261015124827_init_products/  # Tạo bảng Product (T02)
-│   │   │   └── 20261023120000_add_orders/     # Tạo Order và OrderItem (T06)
+│   │   │   ├── 20261015124827_init_products/  # Product (T02)
+│   │   │   ├── 20261023120000_add_orders/     # Order, OrderItem (T06)
+│   │   │   ├── 20261024120000_add_users/      # User (T07)
+│   │   │   ├── 20261028032924_add_payments/   # Payment fields/status (T08)
+│   │   │   ├── 20261030090000_t10a_state_promotions_loyalty/
+│   │   │   ├── 20261031123000_t10b_idempotency_inventory/
+│   │   │   └── 20261031220000_t10b_inventory_constraints/
 │   │   ├── schema.prisma              # Mô hình Product, Order và OrderItem
 │   │   └── seed.ts                    # Thêm món mẫu, cập nhật ảnh món đã có
 │   ├── test/app.e2e-spec.ts           # Kiểm thử E2E đang có trong repo
 │   ├── prisma7.config.ts              # Cấu hình Prisma, migration và seed
 │   ├── vitest.config.ts               # Cấu hình unit test backend
 │   ├── vitest.config.e2e.ts           # Cấu hình E2E backend
-│   ├── .env.example                   # Mẫu cấu hình cổng, CORS và database
+│   ├── vitest.config.database.ts      # PostgreSQL integration T10B (chạy riêng)
+│   ├── Dockerfile                     # Image API
+│   ├── .dockerignore
+│   ├── .env.example                   # Cấu hình API local
 │   ├── package.json                   # Thư viện và lệnh chạy backend
 │   └── package-lock.json              # Phiên bản thư viện đã khóa
-└── README.md                          # Giới thiệu, cài đặt, chạy và kiểm thử
+├── docker-compose.yml                 # PostgreSQL, API và web
+├── .dockerignore
+├── .env.example                       # Cấu hình Compose mẫu
+├── docs/evidence/
+│   └── t09-2-compose-verification.md  # Kết quả kiểm tra Docker thật
+└── README.md                          # Cài đặt, chạy, Docker và kiểm thử
 ```
 
 Hai ứng dụng có `package.json` và `package-lock.json` riêng; chạy npm trong thư mục tương ứng.
@@ -321,6 +300,63 @@ npm run dev
 
 Mở <http://localhost:3000> để dùng BrewLite. Backend chạy tại <http://localhost:3001>. Dừng từng ứng dụng bằng `Ctrl + C` trong terminal tương ứng.
 
+## Chạy bằng Docker Compose (T09.2)
+
+Yêu cầu Docker Desktop (hoặc Docker Engine) có Docker Compose v2. Từ thư mục gốc, sao chép mẫu cấu hình một lần rồi đổi JWT secret thành chuỗi ngẫu nhiên riêng. Các giá trị PostgreSQL trong mẫu chỉ dành cho máy phát triển cục bộ; không dùng chúng cho môi trường công khai và không commit file `.env`.
+
+```powershell
+Copy-Item .env.example .env
+node -e "console.log(require('node:crypto').randomBytes(64).toString('hex'))"
+# Dán kết quả vào JWT_SECRET trong .env
+docker compose up --build -d
+docker compose ps
+```
+
+Compose khởi động PostgreSQL trước và đợi health check `pg_isready` đạt rồi mới chạy API. Container API tự chạy `prisma migrate deploy` trước khi nhận request; web đợi health check của API trước khi khởi động. Web được publish ở <http://localhost:3000>, API ở <http://localhost:3001>. URL `NEXT_PUBLIC_API_URL` được nhúng khi build để browser gọi API qua `localhost`; `API_URL_INTERNAL=http://api:3001` chỉ dùng bởi Next.js server-side Menu bên trong mạng Compose. Không đổi URL nội bộ thành `localhost` trong container web.
+
+Seed không tự chạy khi khởi động container. Sau lần chạy migration đầu tiên, chạy seed tường minh nếu cần dữ liệu mẫu:
+
+```powershell
+docker compose exec api npm run prisma:seed
+```
+
+Seed thêm món chưa có theo tên; với món đã tồn tại, chỉ cập nhật `imageUrl`, giữ nguyên giá và tồn kho. Tài khoản demo `customer@gmail.com` chỉ được tạo nếu chưa tồn tại; seed không đặt lại dữ liệu người dùng hay xóa database. Chạy seed lại không reset dữ liệu.
+
+Để kiểm tra nhanh các dịch vụ và route Menu:
+
+```powershell
+Invoke-RestMethod http://localhost:3001/products
+Invoke-WebRequest http://localhost:3000
+```
+
+Sau đó đăng ký/đăng nhập trên web, thêm món vào giỏ, rồi chạy checkout để kiểm tra xác thực và thanh toán. Dừng ứng dụng mà vẫn giữ database bằng `docker compose down`; chạy lại bằng `docker compose up -d`. PostgreSQL lưu dữ liệu trong named volume `postgres_data`, nên restart hoặc `down` không xóa dữ liệu. **Không chạy `docker compose down -v` trên volume đang dùng**; lệnh đó xóa database Compose.
+
+### Xử lý lỗi Docker
+
+- Nếu cổng `3000`, `3001` hoặc `5432` đang bận, đổi `WEB_PORT`, `API_PORT` hoặc `POSTGRES_PORT` trong `.env`, rồi chạy lại `docker compose up --build -d`. Khi đổi `WEB_PORT`, cập nhật `FRONTEND_URL` theo cổng web mới; khi đổi `API_PORT`, cập nhật `NEXT_PUBLIC_API_URL` theo cổng API mới để browser vẫn kết nối được.
+- Nếu API chưa sẵn sàng, xem `docker compose logs api postgres`; API chỉ chạy sau health check database và tự áp dụng migration khi khởi động.
+- Nếu thiếu `JWT_SECRET`, tạo giá trị ngẫu nhiên rồi đặt vào `.env`. Không ghi secret vào Dockerfile, image, README hoặc Git.
+- Nếu thay đổi mã nguồn hoặc cấu hình build, dùng `docker compose up --build -d` để build lại image.
+- Nếu PowerShell không nhận lệnh `docker`, cài/mở Docker Desktop và mở lại terminal. Với PostgreSQL không dùng Docker, nếu `psql` không được nhận diện thì thêm thư mục `bin` PostgreSQL vào PATH hoặc tạo database qua pgAdmin theo mục **Khởi tạo database**.
+- `docker compose down` giữ named volume. Chỉ dùng `docker compose down -v` cho database thử riêng có thể xóa.
+
+### Kịch bản demo T09.2
+
+Để diễn tập tách khỏi volume Compose mặc định, dùng project name riêng `brewlite-t09-demo`. Compose sẽ tạo volume riêng cho lần demo này.
+
+1. Chạy `docker compose -p brewlite-t09-demo up --build -d`, rồi chụp `docker compose -p brewlite-t09-demo ps` khi PostgreSQL, API và web đều hoạt động.
+2. Chạy seed bằng `docker compose -p brewlite-t09-demo exec api npm run prisma:seed`; mở web, đăng ký/đăng nhập và thực hiện checkout. Chụp Menu và kết quả checkout từ ứng dụng đang kết nối API thật.
+3. Ghi lại số đơn trong database, chạy `docker compose -p brewlite-t09-demo down` rồi `docker compose -p brewlite-t09-demo up -d`. Kiểm tra lại số đơn để xác nhận volume demo còn nguyên và chụp kết quả sau restart.
+4. Trước khi chia sẻ ảnh, che JWT, mật khẩu, email cá nhân và mọi giá trị trong `.env`. Không chụp nội dung secret hoặc terminal hiển thị token.
+
+Khi dùng cấu hình PostgreSQL mặc định, có thể kiểm tra số đơn bằng:
+
+```powershell
+docker compose -p brewlite-t09-demo exec postgres psql -U postgres -d brewlite_scrum -c 'SELECT COUNT(*) FROM "Order";'
+```
+
+Nếu đổi `POSTGRES_USER` hoặc `POSTGRES_DB`, thay giá trị tương ứng trong câu lệnh. Lưu ảnh minh chứng đã chụp cùng tài liệu bàn giao; không dùng ảnh giả lập thay cho kết quả chạy thật. Lệnh `down` giữ volume demo. Chỉ xóa volume của project demo sau khi xác nhận không còn dữ liệu cần giữ; không xóa volume mặc định hoặc volume làm việc.
+
 ## Products API
 
 | Method | Endpoint                             | Kết quả                |
@@ -343,7 +379,8 @@ Invoke-RestMethod "http://localhost:3001/products/$($products[0].id)"
 
 | Ứng dụng | Biến                | Mặc định              | Ý nghĩa                                                |
 | -------- | ------------------- | --------------------- | ------------------------------------------------------ |
-| frontend | NEXT_PUBLIC_API_URL | http://localhost:3001 | URL API; không chứa bí mật                             |
+| frontend | NEXT_PUBLIC_API_URL | http://localhost:3001 | URL API mà browser gọi; không chứa bí mật              |
+| frontend | API_URL_INTERNAL    | http://localhost:3001 | URL API cho Next.js server-side; trong Compose là `http://api:3001` |
 | backend  | PORT                | 3001                  | Cổng HTTP của backend                                  |
 | backend  | FRONTEND_URL        | http://localhost:3000 | Origin được phép gọi API qua CORS                      |
 | backend  | DATABASE_URL        | Không có              | Chuỗi kết nối PostgreSQL; chỉ lưu trong `backend/.env` |
@@ -860,6 +897,37 @@ Task chỉ được đánh dấu Done sau khi đáp ứng Acceptance Criteria, k
 - DTO unit test, service unit test đạt; backend E2E đạt `7/7` tại thời điểm kiểm tra. Code test riêng của T06 sau đó được tách để lưu trên máy cá nhân; kết quả này không phải số lượng test hiện có trong repository.
 - Backend lint, build và Prisma schema validation đạt.
 
+## Kết quả kiểm tra T07 (kiểm tra lại ngày 30/10/2026)
+
+Kiểm tra lại trên `main` tại commit `bb86eab`. Code đăng ký, đăng nhập, JWT, Auth store và các file test T07 được đối chiếu với nhánh `task-7/auth-jwt` tại commit `b6035c4`; các file này giống nhau trên hai nhánh.
+
+| Phần kiểm tra | Kết quả | Nội dung đã kiểm tra |
+| --- | --- | --- |
+| Backend unit test T07 | Đạt `16/16`, trong 4 file | Auth controller/service, băm và so sánh mật khẩu, email trùng, thông tin user, JWT strategy và cấu hình khóa bí mật |
+| Backend API test T07 | Đạt `15/15`, trong `test/auth.e2e-spec.ts` | Đăng ký, đăng nhập, validation, `GET /auth/me` và guard của `POST /orders` |
+| Frontend Auth store | Đạt `9/9`, trong `src/stores/auth.store.spec.ts` | Lưu token khi đăng nhập; đăng ký giữ trạng thái chưa đăng nhập; đăng xuất xóa token; bỏ qua response phiên cũ khi đăng xuất hoặc đổi tài khoản |
+
+Các trường hợp API đã đạt:
+
+- Đăng ký hợp lệ trả HTTP `201`, có thông tin user và chưa cấp JWT; tài khoản vừa tạo đăng nhập được.
+- Tên hoặc email sai định dạng, mật khẩu đăng ký quá ngắn, mật khẩu đăng ký/đăng nhập vượt 72 byte UTF-8 trả HTTP `400`; email trùng trả HTTP `409`.
+- Đăng nhập đúng trả HTTP `200` kèm JWT; sai email hoặc mật khẩu trả HTTP `401`.
+- `GET /auth/me` trả đúng tài khoản khi có JWT hợp lệ; thiếu JWT trả HTTP `401`.
+- `POST /orders` từ chối thiếu/sai JWT bằng HTTP `401`; JWT hợp lệ tạo đơn HTTP `201`, trạng thái `PENDING` và đúng `userId`.
+
+Chạy lại riêng các test T07 từ thư mục gốc dự án:
+
+```powershell
+cd backend
+npm test -- src/auth
+npm run test:e2e -- test/auth.e2e-spec.ts
+
+cd ../frontend
+npm test -- src/stores/auth.store.spec.ts
+```
+
+Bộ API test T07 dùng NestJS, ValidationPipe, JWT và bcrypt cùng Prisma mock; Auth store dùng API mock và localStorage giả lập. Kết quả trên là kiểm thử tự động của phần T07, không phải tổng số test của dự án hoặc kết quả thử giao diện và PostgreSQL thật. Cách kiểm tra thủ công API/database nằm trong [hướng dẫn T07](#hướng-dẫn-kiểm-thử-đăng-ký-đăng-nhập-và-guard-tạo-đơn-t07).
+
 ## Kết quả kiểm tra Backend T08 (28/10/2026)
 
 - Migration Payments áp dụng thành công trên PostgreSQL thật.
@@ -879,9 +947,42 @@ Task chỉ được đánh dấu Done sau khi đáp ứng Acceptance Criteria, k
 - Frontend lint và production build đạt.
 - Unit Test đạt `20/20`.
 
+## Kết quả kiểm tra T09.2 (31/10/2026)
+
+- Frontend lint, production build và Unit Test đạt `20/20`.
+- Backend lint và production build đạt; Unit Test đạt `22/22`.
+- E2E auth và payments đạt `22/22` khi dùng JWT secret tạm trong process kiểm thử.
+- Docker Desktop `29.9.2` và Compose `v5.6.1`; build image và chạy đủ PostgreSQL, API, web trong project/volume cô lập `brewlite-t09-demo` thành công.
+- PostgreSQL health check đạt trước khi API khởi động; API áp dụng migration rồi báo healthy. Web khởi động sau health check API.
+- Seed chạy hai lần: vẫn có 4 sản phẩm, không nhân đôi dữ liệu; đơn thanh toán thử vẫn còn.
+- `GET /products` trả 4 sản phẩm; Menu server-side được phục vụ qua web với HTTP `200`.
+- Đăng nhập bằng tài khoản demo seed, tạo đơn thật và thanh toán; response `PAID`, tổng `29.000 VND`.
+- Sau `docker compose down` và chạy lại cùng project, database còn 4 sản phẩm và 1 đơn đã thanh toán. Volume demo được giữ nguyên.
+- Minh chứng lệnh và kết quả đã che thông tin nhạy cảm nằm tại [docs/evidence/t09-2-compose-verification.md](docs/evidence/t09-2-compose-verification.md). Chưa lưu ảnh giao diện: Chromium/Edge headless không khởi tạo được GPU trong môi trường kiểm tra.
+- E2E auth/payments đạt `22/22`; `test/app.e2e-spec.ts` riêng cần `DATABASE_URL` và database kiểm thử nên chưa chạy được.
+
 ## Tài liệu công nghệ
 
 - Next.js: <https://nextjs.org/docs/app/getting-started/installation>
 - NestJS: <https://docs.nestjs.com/first-steps>
 - Prisma ORM: <https://www.prisma.io/docs/orm>
 - PostgreSQL: <https://www.postgresql.org/docs/>
+
+
+## T10: nghiệp vụ backend
+
+Phần Khoa: state machine, khuyến mãi và điểm thưởng đã được giữ trong code. Tài liệu trước tích hợp: [T10A](docs/t10/t10a-readme-before-integration.md). Phần Hiển: xem [hướng dẫn T10B](docs/t10/T10B.md).
+
+
+## Kết quả kiểm tra T10B (31/10/2026)
+
+- Backend: 72 unit test đạt; 44 E2E đạt khi truyền TEST_DATABASE_URL (gồm bài database T10A của Khoa; một số bài khác dùng Prisma mock).
+- PostgreSQL riêng: 7 integration test đạt, gồm hai service, request cùng/khác khóa, tranh kho và rollback.
+- Frontend: 25 unit test đạt; lint frontend/backend và build production đạt.
+- Demo với API/PostgreSQL thật: PAYMENT_FAILED → thử lại cùng đơn → PAID → xác nhận → reload → lịch sử đạt. Đã chạy lặp; trang xác nhận được điều hướng trực tiếp sau PAID.
+- Kiểm tra CARD + BREW10: subtotal 58.000đ, giảm 5.800đ, tổng 52.200đ; chỉ cộng 5 điểm một lần. Replay trả kết quả cũ; khác payload hoặc khóa mới cho đơn đã PAID trả 409.
+- Sửa cấu hình Tailwind/PostCSS để build Webpack production có CSS, kiểm tra lại ảnh desktop/mobile.
+- Bản demo chạy frontend/backend ở máy, PostgreSQL trong Docker, bằng database riêng. Đã thử build Compose T10B: image API build đạt; image web dừng tại npm ci --omit=dev do registry.npmjs.org báo EIDLETIMEOUT. Chưa xác nhận đủ ba container T10B mới; không dùng kết quả Docker T09 thay cho kết quả này.
+- Đây là kết quả local trước review; chưa commit, push hoặc merge phần T10B.
+
+- Kiểm tra mất phản hồi: API thật đã ghi PAID, chặn phản hồi ở trình duyệt rồi bấm lại; frontend gửi cùng Idempotency-Key và vào xác nhận thành công. Tổng 148 test tự động đạt (72 backend unit + 44 E2E + 7 PostgreSQL T10B + 25 frontend unit).

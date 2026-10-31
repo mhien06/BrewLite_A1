@@ -4,6 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { OrderStatus } from '../generated/prisma/client.js';
+import { InventoryService } from '../inventory/inventory.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { PromotionsService } from '../promotions/promotions.service.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
@@ -25,6 +26,9 @@ export class OrdersService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly promotionsService: PromotionsService,
+    private readonly inventoryService: InventoryService = new InventoryService(
+      prisma,
+    ),
   ) {}
 
   async create(userId: number, dto: CreateOrderDto) {
@@ -33,7 +37,9 @@ export class OrdersService {
       const products = await transaction.product.findMany({
         where: { id: { in: productIds } },
       });
-      const productsById = new Map(products.map((product) => [product.id, product]));
+      const productsById = new Map(
+        products.map((product) => [product.id, product]),
+      );
 
       for (const productId of productIds) {
         if (!productsById.has(productId)) {
@@ -41,22 +47,17 @@ export class OrdersService {
         }
       }
 
-      const requestedByProduct = new Map<number, number>();
-      for (const item of dto.items) {
-        requestedByProduct.set(
-          item.productId,
-          (requestedByProduct.get(item.productId) ?? 0) + item.quantity,
-        );
-      }
-
-      for (const [productId, requestedQuantity] of requestedByProduct) {
-        const product = productsById.get(productId)!;
-        if (requestedQuantity > product.stock) {
-          throw new BadRequestException(
-            `Sản phẩm ${product.name} chỉ còn ${product.stock} món.`,
-          );
-        }
-      }
+      await this.inventoryService.assertCartStockAvailable(
+        transaction,
+        dto.items.map((item) => ({
+          productId: item.productId,
+          productName: productsById.get(item.productId)?.name,
+          size: item.size,
+          quantity: item.quantity,
+          toppings: item.toppings,
+        })),
+        productsById,
+      );
 
       const orderItems = dto.items.map((item) => {
         const product = productsById.get(item.productId)!;
@@ -64,7 +65,10 @@ export class OrdersService {
         const unitPrice =
           product.price +
           SIZE_EXTRA[item.size] +
-          toppings.reduce((total, toppingId) => total + TOPPING_PRICE[toppingId], 0);
+          toppings.reduce(
+            (total, toppingId) => total + TOPPING_PRICE[toppingId],
+            0,
+          );
 
         return {
           productId: item.productId,
@@ -75,7 +79,10 @@ export class OrdersService {
           lineTotal: unitPrice * item.quantity,
         };
       });
-      const subtotal = orderItems.reduce((sum, item) => sum + item.lineTotal, 0);
+      const subtotal = orderItems.reduce(
+        (sum, item) => sum + item.lineTotal,
+        0,
+      );
       const promotion = dto.promotionCode
         ? await this.promotionsService.validateAndCalculate(
             dto.promotionCode,
@@ -118,5 +125,81 @@ export class OrdersService {
         },
       });
     });
+  }
+  async findMyOrders(userId: number) {
+    return this.prisma.order.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        paymentMethod: true,
+        paidAt: true,
+        total: true,
+        createdAt: true,
+        items: {
+          select: {
+            id: true,
+            productId: true,
+            size: true,
+            toppings: true,
+            quantity: true,
+            unitPrice: true,
+            lineTotal: true,
+            product: {
+              select: {
+                id: true,
+                name: true,
+                imageUrl: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async findOne(userId: number, id: number) {
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new BadRequestException('Mã đơn hàng không hợp lệ.');
+    }
+
+    const order = await this.prisma.order.findFirst({
+      where: { id, userId },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        paymentMethod: true,
+        paidAt: true,
+        total: true,
+        createdAt: true,
+        items: {
+          select: {
+            id: true,
+            productId: true,
+            size: true,
+            toppings: true,
+            quantity: true,
+            unitPrice: true,
+            lineTotal: true,
+            product: {
+              select: {
+                id: true,
+                name: true,
+                imageUrl: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Không tìm thấy đơn hàng.');
+    }
+
+    return order;
   }
 }

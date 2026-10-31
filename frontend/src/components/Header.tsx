@@ -72,6 +72,13 @@ export default function Header() {
                   {user.loyaltyPoints} điểm tích lũy
                 </span>
               </div>
+              <Link
+                href="/orders"
+                className="inline-flex items-center rounded-full border border-amber-900/15 bg-white px-3 py-1.5 text-xs font-bold text-amber-950 transition hover:bg-amber-100 sm:px-3.5 sm:py-2"
+                aria-label="Lịch sử đơn hàng"
+              >
+                Đơn hàng
+              </Link>
               <button
                 type="button"
                 onClick={() => {
