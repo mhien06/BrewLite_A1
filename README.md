@@ -128,7 +128,7 @@ Mở terminal khác tại `backend` để chạy `npm test`, `npm run test:e2e`,
 
 ## Cấu trúc dự án
 
-Cấu trúc dưới đây phản ánh source hiện có sau T01–T08 và cấu hình triển khai T09.2. Nhánh này chưa bao gồm phần giao diện xác nhận/lịch sử T09.1.
+Cấu trúc dưới đây phản ánh source trên nhánh tích hợp sau T01–T09.2, bao gồm giao diện xác nhận và lịch sử đơn T09.1.
 
 ```text
 BrewLite_A1/
@@ -139,17 +139,22 @@ BrewLite_A1/
 │   │   │   ├── products/[id]/         # Chi tiết sản phẩm, trang không tìm thấy (T04)
 │   │   │   ├── cart/page.tsx          # Trang giỏ hàng (T05)
 │   │   │   ├── checkout/page.tsx      # Trang checkout (T08)
+│   │   │   ├── order-confirmation/page.tsx # Xác nhận/chi tiết đơn từ API (T09.1)
+│   │   │   ├── orders/page.tsx        # Lịch sử đơn từ GET /orders/me (T09.1)
 │   │   │   ├── layout.tsx             # Bố cục chung, Header và Footer
 │   │   │   ├── loading.tsx            # Giao diện đang tải
 │   │   │   ├── error.tsx              # Giao diện lỗi và thử lại
 │   │   │   └── globals.css            # Tailwind CSS và kiểu giao diện chung
-│   │   ├── components/                # Header, thẻ sản phẩm, lưới món, chọn size/topping
+│   │   ├── components/                # Header, menu, checkout và trạng thái thanh toán
 │   │   ├── services/
+│   │   │   ├── orders.service.ts      # GET /orders/me và GET /orders/:id (T09.1)
+│   │   │   ├── checkout.service.ts    # POST /orders và POST /payments (T08)
 │   │   │   └── products.service.ts    # Gọi và kiểm tra dữ liệu API sản phẩm
 │   │   ├── stores/
+│   │   │   ├── auth.store.ts          # Phiên đăng nhập và JWT (T07)
 │   │   │   ├── cart.store.ts          # Quản lý giỏ hàng bằng Zustand
-│   │   │   └── cart.store.spec.ts     # Kiểm thử giỏ hàng
-│   │   └── types/                     # Kiểu dữ liệu sản phẩm và giỏ hàng
+│   │   │   └── checkout.store.ts      # Giữ đơn chờ retry cùng giỏ hàng (T08)
+│   │   └── types/                     # Kiểu dữ liệu auth, cart, checkout, order, product
 │   ├── public/products/               # Ảnh đồ uống
 │   ├── next.config.ts                 # Cấu hình Next.js
 │   ├── vitest.config.mts              # Cấu hình kiểm thử frontend
@@ -163,12 +168,12 @@ BrewLite_A1/
 │   │   ├── products/                  # Controller, service, module sản phẩm (T02)
 │   │   ├── auth/                      # Đăng ký, đăng nhập và JWT (T07)
 │   │   ├── payments/                  # API thanh toán (T08)
-│   │   ├── orders/                    # API tạo đơn (T06)
+│   │   ├── orders/                    # Tạo đơn, lịch sử và chi tiết có kiểm tra chủ sở hữu (T06/T09.1)
 │   │   │   ├── dto/
 │   │   │   │   ├── create-order.dto.ts       # Kiểm tra danh sách món
 │   │   │   │   └── create-order-item.dto.ts  # Kiểm tra sản phẩm, size, topping, số lượng
-│   │   │   ├── orders.controller.ts   # Nhận POST /orders
-│   │   │   ├── orders.service.ts      # Kiểm tra tồn kho, tính tiền và lưu đơn
+│   │   │   ├── orders.controller.ts   # POST /orders, GET /orders/me, GET /orders/:id
+│   │   │   ├── orders.service.ts      # Tạo đơn; truy vấn lịch sử/chi tiết theo userId
 │   │   │   └── orders.module.ts       # Khai báo module đơn hàng
 │   │   ├── prisma/                    # Module và service kết nối database
 │   │   ├── app.controller.ts          # Endpoint GET / ban đầu
@@ -940,19 +945,15 @@ Bộ API test T07 dùng NestJS, ValidationPipe, JWT và bcrypt cùng Prisma mock
 - Frontend lint và production build đạt.
 - Unit Test đạt `20/20`.
 
-## Kết quả kiểm tra T09.2 (31/10/2026)
+## Kết quả kiểm tra tích hợp T09 (01/11/2026)
 
-- Frontend lint, production build và Unit Test đạt `20/20`.
-- Backend lint và production build đạt; Unit Test đạt `22/22`.
-- E2E auth và payments đạt `22/22` khi dùng JWT secret tạm trong process kiểm thử.
-- Docker Desktop `29.9.2` và Compose `v5.6.1`; build image và chạy đủ PostgreSQL, API, web trong project/volume cô lập `brewlite-t09-demo` thành công.
-- PostgreSQL health check đạt trước khi API khởi động; API áp dụng migration rồi báo healthy. Web khởi động sau health check API.
-- Seed chạy hai lần: vẫn có 4 sản phẩm, không nhân đôi dữ liệu; đơn thanh toán thử vẫn còn.
-- `GET /products` trả 4 sản phẩm; Menu server-side được phục vụ qua web với HTTP `200`.
-- Đăng nhập bằng tài khoản demo seed, tạo đơn thật và thanh toán; response `PAID`, tổng `29.000 VND`.
-- Sau `docker compose down` và chạy lại cùng project, database còn 4 sản phẩm và 1 đơn đã thanh toán. Volume demo được giữ nguyên.
-- Minh chứng lệnh và kết quả đã che thông tin nhạy cảm nằm tại [docs/evidence/t09-2-compose-verification.md](docs/evidence/t09-2-compose-verification.md). Chưa lưu ảnh giao diện: Chromium/Edge headless không khởi tạo được GPU trong môi trường kiểm tra.
-- E2E auth/payments đạt `22/22`; `test/app.e2e-spec.ts` riêng cần `DATABASE_URL` và database kiểm thử nên chưa chạy được.
+- Frontend lint đạt; Unit Test đạt `24/24`. Backend lint đạt; Unit Test đạt `29/29`.
+- Docker Compose build thành công; PostgreSQL và API `healthy`, web chạy trong project thử nghiệm cô lập `brewlite-t09-demo`.
+- Test A — thanh toán thành công lần đầu: API trả `PAID`; giao diện chuyển đến trang xác nhận `orderId=9`, hiển thị đúng mã đơn và tổng `34.000 VND`. Tải lại trang vẫn hiển thị xác nhận; lịch sử có đúng một đơn.
+- Test B — thất bại rồi thử lại: giao diện hiển thị `PAYMENT_FAILED` và giữ giỏ; retry dùng lại `orderId=10`, sau đó chuyển tới xác nhận `PAID`. Lịch sử chỉ có một bản ghi cho đơn này.
+- Test C — xác nhận/lịch sử: `/orders` liệt kê hai đơn đã thanh toán; trang chi tiết và `GET /orders/:id` khớp ID, trạng thái và tổng tiền với `GET /orders/me`.
+- Các bước A/B/C được kiểm tra trên giao diện Chrome headless và API/PostgreSQL thật. Kết quả, URL route và ID/tổng tiền đã ghi tại [docs/evidence/t09-2-compose-verification.md](docs/evidence/t09-2-compose-verification.md); không lưu ảnh chụp màn hình.
+- Docker build bao gồm production build frontend và backend; kiểm tra restart database trước đó giữ nguyên dữ liệu trong volume thử nghiệm.
 
 ## Tài liệu công nghệ
 

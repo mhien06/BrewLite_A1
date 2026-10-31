@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import CheckoutOrderSummary from "@/components/CheckoutOrderSummary";
 import PaymentFailure from "@/components/PaymentFailure";
 import PaymentSuccess from "@/components/PaymentSuccess";
@@ -17,6 +18,7 @@ import { selectTotalPrice, useCartStore } from "@/stores/cart.store";
 import type { PaymentMethod, PaymentResponse } from "@/types/checkout";
 
 export default function CheckoutPage() {
+  const router = useRouter();
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -136,6 +138,7 @@ export default function CheckoutPage() {
         setPaymentSuccess(payment);
         clearCart();
         clearPendingOrder();
+        router.replace(`/order-confirmation?orderId=${payment.id}`);
         return;
       }
 
