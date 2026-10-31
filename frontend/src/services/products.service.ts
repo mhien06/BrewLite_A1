@@ -1,7 +1,16 @@
 import { Product } from '@/types/product';
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+function getApiBaseUrl() {
+  if (typeof window === 'undefined') {
+    return (
+      process.env.API_URL_INTERNAL ||
+      process.env.NEXT_PUBLIC_API_URL ||
+      'http://localhost:3001'
+    );
+  }
+
+  return process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+}
 
 export class ProductsServiceError extends Error {
   constructor(
@@ -28,7 +37,7 @@ function isValidProduct(item: unknown): item is Product {
 }
 
 export async function getProducts(): Promise<Product[]> {
-  const endpoint = `${API_BASE_URL.replace(/\/$/, '')}/products`;
+  const endpoint = `${getApiBaseUrl().replace(/\/$/, '')}/products`;
 
   try {
     const res = await fetch(endpoint, {
@@ -67,7 +76,7 @@ export async function getProducts(): Promise<Product[]> {
 }
 
 export async function getProduct(id: number): Promise<Product> {
-  const endpoint = `${API_BASE_URL.replace(/\/$/, '')}/products/${id}`;
+  const endpoint = `${getApiBaseUrl().replace(/\/$/, '')}/products/${id}`;
 
   try {
     const res = await fetch(endpoint, {
