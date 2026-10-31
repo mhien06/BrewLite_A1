@@ -49,12 +49,26 @@ export default function PaymentSuccess({ payment }: PaymentSuccessProps) {
         </div>
       </dl>
 
-      <Link
-        href="/"
-        className="mt-6 inline-flex min-w-48 items-center justify-center rounded-full bg-[#f6a14a] px-6 py-3 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435]"
-      >
-        Về thực đơn
-      </Link>
+      <div className="mt-8 flex flex-wrap justify-center gap-3">
+        <Link
+          href={`/order-confirmation?orderId=${payment.id}`}
+          className="inline-flex min-w-44 items-center justify-center rounded-full bg-[#f6a14a] px-6 py-3 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435]"
+        >
+          Chi tiết đơn hàng
+        </Link>
+        <Link
+          href="/orders"
+          className="inline-flex min-w-44 items-center justify-center rounded-full border border-[#ead8c7] bg-white px-6 py-3 text-sm font-bold text-[#492214] transition hover:bg-[#fffaf5]"
+        >
+          Lịch sử đơn hàng
+        </Link>
+        <Link
+          href="/"
+          className="inline-flex min-w-40 items-center justify-center rounded-full border border-transparent px-4 py-3 text-sm font-bold text-[#9a7c6b] transition hover:text-[#492214]"
+        >
+          Về thực đơn
+        </Link>
+      </div>
     </section>
   );
 }
