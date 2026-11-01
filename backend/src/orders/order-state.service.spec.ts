@@ -27,9 +27,7 @@ describe('OrderStateService', () => {
     [OrderStatus.PAYMENT_FAILED, OrderStatus.PENDING],
     [OrderStatus.PAYMENT_FAILED, OrderStatus.CANCELLED],
     [OrderStatus.PAID, OrderStatus.PREPARING],
-    [OrderStatus.PAID, OrderStatus.CANCELLED],
     [OrderStatus.PREPARING, OrderStatus.READY],
-    [OrderStatus.PREPARING, OrderStatus.CANCELLED],
     [OrderStatus.READY, OrderStatus.COMPLETED],
   ])('allows %s -> %s', (from, to) => {
     expect(() => service.assertTransition(from, to)).not.toThrow();
@@ -45,21 +43,26 @@ describe('OrderStateService', () => {
     [OrderStatus.COMPLETED, OrderStatus.COMPLETED],
     [OrderStatus.CANCELLED, OrderStatus.PAID],
     [OrderStatus.CANCELLED, OrderStatus.CANCELLED],
+    [OrderStatus.PAID, OrderStatus.CANCELLED],
+    [OrderStatus.PREPARING, OrderStatus.CANCELLED],
   ])('rejects %s -> %s', (from, to) => {
     expect(() => service.assertTransition(from, to)).toThrow(ConflictException);
   });
 
-  it('does not attempt a database update for an invalid transition', async () => {
-    prisma.order.findUnique.mockResolvedValue({
-      id: 8,
-      status: OrderStatus.COMPLETED,
-    });
+  it.each([OrderStatus.PAID, OrderStatus.PREPARING, OrderStatus.COMPLETED])(
+    'does not update when cancelling %s',
+    async (status) => {
+      prisma.order.findUnique.mockResolvedValue({
+        id: 8,
+        status,
+      });
 
-    await expect(service.transition(8, OrderStatus.CANCELLED)).rejects.toThrow(
-      ConflictException,
-    );
-    expect(prisma.order.updateMany).not.toHaveBeenCalled();
-  });
+      await expect(
+        service.transition(8, OrderStatus.CANCELLED),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.order.updateMany).not.toHaveBeenCalled();
+    },
+  );
 
   it('updates only if the previously read status is still current', async () => {
     prisma.order.findUnique.mockResolvedValueOnce({

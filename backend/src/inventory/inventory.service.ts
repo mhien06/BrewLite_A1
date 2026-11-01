@@ -333,7 +333,7 @@ export class InventoryService {
         demand.requiredAmount > demand.currentStock
       ) {
         throw new BadRequestException(
-          `Nguyên liệu ${demand.name} không đủ tồn kho (cần ${demand.requiredAmount}${demand.unit}, còn ${Math.max(0, demand.currentStock)}${demand.unit}).`,
+          'Món hoặc topping bạn chọn không đủ số lượng. Vui lòng giảm số lượng hoặc thay đổi lựa chọn trong giỏ hàng.',
         );
       }
     }
@@ -379,7 +379,7 @@ export class InventoryService {
         demand.requiredAmount > demand.currentStock
       ) {
         throw new ConflictException(
-          `Nguyên liệu ${demand.name} không đủ tồn kho để thanh toán.`,
+          'Món hoặc topping bạn chọn hiện không đủ số lượng. Vui lòng quay lại giỏ hàng để giảm số lượng hoặc thay đổi lựa chọn.',
         );
       }
     }
@@ -451,7 +451,7 @@ export class InventoryService {
       });
       if (!latestIngredient || latestIngredient.stock < demand.requiredAmount) {
         throw new ConflictException(
-          `Nguyên liệu ${demand.name} không đủ tồn kho để thanh toán.`,
+          'Món hoặc topping bạn chọn hiện không đủ số lượng. Vui lòng quay lại giỏ hàng để giảm số lượng hoặc thay đổi lựa chọn.',
         );
       }
       if (latestIngredient.version === expectedVersion) {

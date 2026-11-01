@@ -1030,6 +1030,7 @@ Chạy unit test trong `backend` bằng `npm test`. Với kiểm thử PostgreSQ
 $env:TEST_DATABASE_URL='postgresql://USER:PASSWORD@localhost:PORT/brewlite_t10b_test?schema=public'
 $env:DATABASE_URL=$env:TEST_DATABASE_URL
 npm run prisma:deploy
+npm run prisma:seed
 npm run test:database
 npm run test:e2e
 ```
@@ -1180,3 +1181,7 @@ npm run test:database
 ```
 
 Không dùng database demo hoặc dữ liệu thật cho kiểm thử. Lệnh `test:database` chạy cả bộ PostgreSQL T10B và bộ nhân viên.
+
+### Hủy đơn trong Task 10
+
+Chỉ cho hủy đơn trước khi thanh toán thành công (`PENDING` hoặc `PAYMENT_FAILED`). Đơn `PAID` và `PREPARING` không được chuyển sang `CANCELLED` vì hệ thống chưa hỗ trợ hoàn tiền và hoàn kho sau thanh toán.

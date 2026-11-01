@@ -1,4 +1,8 @@
-import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ConflictException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { OrderStatus, Prisma } from '../generated/prisma/client.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
@@ -14,8 +18,9 @@ const VALID_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
     OrderStatus.PENDING,
     OrderStatus.CANCELLED,
   ],
-  [OrderStatus.PAID]: [OrderStatus.PREPARING, OrderStatus.CANCELLED],
-  [OrderStatus.PREPARING]: [OrderStatus.READY, OrderStatus.CANCELLED],
+  // Chưa hỗ trợ hoàn tiền/hoàn kho sau thanh toán.
+  [OrderStatus.PAID]: [OrderStatus.PREPARING],
+  [OrderStatus.PREPARING]: [OrderStatus.READY],
   [OrderStatus.READY]: [OrderStatus.COMPLETED],
   [OrderStatus.COMPLETED]: [],
   [OrderStatus.CANCELLED]: [],

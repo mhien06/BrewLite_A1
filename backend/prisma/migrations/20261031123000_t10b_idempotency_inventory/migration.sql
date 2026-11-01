@@ -125,4 +125,3 @@ FROM (
 ) AS v("toppingCode", "ingredientCode", "amount")
 JOIN "Ingredient" i ON i."code" = v."ingredientCode"
 ON CONFLICT ("toppingCode", "ingredientId") DO NOTHING;
-
