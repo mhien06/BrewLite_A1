@@ -74,6 +74,20 @@ PostgreSQL và API báo `healthy`; web chạy. Kiểm thử giao diện bằng C
 
 Các tài khoản và đơn thử vẫn nằm trong volume kiểm thử cô lập; không chạy `down -v` và không xóa volume.
 
+## Tailwind production styling regression (01/11/2026)
+
+Thêm cấu hình PostCSS Tailwind v4 để `next build --webpack` trong Docker xử lý utility CSS ở production.
+
+Kiểm tra bằng Compose project cô lập `brewlite-t09-css`, không sử dụng/xóa volume mặc định hoặc volume đang làm việc:
+
+- `docker compose -p brewlite-t09-css up --build -d` build thành công frontend Webpack và backend. PostgreSQL và API healthy; web khởi động.
+- Menu `/`, đăng nhập `/login`, checkout `/checkout`, xác nhận `/order-confirmation?orderId=1` và lịch sử `/orders` đều trả HTTP `200`; stylesheet production tải HTTP `200`.
+- CSS được phục vụ từ container có utility selectors `flex`, `grid`, `items-center`, `rounded-xl`, `h-6` và `w-6`, gồm các utility kích thước cho SVG icon.
+- Seed trên database kiểm thử tạo 4 sản phẩm; login demo, `GET /auth/me` và `GET /orders/me` đều trả thành công.
+- Frontend `npm run build`, `npm run lint` đạt; `npm test` đạt `24/24`.
+
+Kiểm tra này xác nhận production build trong Docker phát sinh và phục vụ Tailwind CSS. Không lưu ảnh chụp màn hình mới; browser UI capture bị timeout trong môi trường kiểm thử.
+
 ## Giới hạn minh chứng
 
 Kết quả kiểm tra được ghi từ giao diện Chrome headless, container, API và PostgreSQL thật. Không đính kèm ảnh chụp màn hình; ID, trạng thái, tổng tiền, URL và đối chiếu backend được ghi ở trên.
