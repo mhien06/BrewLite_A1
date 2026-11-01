@@ -1,5 +1,6 @@
 "use client";
 
+import { formatToppingLabels } from "@/utils/toppings";
 import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 
@@ -35,6 +36,7 @@ const tabs = [
 ];
 
 const statusLabels: Record<string, string> = {
+  CANCELLED: "Đã hủy",
   PAID: "Chờ pha chế",
   PREPARING: "Đang pha",
   READY: "Chờ nhận",
@@ -227,8 +229,8 @@ export default function StaffPage() {
   }
 
   // Chuyển đơn sang bước pha chế tiếp theo.
-  async function advance(order: Order) {
-    const next = nextStatus[order.status];
+  async function advance(order: Order, cancel = false) {
+    const next = cancel ? { status: "CANCELLED", label: "Hủy đơn" } : nextStatus[order.status];
 
     if (!token || !next || busy) return;
 
@@ -528,9 +530,7 @@ export default function StaffPage() {
                             {item.toppings.length > 0 && (
                               <p className="mt-1 text-xs text-stone-500">
                                 Topping:{" "}
-                                {item.toppings
-                                  .map((code) => toppingNames[code] || code)
-                                  .join(", ")}
+                                {formatToppingLabels(item.toppings.map((code) => toppingNames[code] || code))}
                               </p>
                             )}
                           </div>
@@ -542,6 +542,7 @@ export default function StaffPage() {
                           {order.total.toLocaleString("vi-VN")} đ
                         </p>
 
+                        {order.status === "PAID" && <button type="button" disabled={busy || loading} onClick={() => { if (window.confirm("Hủy đơn và hoàn kho? Thao tác này chưa thực hiện hoàn tiền.")) void advance(order, true); }} className="rounded-full border border-red-200 px-5 py-3 text-sm font-semibold text-red-700 disabled:opacity-50">Hủy đơn</button>}
                         {nextStatus[order.status] && (
                           <button
                             type="button"
@@ -612,7 +613,7 @@ export default function StaffPage() {
                             </div>
 
                             <span className="font-semibold text-green-700">
-                              +{transaction.points} điểm
+                              {transaction.reversed ? `Đã thu hồi ${transaction.points} điểm` : `+${transaction.points} điểm`}
                             </span>
                           </div>
                         ))}

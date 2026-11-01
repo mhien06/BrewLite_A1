@@ -1,5 +1,6 @@
 'use client';
 
+import { formatToppingLabels } from "@/utils/toppings";
 import { Suspense, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -367,7 +368,7 @@ function OrderConfirmationContent() {
                   </p>
                   {item.toppings && item.toppings.length > 0 && (
                     <p className="mt-0.5 text-xs text-[#9a7c6b]">
-                      Topping: {item.toppings.map(formatTopping).join(', ')}
+                      Topping: {formatToppingLabels(item.toppings.map(formatTopping))}
                     </p>
                   )}
                   <p className="mt-0.5 text-xs text-[#9a7c6b]">

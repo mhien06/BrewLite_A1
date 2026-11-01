@@ -61,7 +61,7 @@ export default async function ProductDetailPage({ params }: ProductDetailPagePro
               </h1>
             </div>
             <span className="rounded-full bg-emerald-50 px-3 py-1.5 text-xs font-bold text-emerald-800 ring-1 ring-emerald-600/20">
-              {product.stock > 0 ? `Còn hàng · ${product.stock} ly S, không topping` : 'Tạm hết hàng'}
+              {product.stock > 0 ? `Còn hàng (${product.stock})` : 'Tạm hết hàng'}
             </span>
           </div>
 

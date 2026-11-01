@@ -1,5 +1,6 @@
 'use client';
 
+import { formatToppingLabels } from "@/utils/toppings";
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { getMyOrdersApi, OrdersServiceError } from '@/services/orders.service';
@@ -285,7 +286,7 @@ export default function OrderHistoryPage() {
                         </p>
                         {item.toppings && item.toppings.length > 0 && (
                           <p className="text-xs text-[#9a7c6b]">
-                            Topping: {item.toppings.map(formatTopping).join(', ')}
+                            Topping: {formatToppingLabels(item.toppings.map(formatTopping))}
                           </p>
                         )}
                       </div>

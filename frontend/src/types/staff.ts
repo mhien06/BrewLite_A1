@@ -41,7 +41,7 @@ export type Customer = {
   name: string;
   email: string;
   loyaltyPoints: number;
-  loyaltyTransactions: { orderId: number; points: number; createdAt: string }[];
+  loyaltyTransactions: { orderId: number; points: number; reversed?: boolean; createdAt: string }[];
 };
 export type Movement = {
   id: number;

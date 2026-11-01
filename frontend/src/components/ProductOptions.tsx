@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import Link from "next/link";
+import ToppingCounter from "@/components/ToppingCounter";
 import { useRouter } from "next/navigation";
 import { useCartStore } from "@/stores/cart.store";
 import type { CartSizeId, CartItem } from "@/types/cart";
@@ -35,8 +35,8 @@ export default function ProductOptions({ product }: ProductOptionsProps) {
   const [busy, setBusy] = useState(false);
   const submitting = useRef(false);
   const selectedSize = SIZES.find((item) => item.id === size) ?? SIZES[0];
-  const selectedToppings = TOPPINGS.filter((item) =>
-    toppings.includes(item.id),
+  const selectedToppings = toppings.map((id) =>
+    TOPPINGS.find((item) => item.id === id)!,
   );
   const total =
     product.price +
@@ -56,15 +56,6 @@ export default function ProductOptions({ product }: ProductOptionsProps) {
   const availability = useCartAvailability([...items, draft]);
   const current = availability.result?.items[items.length];
   const canAddToCart = Boolean(availability.result?.available) && !busy;
-
-  const toggleTopping = (id: string) => {
-    setMessage("");
-    setToppings((current) =>
-      current.includes(id)
-        ? current.filter((item) => item !== id)
-        : [...current, id],
-    );
-  };
 
   async function handleAddToCart() {
     if (submitting.current) return;
@@ -140,42 +131,17 @@ export default function ProductOptions({ product }: ProductOptionsProps) {
         <legend className="text-sm font-bold text-amber-950">
           Chọn topping
         </legend>
-        <div className="mt-3 space-y-2">
-          {TOPPINGS.map((item) => {
-            const stock = current?.toppings.find(
-              (topping) => topping.code === item.id,
-            );
-            const checked = toppings.includes(item.id);
-            const disabled =
-              busy || (!checked && (!stock || stock.maxQuantity < 1));
-            const label = !stock
-              ? "Đang kiểm tra..."
-              : stock.stockQuantity < 1
-                ? "Hết topping"
-                : stock.maxQuantity < 1
-                  ? "Không đủ cho lựa chọn này"
-                  : `+${formatPrice(item.price)}`;
-            return (
-              <label
-                key={item.id}
-                className={`flex items-center justify-between rounded-xl border border-amber-900/10 px-4 py-3 ${disabled ? "bg-stone-100 text-stone-400" : "bg-white cursor-pointer"}`}
-              >
-                <span className="flex items-center gap-3 text-sm font-medium text-stone-800">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    disabled={disabled}
-                    onChange={() => toggleTopping(item.id)}
-                    className="h-4 w-4 accent-amber-800"
-                  />
-                  {item.label}
-                </span>
-                <span className="text-sm font-semibold text-amber-800">
-                  {label}
-                </span>
-              </label>
-            );
-          })}
+        <div className="mt-3">
+          <ToppingCounter
+            ids={toppings}
+            onChange={(ids) => {
+              setToppings(ids);
+              setMessage("");
+            }}
+            stock={current}
+            cups={1}
+            busy={busy}
+          />
         </div>
       </fieldset>
 
@@ -206,7 +172,7 @@ export default function ProductOptions({ product }: ProductOptionsProps) {
             (availability.result
               ? current?.message ||
                 (availability.result.available
-                  ? `Có thể thêm ${current?.maxQuantity ?? 0} ly theo lựa chọn này.`
+                  ? ""
                   : "Giỏ hiện tại có món cần sửa.")
               : "Đang kiểm tra tình trạng món...")}
         </p>
@@ -219,9 +185,6 @@ export default function ProductOptions({ product }: ProductOptionsProps) {
             Thử lại
           </button>
         )}
-        <Link href="/cart" className="mt-3 block text-sm underline">
-          Xem hoặc sửa giỏ hàng
-        </Link>
         {message && (
           <p
             className="mt-3 text-center text-sm font-semibold text-amber-100"

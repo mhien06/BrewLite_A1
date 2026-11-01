@@ -67,10 +67,10 @@ export default function ProductCard({ product }: ProductCardProps) {
             <span className="inline-flex items-center gap-1 truncate rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-emerald-800 shadow-xs backdrop-blur-xs ring-1 ring-emerald-600/20">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600"></span>
               <span
-                title="Ước tính size S, không topping; chưa giữ chỗ nguyên liệu"
+
                 className="truncate"
               >
-                Còn hàng · {product.stock} ly S
+                Còn hàng ({product.stock})
               </span>
             </span>
           ) : (

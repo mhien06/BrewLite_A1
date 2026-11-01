@@ -1,3 +1,4 @@
+import { formatToppingLabels } from "@/utils/toppings";
 import type { CartItem } from '@/types/cart';
 
 interface CheckoutOrderSummaryProps {
@@ -29,9 +30,7 @@ export default function CheckoutOrderSummary({
 
       <div className="mt-4 space-y-3">
         {items.map((item) => {
-          const toppings = item.toppings
-            .map((topping) => topping.label)
-            .join(', ');
+          const toppings = formatToppingLabels(item.toppings.map((topping) => topping.label));
 
           return (
             <div

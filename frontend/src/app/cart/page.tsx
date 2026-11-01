@@ -1,5 +1,6 @@
 "use client";
 
+import { formatToppingLabels } from "@/utils/toppings";
 import Image from "next/image";
 import { useRef, useState } from "react";
 import CartItemEditor from "@/components/cart/CartItemEditor";
@@ -36,10 +37,8 @@ export default function CartPage() {
   async function changeQuantity(item: CartItem, quantity: number) {
     if (submitting.current) return;
     const before = useCartStore.getState().items;
-    if (quantity <= 0) {
-      removeItem(item.key);
-      return;
-    }
+    // Giảm tối thiểu còn 1 ly; dùng nút Xóa để bỏ món.
+    if (quantity < 1) return;
     const next = before.map((line) =>
       line.key === item.key ? { ...line, quantity } : line,
     );
@@ -85,13 +84,27 @@ export default function CartPage() {
     setMessage("");
     try {
       const checked = await checkCartAvailability(next);
-      // Cho lưu việc bỏ/đổi topping để khách sửa từng dòng, giữ cảnh báo nếu giỏ còn thiếu.
+      const changedIndex = next.findIndex(
+        (line) =>
+          line.productId === changed.productId &&
+          line.size.id === changed.size.id &&
+          line.toppings
+            .map((t) => t.id)
+            .sort()
+            .join(",") ===
+            changed.toppings
+              .map((t) => t.id)
+              .sort()
+              .join(","),
+      );
+      const problem = checked.items[changedIndex]?.message;
+      if (problem || changedIndex < 0) {
+        setMessage(problem || "Không kiểm tra được lựa chọn.");
+        return;
+      }
       if (useCartStore.getState().applyCheckedItems(before, next)) {
         setEditingKey(null);
-        setMessage(
-          checked.items.find((line) => line.message)?.message ||
-            "Đã cập nhật lựa chọn.",
-        );
+        setMessage("Đã cập nhật lựa chọn.");
       } else setMessage("Giỏ vừa thay đổi. Vui lòng thử lại.");
     } catch (error) {
       setMessage(
@@ -129,7 +142,11 @@ export default function CartPage() {
           {!availability.result && !availability.error && (
             <p>Đang kiểm tra món và topping...</p>
           )}
-          {(availability.error || message) && (
+          {(availability.error ||
+            (message &&
+              !availability.result?.items.some(
+                (line) => line.message === message,
+              ))) && (
             <p className="rounded-xl bg-amber-50 p-3 text-amber-900">
               {availability.error || message}
             </p>
@@ -169,7 +186,7 @@ export default function CartPage() {
               const stock = availability.result?.items[index];
               const toppingNames =
                 item.toppings.length > 0
-                  ? item.toppings.map((topping) => topping.label).join(", ")
+                  ? formatToppingLabels(item.toppings.map((topping) => topping.label))
                   : "Không topping";
 
               return (
@@ -207,8 +224,8 @@ export default function CartPage() {
                           onClick={() =>
                             changeQuantity(item, item.quantity - 1)
                           }
-                          className="flex h-9 w-9 items-center justify-center rounded-full text-lg font-bold transition hover:bg-[#fff1e3]"
-                          disabled={busy}
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-lg font-bold transition hover:bg-[#fff1e3] disabled:cursor-not-allowed disabled:text-stone-300 disabled:hover:bg-transparent"
+                          disabled={busy || item.quantity <= 1}
                           aria-label={`Giảm số lượng ${item.name}`}
                         >
                           −
@@ -267,7 +284,7 @@ export default function CartPage() {
                     }
                     className="mt-2 text-sm font-semibold text-amber-800 underline"
                   >
-                    Sửa size / topping
+                    Chỉnh sửa món
                   </button>
                   {editingKey === item.key && (
                     <CartItemEditor
@@ -343,14 +360,14 @@ export default function CartPage() {
                     );
                   }
                 }}
-                className="mt-5 flex w-full items-center justify-center rounded-full bg-[#f6a14a] px-5 py-3.5 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435]"
+                className={`mt-5 flex w-full items-center justify-center rounded-full px-5 py-3.5 text-sm font-extrabold ${checkoutAllowed ? "bg-[#f6a14a] text-[#40241b] hover:bg-[#f29435]" : "cursor-not-allowed bg-stone-200 text-stone-500"}`}
               >
                 Thanh toán
               </Link>
             ) : (
               <Link
                 href="/login"
-                className="mt-5 flex w-full items-center justify-center rounded-full bg-[#f6a14a] px-5 py-3.5 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435]"
+                className={`mt-5 flex w-full items-center justify-center rounded-full px-5 py-3.5 text-sm font-extrabold ${checkoutAllowed ? "bg-[#f6a14a] text-[#40241b] hover:bg-[#f29435]" : "cursor-not-allowed bg-stone-200 text-stone-500"}`}
               >
                 Đăng nhập để thanh toán
               </Link>
