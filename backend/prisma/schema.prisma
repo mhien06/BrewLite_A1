@@ -7,7 +7,14 @@ datasource db {
   provider = "postgresql"
 }
 
+enum UserRole {
+  CUSTOMER
+  STAFF
+}
+
 model User {
+  role                UserRole             @default(CUSTOMER)
+  inventoryMovements  InventoryMovement[]
   id                  Int                  @id @default(autoincrement())
   email               String               @unique
   name                String               @default("KHACH HANG")
@@ -128,7 +135,23 @@ model Payment {
   @@index([orderId])
 }
 
+model InventoryMovement {
+  id           Int        @id @default(autoincrement())
+  ingredientId Int
+  actorId      Int
+  delta        Int
+  before       Int
+  after        Int
+  reason       String
+  createdAt    DateTime   @default(now())
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+  actor        User       @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([ingredientId, createdAt])
+}
+
 model Ingredient {
+  movements      InventoryMovement[]
   id             Int                 @id @default(autoincrement())
   code           String              @unique
   name           String

@@ -225,35 +225,6 @@ export class InventoryService {
     // Map lưu tổng lượng cần dùng theo từng ingredientId
     const demandsMap = new Map<number, AggregatedIngredientDemand>();
 
-    const addIngredientNeed = (
-      ing: {
-        id: number;
-        code: string;
-        name: string;
-        unit: string;
-        stock: number;
-        version: number;
-      },
-      amountNeeded: number,
-    ) => {
-      const current = demandsMap.get(ing.id);
-      if (current) {
-        current.requiredAmount += amountNeeded;
-        current.currentStock = ing.stock;
-        current.version = ing.version;
-      } else {
-        demandsMap.set(ing.id, {
-          ingredientId: ing.id,
-          code: ing.code,
-          name: ing.name,
-          unit: ing.unit,
-          requiredAmount: amountNeeded,
-          currentStock: ing.stock,
-          version: ing.version,
-        });
-      }
-    };
-
     // Duyệt qua từng dòng món trong giỏ hàng để cộng dồn nguyên liệu
     for (const item of items) {
       if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
@@ -277,7 +248,11 @@ export class InventoryService {
             `Định mức nguyên liệu ${recipe.ingredient.name} không hợp lệ.`,
           );
         }
-        addIngredientNeed(recipe.ingredient, amountForOneCup * item.quantity);
+        this.addIngredientNeed(
+          demandsMap,
+          recipe.ingredient,
+          amountForOneCup * item.quantity,
+        );
       }
 
       // 4b. Cộng nguyên liệu của từng topping đi kèm
@@ -297,7 +272,11 @@ export class InventoryService {
               `Định mức nguyên liệu cho topping ${toppingCode} không hợp lệ.`,
             );
           }
-          addIngredientNeed(tRecipe.ingredient, tRecipe.amount * item.quantity);
+          this.addIngredientNeed(
+            demandsMap,
+            tRecipe.ingredient,
+            tRecipe.amount * item.quantity,
+          );
         }
       }
     }
@@ -405,64 +384,87 @@ export class InventoryService {
       }
     }
 
-    // Bước 3: Trừ từng nguyên liệu kèm khóa lạc quan (Optimistic Locking)
+    // Bước 3: Xử lý lần lượt theo ID nguyên liệu để hạn chế deadlock.
     for (const demand of demands) {
-      let isDeducted = false;
-      let expectedVersion = demand.version;
+      await this.deductOneIngredient(tx, demand);
+    }
+    return demands;
+  }
 
-      for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
-        // Chỉ trừ thành công nếu: đúng version hiện tại VÀ tồn kho >= lượng cần trừ
-        const result = await tx.ingredient.updateMany({
-          where: {
-            id: demand.ingredientId,
-            version: expectedVersion,
-            stock: { gte: demand.requiredAmount },
-          },
-          data: {
-            stock: { decrement: demand.requiredAmount },
-            version: { increment: 1 },
-          },
-        });
+  /** Gom nhu cầu của các món khác nhau vào cùng một nguyên liệu. */
+  private addIngredientNeed(
+    demands: Map<number, AggregatedIngredientDemand>,
+    ingredient: {
+      id: number;
+      code: string;
+      name: string;
+      unit: string;
+      stock: number;
+      version: number;
+    },
+    amountNeeded: number,
+  ): void {
+    const existing = demands.get(ingredient.id);
+    if (existing) {
+      existing.requiredAmount += amountNeeded;
+      existing.currentStock = ingredient.stock;
+      existing.version = ingredient.version;
+      return;
+    }
+    demands.set(ingredient.id, {
+      ingredientId: ingredient.id,
+      code: ingredient.code,
+      name: ingredient.name,
+      unit: ingredient.unit,
+      requiredAmount: amountNeeded,
+      currentStock: ingredient.stock,
+      version: ingredient.version,
+    });
+  }
 
-        if (result.count === 1) {
-          isDeducted = true;
-          break;
-        }
+  /** Trừ một nguyên liệu, có kiểm tra version để tránh hai đơn cùng lấy một phần kho. */
+  private async deductOneIngredient(
+    transaction: Prisma.TransactionClient,
+    demand: AggregatedIngredientDemand,
+  ): Promise<void> {
+    let expectedVersion = demand.version;
 
-        // Nếu chưa trừ được (do có đơn khác vừa cập nhật cùng lúc), đọc lại dữ liệu mới nhất
-        const latestIngredient = await tx.ingredient.findUnique({
-          where: { id: demand.ingredientId },
-          select: { id: true, stock: true, version: true },
-        });
+    for (let attempt = 0; attempt < MAX_RETRY; attempt++) {
+      const result = await transaction.ingredient.updateMany({
+        where: {
+          id: demand.ingredientId,
+          version: expectedVersion,
+          stock: { gte: demand.requiredAmount },
+        },
+        data: {
+          stock: { decrement: demand.requiredAmount },
+          version: { increment: 1 },
+        },
+      });
+      // Chỉ một dòng được cập nhật: trừ thành công, kết thúc hàm.
+      if (result.count === 1) return;
 
-        // Nếu kho đã hết -> Ném lỗi 409 để rollback toàn bộ transaction
-        if (
-          !latestIngredient ||
-          latestIngredient.stock < demand.requiredAmount
-        ) {
-          throw new ConflictException(
-            `Nguyên liệu ${demand.name} không đủ tồn kho để thanh toán.`,
-          );
-        }
-
-        // Nếu version không đổi mà vẫn không update được -> Báo xung đột ngay
-        if (latestIngredient.version === expectedVersion) {
-          throw new ConflictException(
-            `Xung đột cập nhật tồn kho nguyên liệu ${demand.name}. Vui lòng thử lại.`,
-          );
-        }
-
-        // Kho vẫn còn đủ, cập nhật lại version mới để thử lại ở vòng lặp kế tiếp
-        expectedVersion = latestIngredient.version;
-      }
-
-      if (!isDeducted) {
+      // Có đơn khác cập nhật trước: đọc lại kho và version mới.
+      const latestIngredient = await transaction.ingredient.findUnique({
+        where: { id: demand.ingredientId },
+        select: { id: true, stock: true, version: true },
+      });
+      if (!latestIngredient || latestIngredient.stock < demand.requiredAmount) {
         throw new ConflictException(
-          `Xung đột cập nhật đồng thời trên nguyên liệu ${demand.name}. Vui lòng thử lại.`,
+          `Nguyên liệu ${demand.name} không đủ tồn kho để thanh toán.`,
         );
       }
+      if (latestIngredient.version === expectedVersion) {
+        throw new ConflictException(
+          `Xung đột cập nhật tồn kho nguyên liệu ${demand.name}. Vui lòng thử lại.`,
+        );
+      }
+      expectedVersion = latestIngredient.version;
     }
 
-    return demands;
+    // Đã thử đủ số lần: báo 409 và để transaction rollback toàn bộ đơn.
+    throw new ConflictException(
+      `Xung đột cập nhật đồng thời trên nguyên liệu ${demand.name}. Vui lòng thử lại.`,
+    );
   }
 }

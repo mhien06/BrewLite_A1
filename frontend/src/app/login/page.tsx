@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/stores/auth.store';
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/stores/auth.store";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -12,8 +12,8 @@ export default function LoginPage() {
   const storeError = useAuthStore((state) => state.error);
   const clearError = useAuthStore((state) => state.clearError);
 
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -21,15 +21,15 @@ export default function LoginPage() {
     clearError();
 
     const handleLogout = () => {
-      setEmail('');
-      setPassword('');
+      setEmail("");
+      setPassword("");
       setLocalError(null);
       clearError();
     };
 
-    window.addEventListener('brewlite:logout', handleLogout);
+    window.addEventListener("brewlite:logout", handleLogout);
     return () => {
-      window.removeEventListener('brewlite:logout', handleLogout);
+      window.removeEventListener("brewlite:logout", handleLogout);
       clearError();
     };
   }, [clearError]);
@@ -40,17 +40,18 @@ export default function LoginPage() {
     clearError();
 
     if (!email.trim()) {
-      setLocalError('Vui lòng nhập email.');
+      setLocalError("Vui lòng nhập email.");
       return;
     }
     if (!password) {
-      setLocalError('Vui lòng nhập mật khẩu.');
+      setLocalError("Vui lòng nhập mật khẩu.");
       return;
     }
 
     const success = await login(email.trim(), password);
     if (success) {
-      router.push('/');
+      const user = useAuthStore.getState().user;
+      router.replace(user?.role === "STAFF" ? "/staff" : "/");
     }
   };
 
@@ -85,7 +86,7 @@ export default function LoginPage() {
             Đăng nhập BrewLite
           </h1>
           <p className="mt-1 text-sm text-[#9a7c6b]">
-            Đăng nhập để đặt đồ uống và tích lũy điểm thưởng
+            Khách hàng mua đồ uống · Nhân viên quản lý quầy
           </p>
         </div>
 
@@ -129,7 +130,7 @@ export default function LoginPage() {
               <input
                 id="password"
                 name="password"
-                type={showPassword ? 'text' : 'password'}
+                type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
                 required
                 value={password}
@@ -140,11 +141,20 @@ export default function LoginPage() {
               <button
                 type="button"
                 onClick={() => setShowPassword((visible) => !visible)}
-                aria-label={showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                aria-label={showPassword ? "Ẩn mật khẩu" : "Hiện mật khẩu"}
                 aria-pressed={showPassword}
                 className="absolute inset-y-0 right-3 inline-flex items-center text-[#9a7c6b] hover:text-[#40241b]"
               >
-                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <svg
+                  className="h-5 w-5"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
                   {showPassword ? (
                     <>
                       <path d="M3 3l18 18" />
@@ -192,13 +202,13 @@ export default function LoginPage() {
                 Đang xử lý...
               </span>
             ) : (
-              'Đăng nhập'
+              "Đăng nhập"
             )}
           </button>
         </form>
 
         <div className="mt-6 text-center text-sm text-[#9a7c6b]">
-          Chưa có tài khoản?{' '}
+          Chưa có tài khoản?{" "}
           <Link
             href="/register"
             className="font-bold text-[#7a3b22] hover:underline"

@@ -1031,3 +1031,102 @@ Thay chuỗi kết nối bằng database kiểm thử của bạn; không dùng 
 - Đây là kết quả local trước review; chưa commit, push hoặc merge phần T10B.
 
 - Kiểm tra mất phản hồi: API thật đã ghi PAID, chặn phản hồi ở trình duyệt rồi bấm lại; frontend gửi cùng Idempotency-Key và vào xác nhận thành công. Tổng 148 test tự động đạt (72 backend unit + 44 E2E + 7 PostgreSQL T10B + 25 frontend unit).
+
+
+## T10 — Trang nhân viên (phần mở rộng)
+
+Trang nhân viên bổ sung giao diện để theo dõi nguyên liệu và xử lý đơn đã thanh toán. Theo mục 3.2 của đề, giao diện nhân viên là phần mở rộng ngoài MVP; nghiệp vụ backend T10 vẫn được kiểm thử riêng.
+
+### Chức năng và tài khoản
+
+- **Khách hàng (`CUSTOMER`):** xem thực đơn, chọn món, giỏ hàng, thanh toán và xem đơn của mình.
+- **Nhân viên (`STAFF`):** đăng nhập sẽ vào `/staff`, dùng giao diện quản lý riêng và không có giỏ hàng. Tài khoản nhân viên không được tạo đơn hoặc thanh toán, kể cả gọi API trực tiếp. Muốn mua hàng thì dùng tài khoản khách riêng; đây là quy ước phân quyền của nhóm.
+- **Nguyên liệu:** tìm theo tên/mã, xem tồn và đơn vị; chọn **Nhập thêm** hoặc **Hao hụt**, nhập số lượng dương và lý do. Biểu mẫu hiển thị lượng tồn dự kiến trước khi lưu.
+- **Công thức:** xem định lượng S/M/L và số phần có thể pha theo nguyên liệu bắt buộc. Số phần tính riêng từng món, chưa bao gồm topping; không cộng các số này thành tổng tồn vì nhiều món dùng chung nguyên liệu.
+- **Topping:** tính là hàng đã chuẩn bị sẵn. Mỗi ly chọn trân châu dùng 30 g, kem sữa dùng 40 ml, thạch cà phê dùng 35 g theo công thức mẫu trong seed. Hệ thống chưa quản lý khâu chế biến topping từ nguyên liệu thô.
+- **Đơn hàng:** xem đơn đã thanh toán, lần lượt **Nhận pha chế → Đã pha xong → Đã giao khách**.
+- **Điểm thưởng:** chỉ xem điểm và lịch sử cộng điểm, không có chức năng chỉnh điểm thủ công.
+- **Lịch sử kho:** xem người thực hiện, thời gian, lý do và lượng tồn trước/sau mỗi lần nhân viên điều chỉnh. Phần này không phải lịch sử tiêu hao nguyên liệu của mọi lần bán hàng.
+
+Thêm giỏ và tạo đơn `PENDING` chưa trừ nguyên liệu. Khi thanh toán thành công, backend trừ nguyên liệu và cộng điểm một lần; thanh toán thất bại không thực hiện hai việc này. Cập nhật trạng thái pha chế không trừ kho hoặc cộng điểm thêm.
+
+### Chạy trang nhân viên bằng Docker
+
+1. Mở Docker Desktop, đợi **Engine running**. Tại thư mục gốc dự án, dùng file `.env` đã thiết lập theo hướng dẫn Docker phía trên rồi chạy:
+
+```powershell
+docker compose -p brewlite-t09-check up --build -d
+docker compose -p brewlite-t09-check ps
+```
+
+Đợi PostgreSQL và API báo `healthy`, web báo `Up`. API tự áp migration khi khởi động. Chỉ cần một bộ web/API/PostgreSQL cho cả khách và nhân viên; không cần chạy thêm backend hoặc frontend bằng npm cùng lúc.
+
+2. Nếu database mới chưa có món và công thức, tạo dữ liệu mẫu:
+
+```powershell
+docker compose -p brewlite-t09-check exec api npm run prisma:seed
+```
+
+3. Mở <http://localhost:3000/register>, đăng ký một tài khoản dành cho nhân viên. Nếu tài khoản đã tồn tại trong database Docker này thì bỏ qua đăng ký.
+
+4. Người quản lý dự án cấp quyền trong terminal. Thay email bên dưới bằng **đúng email đã đăng ký**:
+
+```powershell
+docker compose -p brewlite-t09-check exec api npm run staff:role -- nhanvien@example.com STAFF
+```
+
+Nếu báo `P2025` hoặc không tìm thấy bản ghi, email đó chưa có trong database đang chạy. Kiểm tra lại email và tài khoản trước khi cấp quyền; lệnh này không tự tạo tài khoản mới.
+
+5. Đăng xuất rồi đăng nhập lại tài khoản vừa cấp quyền. Trang sẽ chuyển tới <http://localhost:3000/staff>. Nếu vừa sửa code mà vẫn thấy giao diện cũ, đợi build hoàn tất và tải lại bằng **Ctrl + Shift + R**.
+
+Khi cần thu hồi quyền:
+
+```powershell
+docker compose -p brewlite-t09-check exec api npm run staff:role -- nhanvien@example.com CUSTOMER
+```
+
+API đọc quyền từ database khi xác thực request. Sau khi thu hồi quyền, tài khoản không còn được dùng API nhân viên dù JWT cũ chưa hết hạn.
+
+Với cách chạy trực tiếp bằng Node, dùng hướng dẫn PostgreSQL → backend → frontend ở phần đầu README. Tại thư mục `backend`, chạy migration và cấp quyền cho tài khoản đã đăng ký trong database tương ứng:
+
+```powershell
+npm run prisma:generate
+npm run prisma:deploy
+npm run staff:role -- nhanvien@example.com STAFF
+```
+
+Sau đó chạy backend/frontend như bình thường. Database PostgreSQL trên máy và database trong Docker có thể là hai bộ dữ liệu khác nhau; tài khoản phải được tạo và cấp quyền trong đúng database đang dùng.
+
+### Kiểm tra thủ công
+
+| Bước | Thao tác | Kết quả cần thấy |
+| --- | --- | --- |
+| 1 | Khách đăng nhập và mở `/staff` | Bị từ chối, không thấy dữ liệu quản lý |
+| 2 | Đăng nhập tài khoản STAFF | Vào quầy, không có giỏ hàng; mở `/cart` hoặc `/checkout` sẽ quay lại `/staff` |
+| 3 | Trong Nguyên liệu, chọn Nhập thêm, nhập 100 và lý do | Tồn dự kiến tăng 100; lưu xong tồn tăng đúng 100, có lịch sử trước/sau |
+| 4 | Chọn Hao hụt, nhập số lượng lớn hơn tồn | Không cho lưu, không thay đổi kho |
+| 5 | Mở biểu mẫu cùng nguyên liệu ở hai tab; lưu tab đầu rồi lưu tab sau | Tab sau báo kho đã thay đổi, không ghi đè; bấm Làm mới và mở lại biểu mẫu để thử lại |
+| 6 | Khách thanh toán thành công, nhân viên bấm Làm mới | Đơn xuất hiện ở Chờ pha chế; kho giảm theo size/topping và điểm cộng theo T10A |
+| 7 | Nhân viên lần lượt nhận pha, pha xong, giao khách | Trạng thái PREPARING → READY → COMPLETED; kho và điểm không thay đổi thêm |
+| 8 | Khách thanh toán thất bại rồi thử lại | Giữ giỏ, thất bại không trừ kho/cộng điểm; thành công mới đưa đơn vào hàng đợi pha chế |
+| 9 | Thu hồi quyền STAFF rồi tải lại dữ liệu | API từ chối quyền truy cập nhân viên |
+
+Để quan sát hai bên cùng lúc, dùng cửa sổ Chrome bình thường cho khách và cửa sổ ẩn danh (**Ctrl + Shift + N**) cho nhân viên. Hai bên dùng tài khoản riêng nhưng chung database. Hai tab trong cùng phiên trình duyệt dùng chung đăng nhập.
+
+Trang chưa cập nhật tự động: bấm **Làm mới** để xem dữ liệu từ máy khác. API hiện giới hạn 100 đơn và 100 lần chỉnh kho gần nhất, 200 tài khoản, mỗi tài khoản 30 giao dịch điểm; chưa có phân trang hoặc bộ lọc trạng thái đơn. Đây là giới hạn kỹ thuật của bản hiện tại, không phải yêu cầu của đề. Tìm kiếm nguyên liệu áp dụng trên danh sách đã tải.
+
+### Kiểm thử tự động phần nhân viên
+
+`backend/test/staff.database-test.ts` kiểm tra NestJS, JWT và PostgreSQL thật: quyền 401/403; chặn khách tự cấp quyền; chặn nhân viên mua hàng; chỉnh kho đồng thời; dữ liệu sai/âm kho; thứ tự pha chế; điểm chỉ xem; rollback khi ghi lịch sử thất bại; thu hồi quyền.
+
+Để chạy lại, tạo database kiểm thử riêng có tên kết thúc bằng `_test`. Trong terminal tại `backend`, thay chuỗi kết nối bằng database thử của bạn:
+
+```powershell
+$env:TEST_DATABASE_URL='postgresql://USER:PASSWORD@localhost:PORT/brewlite_staff_test?schema=public'
+$env:DATABASE_URL=$env:TEST_DATABASE_URL
+npm run prisma:generate
+npm run prisma:deploy
+npm run test:database
+```
+
+Không dùng database demo hoặc dữ liệu thật cho kiểm thử. Lệnh `test:database` chạy cả bộ PostgreSQL T10B và bộ nhân viên.
