@@ -100,4 +100,81 @@ export class OrdersService {
       });
     });
   }
+
+  async findMyOrders(userId: number) {
+    return this.prisma.order.findMany({
+      where: { userId },
+      orderBy: { createdAt: 'desc' },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        paymentMethod: true,
+        paidAt: true,
+        total: true,
+        createdAt: true,
+        items: {
+          select: {
+            id: true,
+            productId: true,
+            size: true,
+            toppings: true,
+            quantity: true,
+            unitPrice: true,
+            lineTotal: true,
+            product: {
+              select: {
+                id: true,
+                name: true,
+                imageUrl: true,
+              },
+            },
+          },
+        },
+      },
+    });
+  }
+
+  async findOne(userId: number, id: number) {
+    if (!Number.isInteger(id) || id <= 0) {
+      throw new BadRequestException('Mã đơn hàng không hợp lệ.');
+    }
+
+    const order = await this.prisma.order.findFirst({
+      where: { id, userId },
+      select: {
+        id: true,
+        userId: true,
+        status: true,
+        paymentMethod: true,
+        paidAt: true,
+        total: true,
+        createdAt: true,
+        items: {
+          select: {
+            id: true,
+            productId: true,
+            size: true,
+            toppings: true,
+            quantity: true,
+            unitPrice: true,
+            lineTotal: true,
+            product: {
+              select: {
+                id: true,
+                name: true,
+                imageUrl: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Không tìm thấy đơn hàng.');
+    }
+
+    return order;
+  }
 }
