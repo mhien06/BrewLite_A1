@@ -972,7 +972,51 @@ Bộ API test T07 dùng NestJS, ValidationPipe, JWT và bcrypt cùng Prisma mock
 
 ## T10: nghiệp vụ backend
 
-Phần Khoa: state machine, khuyến mãi và điểm thưởng đã được giữ trong code. Tài liệu trước tích hợp: [T10A](docs/t10/t10a-readme-before-integration.md). Phần Hiển: xem [hướng dẫn T10B](docs/t10/T10B.md).
+Phần Khoa (T10A) gồm máy trạng thái đơn hàng, khuyến mãi và điểm thưởng. Phần Hiển (T10B) gồm thanh toán idempotent và kiểm soát kho nguyên liệu khi đặt đồng thời. Hướng dẫn chạy và kiểm tra được trình bày ngay dưới đây.
+
+### Nghiệp vụ T10A và T10B
+
+- Luồng chính: `PENDING → PAID → PREPARING → READY → COMPLETED`; backend chặn chuyển trạng thái không hợp lệ.
+- Backend tính tiền từ dữ liệu sản phẩm, size/topping và mã khuyến mãi hợp lệ; cộng điểm sau khi đơn được thanh toán thành công.
+- Tạo đơn `PENDING` chỉ kiểm tra kho. Thanh toán thành công mới trừ nguyên liệu, cập nhật đơn, ghi Payment và cộng điểm trong cùng transaction; thanh toán thất bại không trừ kho/cộng điểm.
+- Gửi lại cùng tài khoản, `Idempotency-Key` và nội dung thanh toán sẽ nhận kết quả đã lưu. Cùng khóa nhưng khác nội dung trả HTTP 409. Mất phản hồi dùng lại khóa cũ; thử lại một lần thất bại đã biết dùng khóa mới trên cùng đơn.
+- Kho lưu nguyên liệu và định lượng theo size/topping. Số phần có thể pha bằng `min(floor(tồn / định lượng))` của các nguyên liệu bắt buộc. Backend gộp nhu cầu toàn đơn và dùng transaction + optimistic locking để tránh bán vượt tồn.
+
+### Chạy và kiểm tra T10
+
+Làm theo phần cài đặt ở đầu README: PostgreSQL → backend → frontend. Backend cần file `.env` hợp lệ. Trong terminal tại `backend`:
+
+```powershell
+npm ci
+npm run prisma:generate
+npm run prisma:deploy
+npm run prisma:seed
+npm run start:dev
+```
+
+Terminal khác tại `frontend`:
+
+```powershell
+npm ci
+npm run dev
+```
+
+Hoặc dùng Docker theo hướng dẫn chung; không chạy chồng Node và Docker trên cùng cổng. Seed không phải thao tác nhập kho và không khôi phục lượng tồn nguyên liệu đã dùng.
+
+Kiểm tra thanh toán thành công, thất bại rồi thử lại, gửi lặp cùng khóa, khóa cũ với nội dung khác và hai đơn cùng tranh nguyên liệu. Đối chiếu tổng tiền, mã đơn, điểm, Payment và lượng tồn; một yêu cầu thanh toán thành công chỉ được gây tác động một lần.
+
+Chạy unit test trong `backend` bằng `npm test`. Với kiểm thử PostgreSQL, tạo database riêng có tên kết thúc bằng `_test`, sau đó trong terminal `backend`:
+
+```powershell
+$env:TEST_DATABASE_URL='postgresql://USER:PASSWORD@localhost:PORT/brewlite_t10b_test?schema=public'
+$env:DATABASE_URL=$env:TEST_DATABASE_URL
+npm run prisma:deploy
+npm run test:database
+npm run test:e2e
+```
+
+Thay chuỗi kết nối bằng database kiểm thử của bạn; không dùng database demo hoặc dữ liệu thật. Bộ database kiểm tra thanh toán đồng thời, tranh kho và rollback; một số E2E khác dùng Prisma mock. Đóng terminal thử nghiệm sau khi chạy để không dùng nhầm biến kết nối cho ứng dụng.
+
 
 
 ## Kết quả kiểm tra T10B (31/10/2026)
