@@ -1027,10 +1027,41 @@ Thay chuỗi kết nối bằng database kiểm thử của bạn; không dùng 
 - Demo với API/PostgreSQL thật: PAYMENT_FAILED → thử lại cùng đơn → PAID → xác nhận → reload → lịch sử đạt. Đã chạy lặp; trang xác nhận được điều hướng trực tiếp sau PAID.
 - Kiểm tra CARD + BREW10: subtotal 58.000đ, giảm 5.800đ, tổng 52.200đ; chỉ cộng 5 điểm một lần. Replay trả kết quả cũ; khác payload hoặc khóa mới cho đơn đã PAID trả 409.
 - Sửa cấu hình Tailwind/PostCSS để build Webpack production có CSS, kiểm tra lại ảnh desktop/mobile.
-- Bản demo chạy frontend/backend ở máy, PostgreSQL trong Docker, bằng database riêng. Đã thử build Compose T10B: image API build đạt; image web dừng tại npm ci --omit=dev do registry.npmjs.org báo EIDLETIMEOUT. Chưa xác nhận đủ ba container T10B mới; không dùng kết quả Docker T09 thay cho kết quả này.
-- Đây là kết quả local trước review; chưa commit, push hoặc merge phần T10B.
+- Ở lần kiểm tra ban đầu, demo chạy frontend/backend trên máy và PostgreSQL trong Docker, bằng database riêng. Lần build Compose khi đó bị gián đoạn do npm registry báo `EIDLETIMEOUT`; đây là ghi nhận lịch sử, không phải trạng thái hiện tại. Kết quả tích hợp mới nằm ở mục bên dưới.
+- Các kết quả trong mục ngày 31/10 là ghi nhận tại thời điểm kiểm tra ban đầu. T10A/T10B sau đó đã được tích hợp vào `task-10/backend-logic`; trang nhân viên được gộp qua PR #34 ngày 01/11/2026. Chưa gộp T10 vào `main`.
 
 - Kiểm tra mất phản hồi: API thật đã ghi PAID, chặn phản hồi ở trình duyệt rồi bấm lại; frontend gửi cùng Idempotency-Key và vào xác nhận thành công. Tổng 148 test tự động đạt (72 backend unit + 44 E2E + 7 PostgreSQL T10B + 25 frontend unit).
+
+
+## Kết quả kiểm tra tích hợp T10 (01/11/2026)
+
+Kiểm tra trên nhánh `task-10/backend-logic`, commit `16594da` (đã gộp trang nhân viên qua PR #34). Đối chiếu bốn yêu cầu nghiệp vụ ở mục 9 và Definition of Done ở mục 10 của đề BrewLite.
+
+| Hạng mục | Kết quả và phạm vi |
+| --- | --- |
+| Máy trạng thái đơn hàng | Có PENDING → PAID → PREPARING → READY → COMPLETED; unit test chặn chuyển sai và API nhân viên chặn bỏ qua bước pha chế |
+| Thanh toán idempotent | Cùng tài khoản/khóa/nội dung trả kết quả đã lưu; kiểm tra hai service độc lập gửi đồng thời, không trừ kho/cộng điểm/ghi Payment lặp |
+| Kiểm soát tồn kho | PostgreSQL thật kiểm tra nhiều đơn tranh nguyên liệu, cộng gộp nhu cầu size/topping và nguyên liệu dùng chung; transaction + optimistic locking không cho bán vượt tồn |
+| Khuyến mãi và điểm thưởng | Có kiểm tra mã, thời gian áp dụng, giá trị tối thiểu và mức giảm; cộng điểm sau PAID, không cộng lần hai khi gửi lại thanh toán |
+| Phân quyền nhân viên | Khách không truy cập API quản lý; nhân viên không tạo đơn/thanh toán; thu hồi quyền có hiệu lực với JWT cũ |
+| Điều chỉnh kho | Kiểm tra version, không cho tồn âm, lưu lịch sử trước/sau và rollback khi ghi lịch sử thất bại |
+
+Kết quả lệnh vừa chạy trên bản tích hợp:
+
+| Bộ kiểm tra | Kết quả |
+| --- | --- |
+| Backend unit test (`npm test`) | 72/72 đạt |
+| Backend E2E (`npm run test:e2e`) | 44/44 đạt; một số bài dùng Prisma mock, bài PostgreSQL T10A dùng database thử |
+| PostgreSQL (`npm run test:database`) | 16/16 đạt: 7 T10B + 9 phần nhân viên, trên database riêng có tên kết thúc `_test` |
+| Frontend unit test (`npm test`) | 25/25 đạt |
+| Lint và production build | Backend/frontend đều đạt |
+| Migration trên database thử | `prisma migrate deploy` đạt, không còn migration chờ áp dụng |
+
+Tổng 157 kiểm thử tự động đạt; con số này không có nghĩa là toàn bộ ca thử đều dùng database hoặc trình duyệt thật.
+
+Docker Compose của bản đang chạy (`brewlite-t09-check`) đã khởi động đủ ba dịch vụ: PostgreSQL và API `healthy`, web `Up`; cổng tương ứng 5432, 3001 và 3000. Đây là kết quả kiểm tra trạng thái container, không thay thế việc thử toàn bộ luồng giao diện. Cách chạy và các bước thử tay khách/nhân viên nằm ngay bên dưới.
+
+Nhánh đã có commit tích hợp. Kết quả kỹ thuật trên không thay thế review của thành viên nhóm; hoàn tất review trước khi gộp T10 vào `main`. Bản hiện tại chưa có phân trang hoặc tự cập nhật dữ liệu trang nhân viên; các giới hạn được ghi trong hướng dẫn sử dụng.
 
 
 ## T10 — Trang nhân viên (phần mở rộng)
