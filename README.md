@@ -317,6 +317,10 @@ docker compose up --build -d
 docker compose ps
 ```
 
+Tên project mặc định trong `docker-compose.yml` là `brewlite`, gồm ba container `brewlite-web-1`, `brewlite-api-1`, `brewlite-postgres-1`. Cả trang khách và trang nhân viên dùng chung bộ này. Các lệnh thường ngày không cần tham số `-p`.
+
+Với máy đã có database từ bộ cũ `brewlite-t09-check`, thêm `POSTGRES_VOLUME_NAME=brewlite-t09-check_postgres_data` và `POSTGRES_VOLUME_EXTERNAL=true` vào `.env` gốc để dùng lại volume đó; sao lưu database và dừng PostgreSQL cũ trước khi chuyển. Máy mới giữ `POSTGRES_VOLUME_NAME` trống và `POSTGRES_VOLUME_EXTERNAL=false` để Compose tạo volume riêng theo tên project. Volume cũ dùng chung được khai báo external để Compose không quản lý việc xóa volume đó. Khi chạy một bộ kiểm thử cô lập với `-p`, dùng file env thử riêng có `POSTGRES_VOLUME_NAME` trống và `POSTGRES_VOLUME_EXTERNAL=false`; không để bộ thử cùng mở volume database đang dùng. Không đổi tên project đơn thuần rồi seed lại để thay thế dữ liệu cũ.
+
 Compose khởi động PostgreSQL trước và đợi health check `pg_isready` đạt rồi mới chạy API. Container API tự chạy `prisma migrate deploy` trước khi nhận request; web đợi health check của API trước khi khởi động. Web được publish ở <http://localhost:3000>, API ở <http://localhost:3001>. URL `NEXT_PUBLIC_API_URL` được nhúng khi build để browser gọi API qua `localhost`; `API_URL_INTERNAL=http://api:3001` chỉ dùng bởi Next.js server-side Menu bên trong mạng Compose. Không đổi URL nội bộ thành `localhost` trong container web.
 
 Seed không tự chạy khi khởi động container. Sau lần chạy migration đầu tiên, chạy seed tường minh nếu cần dữ liệu mẫu:
@@ -334,7 +338,14 @@ Invoke-RestMethod http://localhost:3001/products
 Invoke-WebRequest http://localhost:3000
 ```
 
-Sau đó đăng ký/đăng nhập trên web, thêm món vào giỏ, rồi chạy checkout để kiểm tra xác thực và thanh toán. Dừng ứng dụng mà vẫn giữ database bằng `docker compose down`; chạy lại bằng `docker compose up -d`. PostgreSQL lưu dữ liệu trong named volume `postgres_data`, nên restart hoặc `down` không xóa dữ liệu. **Không chạy `docker compose down -v` trên volume đang dùng**; lệnh đó xóa database Compose.
+Sau đó đăng ký/đăng nhập trên web, thêm món vào giỏ, rồi chạy checkout để kiểm tra xác thực và thanh toán. Dừng ứng dụng mà vẫn giữ database bằng `docker compose down`; chạy lại bằng `docker compose up -d`. PostgreSQL lưu dữ liệu qua volume `postgres_data` trong cấu hình Compose (tên thực tế tùy project hoặc `POSTGRES_VOLUME_NAME`), nên restart hoặc `down` không xóa dữ liệu. **Không chạy `docker compose down -v` trên volume đang dùng**; lệnh đó xóa database Compose.
+
+### Kiểm tra sau khi đổi tên project Docker (01/11/2026)
+
+- Project chính là `brewlite`; build và khởi động đủ web/API/PostgreSQL đạt. API và PostgreSQL `healthy`.
+- Đã sao lưu trước khi chuyển và dùng lại volume cũ bằng cấu hình cục bộ trong `.env`. Đối chiếu 11 bảng trước/sau: số bản ghi và checksum nội dung đều khớp (8 tài khoản, 11 đơn hàng trong bộ demo tại thời điểm kiểm tra).
+- Menu, trang đăng nhập, trang nhân viên và Products API trả HTTP 200. JWT của tài khoản CUSTOMER/STAFF đọc `/auth/me` được; khách bị chặn API nhân viên, nhân viên bị chặn tạo đơn/thanh toán bằng HTTP 403.
+- Bộ cũ đã dừng, không xóa volume. Bộ mới/máy mới với biến volume để mặc định có volume riêng theo project; bản sao lưu và `.env` cục bộ không đưa vào Git.
 
 ### Xử lý lỗi Docker
 
@@ -347,17 +358,25 @@ Sau đó đăng ký/đăng nhập trên web, thêm món vào giỏ, rồi chạy
 
 ### Kịch bản demo T09.2
 
-Để diễn tập tách khỏi volume Compose mặc định, dùng project name riêng `brewlite-t09-demo`. Compose sẽ tạo volume riêng cho lần demo này.
+Để diễn tập tách khỏi database đang dùng, tạo file env riêng từ mẫu (không sao chép `.env` cục bộ đang trỏ tới volume cũ):
 
-1. Chạy `docker compose -p brewlite-t09-demo up --build -d`, rồi chụp `docker compose -p brewlite-t09-demo ps` khi PostgreSQL, API và web đều hoạt động.
-2. Chạy seed bằng `docker compose -p brewlite-t09-demo exec api npm run prisma:seed`; mở web, đăng ký/đăng nhập và thực hiện checkout. Chụp Menu và kết quả checkout từ ứng dụng đang kết nối API thật.
-3. Ghi lại số đơn trong database, chạy `docker compose -p brewlite-t09-demo down` rồi `docker compose -p brewlite-t09-demo up -d`. Kiểm tra lại số đơn để xác nhận volume demo còn nguyên và chụp kết quả sau restart.
+```powershell
+if (!(Test-Path .env.t09-demo)) { Copy-Item .env.example .env.t09-demo }
+notepad .env.t09-demo
+```
+
+Điền JWT secret riêng như hướng dẫn phía trên, để `POSTGRES_VOLUME_NAME` trống và `POSTGRES_VOLUME_EXTERNAL=false`. Nếu chạy cùng bộ chính, đặt cổng riêng, ví dụ `WEB_PORT=3300`, `API_PORT=3301`, `POSTGRES_PORT=55433`, `FRONTEND_URL=http://localhost:3300`, `NEXT_PUBLIC_API_URL=http://localhost:3301`. File `.env.t09-demo` được Git bỏ qua. Các lệnh sau luôn truyền file env này và project riêng `brewlite-t09-demo`; mở web demo theo cổng đã đặt.
+
+1. Chạy `docker compose --env-file .env.t09-demo -p brewlite-t09-demo up --build -d`, rồi chụp `docker compose --env-file .env.t09-demo -p brewlite-t09-demo ps` khi PostgreSQL, API và web đều hoạt động.
+2. Chạy seed bằng `docker compose --env-file .env.t09-demo -p brewlite-t09-demo exec api npm run prisma:seed`; mở web, đăng ký/đăng nhập và thực hiện checkout. Chụp Menu và kết quả checkout từ ứng dụng đang kết nối API thật.
+3. Ghi lại số đơn trong database, chạy `docker compose --env-file .env.t09-demo -p brewlite-t09-demo down` rồi `docker compose --env-file .env.t09-demo -p brewlite-t09-demo up -d`. Kiểm tra lại số đơn để xác nhận volume demo còn nguyên và chụp kết quả sau restart.
 4. Trước khi chia sẻ ảnh, che JWT, mật khẩu, email cá nhân và mọi giá trị trong `.env`. Không chụp nội dung secret hoặc terminal hiển thị token.
 
 Khi dùng cấu hình PostgreSQL mặc định, có thể kiểm tra số đơn bằng:
 
 ```powershell
-docker compose -p brewlite-t09-demo exec postgres psql -U postgres -d brewlite_scrum -c 'SELECT COUNT(*) FROM "Order";'
+'SELECT COUNT(*) FROM "Order";' |
+    docker compose --env-file .env.t09-demo -p brewlite-t09-demo exec -T postgres psql -U postgres -d brewlite_scrum
 ```
 
 Nếu đổi `POSTGRES_USER` hoặc `POSTGRES_DB`, thay giá trị tương ứng trong câu lệnh. Lưu ảnh minh chứng đã chụp cùng tài liệu bàn giao; không dùng ảnh giả lập thay cho kết quả chạy thật. Lệnh `down` giữ volume demo. Chỉ xóa volume của project demo sau khi xác nhận không còn dữ liệu cần giữ; không xóa volume mặc định hoặc volume làm việc.
@@ -1059,7 +1078,7 @@ Kết quả lệnh vừa chạy trên bản tích hợp:
 
 Tổng 157 kiểm thử tự động đạt; con số này không có nghĩa là toàn bộ ca thử đều dùng database hoặc trình duyệt thật.
 
-Docker Compose của bản đang chạy (`brewlite-t09-check`) đã khởi động đủ ba dịch vụ: PostgreSQL và API `healthy`, web `Up`; cổng tương ứng 5432, 3001 và 3000. Đây là kết quả kiểm tra trạng thái container, không thay thế việc thử toàn bộ luồng giao diện. Cách chạy và các bước thử tay khách/nhân viên nằm ngay bên dưới.
+Trước khi đổi tên project, Docker Compose của bản tích hợp (`brewlite-t09-check`) đã khởi động đủ ba dịch vụ: PostgreSQL và API `healthy`, web `Up`; cổng tương ứng 5432, 3001 và 3000. Đây là kết quả kiểm tra trạng thái container, không thay thế việc thử toàn bộ luồng giao diện. Cách chạy và các bước thử tay khách/nhân viên nằm ngay bên dưới.
 
 Nhánh đã có commit tích hợp. Kết quả kỹ thuật trên không thay thế review của thành viên nhóm; hoàn tất review trước khi gộp T10 vào `main`. Bản hiện tại chưa có phân trang hoặc tự cập nhật dữ liệu trang nhân viên; các giới hạn được ghi trong hướng dẫn sử dụng.
 
@@ -1086,8 +1105,8 @@ Thêm giỏ và tạo đơn `PENDING` chưa trừ nguyên liệu. Khi thanh toá
 1. Mở Docker Desktop, đợi **Engine running**. Tại thư mục gốc dự án, dùng file `.env` đã thiết lập theo hướng dẫn Docker phía trên rồi chạy:
 
 ```powershell
-docker compose -p brewlite-t09-check up --build -d
-docker compose -p brewlite-t09-check ps
+docker compose up --build -d
+docker compose ps
 ```
 
 Đợi PostgreSQL và API báo `healthy`, web báo `Up`. API tự áp migration khi khởi động. Chỉ cần một bộ web/API/PostgreSQL cho cả khách và nhân viên; không cần chạy thêm backend hoặc frontend bằng npm cùng lúc.
@@ -1095,7 +1114,7 @@ docker compose -p brewlite-t09-check ps
 2. Nếu database mới chưa có món và công thức, tạo dữ liệu mẫu:
 
 ```powershell
-docker compose -p brewlite-t09-check exec api npm run prisma:seed
+docker compose exec api npm run prisma:seed
 ```
 
 3. Mở <http://localhost:3000/register>, đăng ký một tài khoản dành cho nhân viên. Nếu tài khoản đã tồn tại trong database Docker này thì bỏ qua đăng ký.
@@ -1103,7 +1122,7 @@ docker compose -p brewlite-t09-check exec api npm run prisma:seed
 4. Người quản lý dự án cấp quyền trong terminal. Thay email bên dưới bằng **đúng email đã đăng ký**:
 
 ```powershell
-docker compose -p brewlite-t09-check exec api npm run staff:role -- nhanvien@example.com STAFF
+docker compose exec api npm run staff:role -- nhanvien@example.com STAFF
 ```
 
 Nếu báo `P2025` hoặc không tìm thấy bản ghi, email đó chưa có trong database đang chạy. Kiểm tra lại email và tài khoản trước khi cấp quyền; lệnh này không tự tạo tài khoản mới.
@@ -1113,7 +1132,7 @@ Nếu báo `P2025` hoặc không tìm thấy bản ghi, email đó chưa có tro
 Khi cần thu hồi quyền:
 
 ```powershell
-docker compose -p brewlite-t09-check exec api npm run staff:role -- nhanvien@example.com CUSTOMER
+docker compose exec api npm run staff:role -- nhanvien@example.com CUSTOMER
 ```
 
 API đọc quyền từ database khi xác thực request. Sau khi thu hồi quyền, tài khoản không còn được dùng API nhân viên dù JWT cũ chưa hết hạn.

@@ -1,3 +1,5 @@
+name: brewlite
+
 services:
   postgres:
     image: postgres:16
@@ -63,3 +65,5 @@ services:
 
 volumes:
   postgres_data:
+    name: ${POSTGRES_VOLUME_NAME:-${COMPOSE_PROJECT_NAME}_postgres_data}
+    external: ${POSTGRES_VOLUME_EXTERNAL:-false}
