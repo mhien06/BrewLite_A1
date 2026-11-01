@@ -1,7 +1,8 @@
-// Next.js dùng cấu hình này cho cả Webpack production và Turbopack development.
+/** @type {import('postcss-load-config').Config} */
 const config = {
   plugins: {
-    '@tailwindcss/postcss': {},
+    "@tailwindcss/postcss": {},
   },
 };
+
 export default config;
