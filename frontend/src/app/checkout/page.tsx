@@ -7,6 +7,7 @@ import CheckoutOrderSummary from "@/components/CheckoutOrderSummary";
 import PaymentFailure from "@/components/PaymentFailure";
 import PaymentSuccess from "@/components/PaymentSuccess";
 import PaymentMethodPanel from "@/components/PaymentMethodPanel";
+import { checkCartAvailability } from "@/services/availability.service";
 import { createOrderApi, createPaymentApi } from "@/services/checkout.service";
 import { useAuthStore } from "@/stores/auth.store";
 import {
@@ -150,6 +151,15 @@ export default function CheckoutPage() {
       ) {
         orderId = pendingOrder.orderId;
       } else {
+        const checked = await checkCartAvailability(items);
+        if (!isCurrentSubmission()) return;
+        if (!checked.available) {
+          setError(
+            checked.items.find((item) => item.message)?.message ||
+              "Vui lòng sửa lựa chọn trong giỏ hàng.",
+          );
+          return;
+        }
         const trimmedPromo = promotionCode.trim();
         const order = await createOrderApi(token, {
           items: items.map((item) => ({

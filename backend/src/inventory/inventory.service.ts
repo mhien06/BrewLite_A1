@@ -456,7 +456,7 @@ export class InventoryService {
       }
       if (latestIngredient.version === expectedVersion) {
         throw new ConflictException(
-          `Xung đột cập nhật tồn kho nguyên liệu ${demand.name}. Vui lòng thử lại.`,
+          'Tình trạng món vừa thay đổi. Vui lòng kiểm tra lại giỏ và thử lại.',
         );
       }
       expectedVersion = latestIngredient.version;
@@ -464,7 +464,7 @@ export class InventoryService {
 
     // Đã thử đủ số lần: báo 409 và để transaction rollback toàn bộ đơn.
     throw new ConflictException(
-      `Xung đột cập nhật đồng thời trên nguyên liệu ${demand.name}. Vui lòng thử lại.`,
+      'Có nhiều khách đang đặt món. Vui lòng kiểm tra lại giỏ và thử lại.',
     );
   }
 }

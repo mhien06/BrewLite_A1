@@ -1,26 +1,107 @@
-'use client';
+"use client";
 
-import Image from 'next/image';
-import Link from 'next/link';
-import { useAuthStore } from '@/stores/auth.store';
+import Image from "next/image";
+import { useRef, useState } from "react";
+import CartItemEditor from "@/components/cart/CartItemEditor";
+import { useCartAvailability } from "@/hooks/useCartAvailability";
 import {
-  selectTotalPrice,
-  useCartStore,
-} from '@/stores/cart.store';
+  checkCartAvailability,
+  mergeCartLines,
+} from "@/services/availability.service";
+import type { CartItem } from "@/types/cart";
+import Link from "next/link";
+import { useAuthStore } from "@/stores/auth.store";
+import { selectTotalPrice, useCartStore } from "@/stores/cart.store";
 
 const formatPrice = (price: number) =>
-  new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
+  new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
   }).format(price);
 
 export default function CartPage() {
   const items = useCartStore((state) => state.items);
-  const updateQuantity = useCartStore((state) => state.updateQuantity);
   const removeItem = useCartStore((state) => state.removeItem);
   const totalPrice = useCartStore(selectTotalPrice);
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+
+  const availability = useCartAvailability(items);
+  const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState("");
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const submitting = useRef(false);
+  const checkoutAllowed = Boolean(availability.result?.available) && !busy;
+
+  async function changeQuantity(item: CartItem, quantity: number) {
+    if (submitting.current) return;
+    const before = useCartStore.getState().items;
+    if (quantity <= 0) {
+      removeItem(item.key);
+      return;
+    }
+    const next = before.map((line) =>
+      line.key === item.key ? { ...line, quantity } : line,
+    );
+    // Luôn cho giảm số lượng để sửa giỏ đang thiếu hàng.
+    if (quantity < item.quantity) {
+      useCartStore.getState().applyCheckedItems(before, next);
+      setMessage("");
+      return;
+    }
+    submitting.current = true;
+    setBusy(true);
+    setMessage("");
+    try {
+      const checked = await checkCartAvailability(next);
+      if (!checked.available) {
+        setMessage(
+          checked.items.find((line) => line.message)?.message ||
+            "Không đủ số lượng.",
+        );
+        availability.refresh();
+        return;
+      }
+      if (!useCartStore.getState().applyCheckedItems(before, next))
+        setMessage("Giỏ vừa thay đổi. Vui lòng thử lại.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Không kiểm tra được món.",
+      );
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
+  }
+
+  async function saveOptions(changed: CartItem) {
+    if (submitting.current) return;
+    const before = useCartStore.getState().items;
+    const next = mergeCartLines(
+      before.map((line) => (line.key === changed.key ? changed : line)),
+    );
+    submitting.current = true;
+    setBusy(true);
+    setMessage("");
+    try {
+      const checked = await checkCartAvailability(next);
+      // Cho lưu việc bỏ/đổi topping để khách sửa từng dòng, giữ cảnh báo nếu giỏ còn thiếu.
+      if (useCartStore.getState().applyCheckedItems(before, next)) {
+        setEditingKey(null);
+        setMessage(
+          checked.items.find((line) => line.message)?.message ||
+            "Đã cập nhật lựa chọn.",
+        );
+      } else setMessage("Giỏ vừa thay đổi. Vui lòng thử lại.");
+    } catch (error) {
+      setMessage(
+        error instanceof Error ? error.message : "Không sửa được lựa chọn.",
+      );
+    } finally {
+      submitting.current = false;
+      setBusy(false);
+    }
+  }
 
   return (
     <main className="mx-auto w-full max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
@@ -43,6 +124,26 @@ export default function CartPage() {
         </p>
       </header>
 
+      {items.length > 0 && (
+        <div className="mt-5 space-y-2 text-sm" aria-live="polite">
+          {!availability.result && !availability.error && (
+            <p>Đang kiểm tra món và topping...</p>
+          )}
+          {(availability.error || message) && (
+            <p className="rounded-xl bg-amber-50 p-3 text-amber-900">
+              {availability.error || message}
+            </p>
+          )}
+          <button
+            type="button"
+            onClick={availability.refresh}
+            disabled={busy}
+            className="underline"
+          >
+            Kiểm tra lại tình trạng món
+          </button>
+        </div>
+      )}
       {items.length === 0 ? (
         <section className="mt-8 rounded-[22px] border border-[#ead8c7] bg-white px-6 py-14 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#fff1e3] text-3xl">
@@ -52,8 +153,7 @@ export default function CartPage() {
             Giỏ hàng đang trống
           </h2>
           <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-[#9a7c6b]">
-            Hãy chọn thức uống, kích cỡ và topping yêu thích từ Menu
-            BrewLite.
+            Hãy chọn thức uống, kích cỡ và topping yêu thích từ Menu BrewLite.
           </p>
           <Link
             href="/"
@@ -64,103 +164,121 @@ export default function CartPage() {
         </section>
       ) : (
         <div className="mt-8 grid items-start gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
-          <section
-            className="space-y-4"
-            aria-label="Sản phẩm trong giỏ hàng"
-          >
-            {items.map((item) => {
-              const productQuantity = items
-                .filter(
-                  (cartItem) =>
-                    cartItem.productId === item.productId,
-                )
-                .reduce(
-                  (total, cartItem) => total + cartItem.quantity,
-                  0,
-                );
-
+          <section className="space-y-4" aria-label="Sản phẩm trong giỏ hàng">
+            {items.map((item, index) => {
+              const stock = availability.result?.items[index];
               const toppingNames =
                 item.toppings.length > 0
-                  ? item.toppings
-                      .map((topping) => topping.label)
-                      .join(', ')
-                  : 'Không topping';
+                  ? item.toppings.map((topping) => topping.label).join(", ")
+                  : "Không topping";
 
               return (
-                <article
-                  key={item.key}
-                  className="flex flex-col gap-5 rounded-[22px] border border-[#ead8c7] bg-white p-5 sm:flex-row sm:items-center"
-                >
-                  <div className="relative h-28 w-full shrink-0 overflow-hidden rounded-xl bg-[#f7eadf] sm:w-32">
-                    <Image
-                      src={item.imageUrl}
-                      alt={item.name}
-                      fill
-                      sizes="128px"
-                      className="object-cover"
-                    />
-                  </div>
-
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-xl font-extrabold text-[#40241b]">
-                      {item.name}
-                    </h2>
-                    <p className="mt-1 text-sm text-[#9a7c6b]">
-                      Size {item.size.id} • {toppingNames}
-                    </p>
-                    <p className="mt-2 text-base font-extrabold text-[#7a3b22]">
-                      {formatPrice(item.unitPrice)}
-                    </p>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-5 sm:flex-col sm:items-end">
-                    <div
-                      className="inline-flex items-center gap-1 text-[#40241b]"
-                      aria-label={`Số lượng ${item.name}`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateQuantity(
-                            item.key,
-                            item.quantity - 1,
-                          )
-                        }
-                        className="flex h-9 w-9 items-center justify-center rounded-full text-lg font-bold transition hover:bg-[#fff1e3]"
-                        aria-label={`Giảm số lượng ${item.name}`}
-                      >
-                        −
-                      </button>
-
-                      <span className="min-w-6 text-center text-sm font-extrabold">
-                        {item.quantity}
-                      </span>
-
-                      <button
-                        type="button"
-                        onClick={() =>
-                          updateQuantity(
-                            item.key,
-                            item.quantity + 1,
-                          )
-                        }
-                        disabled={productQuantity >= item.stock}
-                        className="flex h-9 w-9 items-center justify-center rounded-full text-lg font-bold transition hover:bg-[#fff1e3] disabled:cursor-not-allowed disabled:text-stone-300"
-                        aria-label={`Tăng số lượng ${item.name}`}
-                      >
-                        +
-                      </button>
+                <div key={item.key}>
+                  <article className="flex flex-col gap-5 rounded-[22px] border border-[#ead8c7] bg-white p-5 sm:flex-row sm:items-center">
+                    <div className="relative h-28 w-full shrink-0 overflow-hidden rounded-xl bg-[#f7eadf] sm:w-32">
+                      <Image
+                        src={item.imageUrl}
+                        alt={item.name}
+                        fill
+                        sizes="128px"
+                        className="object-cover"
+                      />
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => removeItem(item.key)}
-                      className="min-w-28 rounded-full border border-[#ead8c7] bg-white px-5 py-2.5 text-sm font-bold text-[#492214] transition hover:border-[#492214] hover:bg-[#fffaf5]"
+                    <div className="min-w-0 flex-1">
+                      <h2 className="text-xl font-extrabold text-[#40241b]">
+                        {item.name}
+                      </h2>
+                      <p className="mt-1 text-sm text-[#9a7c6b]">
+                        Size {item.size.id} • {toppingNames}
+                      </p>
+                      <p className="mt-2 text-base font-extrabold text-[#7a3b22]">
+                        {formatPrice(item.unitPrice)}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-5 sm:flex-col sm:items-end">
+                      <div
+                        className="inline-flex items-center gap-1 text-[#40241b]"
+                        aria-label={`Số lượng ${item.name}`}
+                      >
+                        <button
+                          type="button"
+                          onClick={() =>
+                            changeQuantity(item, item.quantity - 1)
+                          }
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-lg font-bold transition hover:bg-[#fff1e3]"
+                          disabled={busy}
+                          aria-label={`Giảm số lượng ${item.name}`}
+                        >
+                          −
+                        </button>
+
+                        <span className="min-w-6 text-center text-sm font-extrabold">
+                          {item.quantity}
+                        </span>
+
+                        <button
+                          type="button"
+                          onClick={() =>
+                            changeQuantity(item, item.quantity + 1)
+                          }
+                          disabled={
+                            busy || !stock || item.quantity >= stock.maxQuantity
+                          }
+                          className="flex h-9 w-9 items-center justify-center rounded-full text-lg font-bold transition hover:bg-[#fff1e3] disabled:cursor-not-allowed disabled:text-stone-300"
+                          aria-label={`Tăng số lượng ${item.name}`}
+                        >
+                          +
+                        </button>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => removeItem(item.key)}
+                        className="min-w-28 rounded-full border border-[#ead8c7] bg-white px-5 py-2.5 text-sm font-bold text-[#492214] transition hover:border-[#492214] hover:bg-[#fffaf5]"
+                      >
+                        Xóa
+                      </button>
+                    </div>
+                  </article>
+                  {stock?.message && (
+                    <p
+                      role="alert"
+                      className="mt-2 rounded-xl bg-red-50 p-3 text-sm text-red-700"
                     >
-                      Xóa
-                    </button>
-                  </div>
-                </article>
+                      {stock.message}
+                    </p>
+                  )}
+                  {stock &&
+                    !stock.message &&
+                    item.quantity >= stock.maxQuantity && (
+                      <p className="mt-2 text-sm text-amber-800">
+                        Đã đạt số lượng có thể mua theo size/topping này. Bạn có
+                        thể bỏ hoặc đổi topping để kiểm tra lại.
+                      </p>
+                    )}
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() =>
+                      setEditingKey(editingKey === item.key ? null : item.key)
+                    }
+                    className="mt-2 text-sm font-semibold text-amber-800 underline"
+                  >
+                    Sửa size / topping
+                  </button>
+                  {editingKey === item.key && (
+                    <CartItemEditor
+                      item={item}
+                      items={items}
+                      busy={busy}
+                      onSave={saveOptions}
+                      onClose={() => setEditingKey(null)}
+                    />
+                  )}
+                </div>
               );
             })}
           </section>
@@ -180,15 +298,11 @@ export default function CartPage() {
 
               <div className="flex items-center justify-between gap-4">
                 <dt className="text-[#9a7c6b]">Giảm giá</dt>
-                <dd className="font-bold text-[#40241b]">
-                  {formatPrice(0)}
-                </dd>
+                <dd className="font-bold text-[#40241b]">{formatPrice(0)}</dd>
               </div>
 
               <div className="flex items-center justify-between gap-4 border-t border-[#ead8c7] pt-4">
-                <dt className="font-extrabold text-[#40241b]">
-                  Tổng cộng
-                </dt>
+                <dt className="font-extrabold text-[#40241b]">Tổng cộng</dt>
                 <dd className="text-lg font-extrabold text-[#7a3b22]">
                   {formatPrice(totalPrice)}
                 </dd>
@@ -218,20 +332,29 @@ export default function CartPage() {
             )}
 
             {isAuthenticated && user ? (
-  <Link
-    href="/checkout"
-    className="mt-5 flex w-full items-center justify-center rounded-full bg-[#f6a14a] px-5 py-3.5 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435]"
-  >
-    Thanh toán
-  </Link>
-) : (
-  <Link
-    href="/login"
-    className="mt-5 flex w-full items-center justify-center rounded-full bg-[#f6a14a] px-5 py-3.5 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435]"
-  >
-    Đăng nhập để thanh toán
-  </Link>
-)}
+              <Link
+                href="/checkout"
+                aria-disabled={!checkoutAllowed}
+                onClick={(event) => {
+                  if (!checkoutAllowed) {
+                    event.preventDefault();
+                    setMessage(
+                      "Vui lòng sửa các món thiếu hoặc đợi kiểm tra xong trước khi thanh toán.",
+                    );
+                  }
+                }}
+                className="mt-5 flex w-full items-center justify-center rounded-full bg-[#f6a14a] px-5 py-3.5 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435]"
+              >
+                Thanh toán
+              </Link>
+            ) : (
+              <Link
+                href="/login"
+                className="mt-5 flex w-full items-center justify-center rounded-full bg-[#f6a14a] px-5 py-3.5 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435]"
+              >
+                Đăng nhập để thanh toán
+              </Link>
+            )}
 
             <Link
               href="/"

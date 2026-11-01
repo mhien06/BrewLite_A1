@@ -1,5 +1,5 @@
-import { create } from 'zustand';
-import type { AddCartItemInput, CartItem } from '@/types/cart';
+import { create } from "zustand";
+import type { AddCartItemInput, CartItem } from "@/types/cart";
 
 interface CartStore {
   items: CartItem[];
@@ -7,18 +7,19 @@ interface CartStore {
   updateQuantity: (key: string, quantity: number) => void;
   removeItem: (key: string) => void;
   clearCart: () => void;
+  applyCheckedItems: (previous: CartItem[], next: CartItem[]) => boolean;
 }
 
 const createCartItemKey = (item: AddCartItemInput) => {
   const toppingIds = item.toppings
     .map((topping) => topping.id)
     .sort()
-    .join(',');
+    .join(",");
 
   return `${item.productId}:${item.size.id}:${toppingIds}`;
 };
 
-export const useCartStore = create<CartStore>((set) => ({
+export const useCartStore = create<CartStore>((set, get) => ({
   items: [],
 
   addItem: (item) =>
@@ -51,7 +52,9 @@ export const useCartStore = create<CartStore>((set) => ({
             ...item,
             key,
             quantity: 1,
-            toppings: [...item.toppings].sort((a, b) => a.id.localeCompare(b.id)),
+            toppings: [...item.toppings].sort((a, b) =>
+              a.id.localeCompare(b.id),
+            ),
           },
         ],
       };
@@ -105,6 +108,12 @@ export const useCartStore = create<CartStore>((set) => ({
       items: state.items.filter((item) => item.key !== key),
     })),
 
+  // Không ghi đè nếu khách đã sửa giỏ trong lúc request đang chờ.
+  applyCheckedItems: (previous, next) => {
+    if (get().items !== previous) return false;
+    set({ items: next });
+    return true;
+  },
   clearCart: () => set({ items: [] }),
 }));
 

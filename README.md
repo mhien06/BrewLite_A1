@@ -1185,3 +1185,11 @@ Không dùng database demo hoặc dữ liệu thật cho kiểm thử. Lệnh `t
 ### Hủy đơn trong Task 10
 
 Chỉ cho hủy đơn trước khi thanh toán thành công (`PENDING` hoặc `PAYMENT_FAILED`). Đơn `PAID` và `PREPARING` không được chuyển sang `CANCELLED` vì hệ thống chưa hỗ trợ hoàn tiền và hoàn kho sau thanh toán.
+
+### Kiểm tra số lượng trước khi thêm vào giỏ (T10)
+
+- Trang chi tiết kiểm tra công thức theo size và topping, có tính nguyên liệu dùng chung với các món đang có trong giỏ. Hiển thị số ly còn có thể thêm và khóa topping hết hàng.
+- Trước khi thêm món hoặc tăng số lượng trong giỏ, ứng dụng gọi `POST /inventory/check-cart`; chỉ cập nhật giỏ khi đủ nguyên liệu. API này chỉ đọc, không giữ chỗ hoặc trừ kho.
+- Giỏ cập nhật tình trạng khi thay đổi lựa chọn, quay lại cửa sổ và mỗi 15 giây; khách có thể giảm số lượng hoặc sửa size/topping khi thiếu hàng.
+- Khi thanh toán vẫn kiểm tra lại trong transaction để chống bán vượt kho khi nhiều khách cùng mua. Con số ở Menu là ước tính size S không topping.
+- Thử tay: cho đào chỉ đủ 3 ly size L, thêm trà đào L vào giỏ và tăng lên 3; nút tăng bị khóa và không thêm ly thứ 4 từ trang chi tiết. Thử topping hết và hai món dùng chung sữa.

@@ -1,4 +1,5 @@
-import type { PaymentMethod } from '@/types/checkout';
+import Link from "next/link";
+import type { PaymentMethod } from "@/types/checkout";
 
 interface PaymentMethodPanelProps {
   method: PaymentMethod;
@@ -12,9 +13,9 @@ interface PaymentMethodPanelProps {
 }
 
 const formatPrice = (price: number) =>
-  new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
+  new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
   }).format(price);
 
 export default function PaymentMethodPanel({
@@ -35,15 +36,15 @@ export default function PaymentMethodPanel({
 
       <div className="mt-4 space-y-3">
         {[
-          { value: 'WALLET', label: 'Ví điện tử' },
-          { value: 'CARD', label: 'Thẻ ngân hàng' },
+          { value: "WALLET", label: "Ví điện tử" },
+          { value: "CARD", label: "Thẻ ngân hàng" },
         ].map((option) => (
           <label
             key={option.value}
             className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-5 py-4 text-sm font-bold text-[#492214] ${
               method === option.value
-                ? 'border-[#ead8c7] bg-[#fff8ef]'
-                : 'border-[#ead8c7] bg-white'
+                ? "border-[#ead8c7] bg-[#fff8ef]"
+                : "border-[#ead8c7] bg-white"
             }`}
           >
             <input
@@ -52,9 +53,7 @@ export default function PaymentMethodPanel({
               value={option.value}
               checked={method === option.value}
               disabled={isSubmitting}
-              onChange={() =>
-                onMethodChange(option.value as PaymentMethod)
-              }
+              onChange={() => onMethodChange(option.value as PaymentMethod)}
               className="accent-[#4a2115]"
             />
             {option.label}
@@ -79,14 +78,10 @@ export default function PaymentMethodPanel({
         </div>
         <div className="flex justify-between gap-4">
           <dt className="text-[#9a7c6b]">Điểm</dt>
-          <dd className="font-extrabold text-[#40241b]">
-            {formatPrice(0)}
-          </dd>
+          <dd className="font-extrabold text-[#40241b]">{formatPrice(0)}</dd>
         </div>
         <div className="flex justify-between gap-4">
-          <dt className="font-extrabold text-[#40241b]">
-            Tổng cộng
-          </dt>
+          <dt className="font-extrabold text-[#40241b]">Tổng cộng</dt>
           <dd className="font-extrabold text-[#7a3b22]">
             {formatPrice(total)}
           </dd>
@@ -99,6 +94,9 @@ export default function PaymentMethodPanel({
           role="alert"
         >
           {error}
+          <Link href="/cart" className="mt-2 block underline">
+            Quay lại giỏ để sửa lựa chọn
+          </Link>
         </p>
       )}
 
@@ -108,7 +106,7 @@ export default function PaymentMethodPanel({
         onClick={() => onSubmit(true)}
         className="mt-5 w-full rounded-full bg-[#f6a14a] px-5 py-3.5 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435] disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {isSubmitting ? 'Đang xử lý...' : `Thanh toán · ${formatPrice(total)}`}
+        {isSubmitting ? "Đang xử lý..." : `Thanh toán · ${formatPrice(total)}`}
       </button>
 
       <button
