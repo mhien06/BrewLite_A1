@@ -26,7 +26,8 @@
     "prisma:seed": "prisma db seed",
     "prisma:deploy": "prisma migrate deploy",
     "preprisma:seed": "prisma generate",
-    "test:database": "vitest run --config ./vitest.config.database.ts"
+    "test:database": "vitest run --config ./vitest.config.database.ts",
+    "staff:role": "tsx scripts/staff-role.ts"
   },
   "dependencies": {
     "@nestjs/common": "^12.0.1",

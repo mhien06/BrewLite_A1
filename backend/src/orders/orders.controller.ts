@@ -1,3 +1,4 @@
+import { CustomerGuard } from '../auth/guards/customer.guard.js';
 import {
   Body,
   Controller,
@@ -21,6 +22,7 @@ export class OrdersController {
   constructor(private readonly ordersService: OrdersService) {}
 
   @Post()
+  @UseGuards(CustomerGuard)
   create(@CurrentUser() user: AuthUser, @Body() dto: CreateOrderDto) {
     return this.ordersService.create(user.id, dto);
   }

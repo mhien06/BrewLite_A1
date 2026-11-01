@@ -26,6 +26,17 @@ export class PaymentsService {
     private readonly inventory: InventoryService = new InventoryService(prisma),
   ) {}
 
+  /** Điểm bắt đầu: đọc từ đây trước khi học các hàm hỗ trợ phía dưới. */
+  async create(userId: number, dto: CreatePaymentDto, rawKey?: string) {
+    const key = this.validateIdempotencyKey(rawKey);
+    const queueKey = key ? `${userId}:${key}` : undefined;
+
+    // Trong một API, request trùng key chờ nhau. PostgreSQL bảo vệ giữa nhiều API.
+    return this.runSequentiallyByKey(queueKey, () =>
+      this.processPayment(userId, dto, key),
+    );
+  }
+
   /**
    * 1. Kiểm tra và làm sạch header Idempotency-Key
    */
@@ -210,59 +221,101 @@ export class PaymentsService {
     return result;
   }
 
-  async create(userId: number, dto: CreatePaymentDto, rawKey?: string) {
-    const key = this.validateIdempotencyKey(rawKey);
-    const lockKey = key ? `${userId}:${key}` : undefined;
-
-    return this.runSequentiallyByKey(lockKey, async () => {
-      if (key) {
-        const saved = await this.findSavedPaymentByKey(
-          this.prisma,
-          userId,
-          key,
-          dto,
-        );
-        if (saved) return saved;
-      }
-      const order = await this.prisma.order.findFirst({
-        where: { id: dto.orderId, userId },
-        select: { id: true, status: true },
-      });
-      if (!order) throw new NotFoundException('Không tìm thấy đơn hàng.');
-      if (order.status === OrderStatus.PAID && !key) {
-        throw new ConflictException('Đơn hàng đã được thanh toán.');
-      }
-
-      return this.prisma.$transaction(
-        async (tx) => {
-          await this.lockPaymentRequest(tx, userId, dto.orderId, key);
-          // Đọc lại sau khi lấy khóa: request khác có thể vừa thanh toán xong.
-          if (key) {
-            const saved = await this.findSavedPaymentByKey(
-              tx,
-              userId,
-              key,
-              dto,
-            );
-            if (saved) return saved;
-          }
-          const currentOrder =
-            typeof tx.$executeRaw === 'function'
-              ? await tx.order.findFirst({
-                  where: { id: dto.orderId, userId },
-                  select: { status: true },
-                })
-              : order;
-          if (!currentOrder)
-            throw new NotFoundException('Không tìm thấy đơn hàng.');
-          this.orderState.assertTransition(
-            currentOrder.status,
-            dto.simulateSuccess ? OrderStatus.PAID : OrderStatus.PAYMENT_FAILED,
-          );
-          return this.applyPayment(tx, userId, dto, key);
-        },
-        { maxWait: 15_000, timeout: 20_000 },
+  /** Xử lý một lần thanh toán sau khi đã kiểm tra header. */
+  private async processPayment(
+    userId: number,
+    dto: CreatePaymentDto,
+    key?: string,
+  ) {
+    // Bước 1: Có kết quả cũ thì trả lại, không trừ kho hoặc cộng điểm nữa.
+    if (key) {
+      const saved = await this.findSavedPaymentByKey(
+        this.prisma,
+        userId,
+        key,
+        dto,
       );
+      if (saved) return saved;
+    }
+
+    // Bước 2: Chỉ tìm đơn của người dùng đang đăng nhập.
+    const order = await this.prisma.order.findFirst({
+      where: { id: dto.orderId, userId },
+      select: { id: true, status: true },
     });
+    if (!order) {
+      throw new NotFoundException('Không tìm thấy đơn hàng.');
+    }
+    if (order.status === OrderStatus.PAID && !key) {
+      throw new ConflictException('Đơn hàng đã được thanh toán.');
+    }
+
+    // Bước 3: Kho, đơn, điểm và Payment được xử lý trong cùng giao dịch.
+    return this.prisma.$transaction(
+      (transaction) =>
+        this.processPaymentInTransaction(
+          transaction,
+          userId,
+          dto,
+          order.status,
+          key,
+        ),
+      { maxWait: 15_000, timeout: 20_000 },
+    );
+  }
+
+  private async processPaymentInTransaction(
+    transaction: Prisma.TransactionClient,
+    userId: number,
+    dto: CreatePaymentDto,
+    previousStatus: OrderStatus,
+    key?: string,
+  ) {
+    await this.lockPaymentRequest(transaction, userId, dto.orderId, key);
+
+    // Trong lúc chờ khóa, request khác có thể đã xử lý cùng key.
+    if (key) {
+      const saved = await this.findSavedPaymentByKey(
+        transaction,
+        userId,
+        key,
+        dto,
+      );
+      if (saved) return saved;
+    }
+
+    const currentStatus = await this.readCurrentOrderStatus(
+      transaction,
+      userId,
+      dto.orderId,
+      previousStatus,
+    );
+    const nextStatus = dto.simulateSuccess
+      ? OrderStatus.PAID
+      : OrderStatus.PAYMENT_FAILED;
+
+    // Gọi quy tắc chuyển trạng thái của Khoa, không viết lại quy tắc ở đây.
+    this.orderState.assertTransition(currentStatus, nextStatus);
+    return this.applyPayment(transaction, userId, dto, key);
+  }
+
+  /** Luôn đọc lại trạng thái sau khi đã khóa dòng đơn trong database thật. */
+  private async readCurrentOrderStatus(
+    transaction: Prisma.TransactionClient,
+    userId: number,
+    orderId: number,
+    previousStatus: OrderStatus,
+  ): Promise<OrderStatus> {
+    // Giữ tương thích bộ test cũ dùng Prisma mock, không có SQL transaction thật.
+    if (typeof transaction.$executeRaw !== 'function') return previousStatus;
+
+    const order = await transaction.order.findFirst({
+      where: { id: orderId, userId },
+      select: { status: true },
+    });
+    if (!order) {
+      throw new NotFoundException('Không tìm thấy đơn hàng.');
+    }
+    return order.status;
   }
 }
