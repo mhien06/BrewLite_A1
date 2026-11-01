@@ -108,7 +108,7 @@ export default function PaymentMethodPanel({
         onClick={() => onSubmit(true)}
         className="mt-5 w-full rounded-full bg-[#f6a14a] px-5 py-3.5 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435] disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {isSubmitting ? 'Đang xử lý...' : 'Xác nhận thanh toán'}
+        {isSubmitting ? 'Đang xử lý...' : `Thanh toán · ${formatPrice(total)}`}
       </button>
 
       <button
