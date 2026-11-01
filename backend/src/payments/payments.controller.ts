@@ -1,6 +1,8 @@
+import { CustomerGuard } from '../auth/guards/customer.guard.js';
 import {
   Body,
   Controller,
+  Headers,
   HttpCode,
   HttpStatus,
   Post,
@@ -20,8 +22,13 @@ export class PaymentsController {
   constructor(private readonly paymentsService: PaymentsService) {}
 
   @Post()
+  @UseGuards(CustomerGuard)
   @HttpCode(HttpStatus.OK)
-  create(@CurrentUser() user: AuthUser, @Body() dto: CreatePaymentDto) {
-    return this.paymentsService.create(user.id, dto);
+  create(
+    @CurrentUser() user: AuthUser,
+    @Body() dto: CreatePaymentDto,
+    @Headers('idempotency-key') idempotencyKey?: string,
+  ) {
+    return this.paymentsService.create(user.id, dto, idempotencyKey);
   }
 }

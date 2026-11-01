@@ -80,7 +80,10 @@ export class AuthService {
       throw new UnauthorizedException('Email hoặc mật khẩu không chính xác.');
     }
 
-    const isPasswordValid = await bcrypt.compare(dto.password, user.passwordHash);
+    const isPasswordValid = await bcrypt.compare(
+      dto.password,
+      user.passwordHash,
+    );
     if (!isPasswordValid) {
       throw new UnauthorizedException('Email hoặc mật khẩu không chính xác.');
     }
@@ -97,6 +100,7 @@ export class AuthService {
         email: user.email,
         name: user.name,
         loyaltyPoints: user.loyaltyPoints,
+        ...(user.role ? { role: user.role } : {}),
       },
     };
   }
@@ -106,6 +110,7 @@ export class AuthService {
       where: { id: userId },
       select: {
         id: true,
+        role: true,
         email: true,
         name: true,
         loyaltyPoints: true,

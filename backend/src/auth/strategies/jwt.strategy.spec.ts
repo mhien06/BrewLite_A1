@@ -27,12 +27,19 @@ describe('JwtStrategy', () => {
       name: 'USER FIVE',
     });
 
-    const result = await strategy.validate({ sub: 5, email: 'user5@brewlite.vn' });
+    const result = await strategy.validate({
+      sub: 5,
+      email: 'user5@brewlite.vn',
+    });
     expect(prisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: 5 },
-      select: { id: true, email: true, name: true },
+      select: { id: true, email: true, name: true, role: true },
     });
-    expect(result).toEqual({ id: 5, email: 'user5@brewlite.vn', name: 'USER FIVE' });
+    expect(result).toEqual({
+      id: 5,
+      email: 'user5@brewlite.vn',
+      name: 'USER FIVE',
+    });
   });
 
   it('ném lỗi UnauthorizedException khi payload không có sub', async () => {
@@ -49,4 +56,3 @@ describe('JwtStrategy', () => {
     ).rejects.toThrow(UnauthorizedException);
   });
 });
-

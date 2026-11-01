@@ -9,12 +9,16 @@ export interface CreateOrderItemRequest {
 
 export interface CreateOrderRequest {
   items: CreateOrderItemRequest[];
+  promotionCode?: string;
 }
 
 export interface OrderResponse {
   id: number;
   userId: number;
   status: 'PENDING';
+  promotionCode?: string | null;
+  subtotal?: number;
+  discountAmount?: number;
   total: number;
   createdAt: string;
 }

@@ -1,4 +1,5 @@
 export interface User {
+  role?: "CUSTOMER" | "STAFF";
   id: number;
   email: string;
   name: string;

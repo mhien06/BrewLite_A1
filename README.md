@@ -167,13 +167,16 @@ BrewLite_A1/
 │   ├── src/
 │   │   ├── products/                  # Controller, service, module sản phẩm (T02)
 │   │   ├── auth/                      # Đăng ký, đăng nhập và JWT (T07)
-│   │   ├── payments/                  # API thanh toán (T08)
-│   │   ├── orders/                    # Tạo đơn, lịch sử và chi tiết có kiểm tra chủ sở hữu (T06/T09.1)
+│   │   ├── payments/                  # Thanh toán + Idempotency-Key (T08/T10B)
+│   │   ├── inventory/                 # Công thức, kho nguyên liệu, optimistic locking (T10B)
+│   │   ├── promotions/                # Kiểm tra mã giảm giá (T10A)
+│   │   ├── loyalty/                   # Cộng điểm một lần cho mỗi đơn (T10A)
+│   │   ├── orders/                    # Tạo đơn và đọc lịch sử/chi tiết (T06/T09/T10)
 │   │   │   ├── dto/
 │   │   │   │   ├── create-order.dto.ts       # Kiểm tra danh sách món
 │   │   │   │   └── create-order-item.dto.ts  # Kiểm tra sản phẩm, size, topping, số lượng
-│   │   │   ├── orders.controller.ts   # POST /orders, GET /orders/me, GET /orders/:id
-│   │   │   ├── orders.service.ts      # Tạo đơn; truy vấn lịch sử/chi tiết theo userId
+│   │   │   ├── orders.controller.ts   # POST /orders, GET /orders/me và GET /orders/:id
+│   │   │   ├── orders.service.ts      # Kiểm tra tồn kho, tính tiền và lưu đơn
 │   │   │   └── orders.module.ts       # Khai báo module đơn hàng
 │   │   ├── prisma/                    # Module và service kết nối database
 │   │   ├── app.controller.ts          # Endpoint GET / ban đầu
@@ -186,13 +189,17 @@ BrewLite_A1/
 │   │   │   ├── 20261015124827_init_products/  # Product (T02)
 │   │   │   ├── 20261023120000_add_orders/     # Order, OrderItem (T06)
 │   │   │   ├── 20261024120000_add_users/      # User (T07)
-│   │   │   └── 20261028032924_add_payments/   # Payment fields/status (T08)
+│   │   │   ├── 20261028032924_add_payments/   # Payment fields/status (T08)
+│   │   │   ├── 20261030090000_t10a_state_promotions_loyalty/
+│   │   │   ├── 20261031123000_t10b_idempotency_inventory/
+│   │   │   └── 20261031220000_t10b_inventory_constraints/
 │   │   ├── schema.prisma              # Mô hình Product, Order và OrderItem
 │   │   └── seed.ts                    # Thêm món mẫu, cập nhật ảnh món đã có
 │   ├── test/app.e2e-spec.ts           # Kiểm thử E2E đang có trong repo
 │   ├── prisma7.config.ts              # Cấu hình Prisma, migration và seed
 │   ├── vitest.config.ts               # Cấu hình unit test backend
 │   ├── vitest.config.e2e.ts           # Cấu hình E2E backend
+│   ├── vitest.config.database.ts      # PostgreSQL integration T10B (chạy riêng)
 │   ├── Dockerfile                     # Image API
 │   ├── .dockerignore
 │   ├── .env.example                   # Cấu hình API local
@@ -310,6 +317,10 @@ docker compose up --build -d
 docker compose ps
 ```
 
+Tên project mặc định trong `docker-compose.yml` là `brewlite`, gồm ba container `brewlite-web-1`, `brewlite-api-1`, `brewlite-postgres-1`. Cả trang khách và trang nhân viên dùng chung bộ này. Các lệnh thường ngày không cần tham số `-p`.
+
+Với máy đã có database từ bộ cũ `brewlite-t09-check`, thêm `POSTGRES_VOLUME_NAME=brewlite-t09-check_postgres_data` và `POSTGRES_VOLUME_EXTERNAL=true` vào `.env` gốc để dùng lại volume đó; sao lưu database và dừng PostgreSQL cũ trước khi chuyển. Máy mới giữ `POSTGRES_VOLUME_NAME` trống và `POSTGRES_VOLUME_EXTERNAL=false` để Compose tạo volume riêng theo tên project. Volume cũ dùng chung được khai báo external để Compose không quản lý việc xóa volume đó. Khi chạy một bộ kiểm thử cô lập với `-p`, dùng file env thử riêng có `POSTGRES_VOLUME_NAME` trống và `POSTGRES_VOLUME_EXTERNAL=false`; không để bộ thử cùng mở volume database đang dùng. Không đổi tên project đơn thuần rồi seed lại để thay thế dữ liệu cũ.
+
 Compose khởi động PostgreSQL trước và đợi health check `pg_isready` đạt rồi mới chạy API. Container API tự chạy `prisma migrate deploy` trước khi nhận request; web đợi health check của API trước khi khởi động. Web được publish ở <http://localhost:3000>, API ở <http://localhost:3001>. URL `NEXT_PUBLIC_API_URL` được nhúng khi build để browser gọi API qua `localhost`; `API_URL_INTERNAL=http://api:3001` chỉ dùng bởi Next.js server-side Menu bên trong mạng Compose. Không đổi URL nội bộ thành `localhost` trong container web.
 
 Seed không tự chạy khi khởi động container. Sau lần chạy migration đầu tiên, chạy seed tường minh nếu cần dữ liệu mẫu:
@@ -327,7 +338,14 @@ Invoke-RestMethod http://localhost:3001/products
 Invoke-WebRequest http://localhost:3000
 ```
 
-Sau đó đăng ký/đăng nhập trên web, thêm món vào giỏ, rồi chạy checkout để kiểm tra xác thực và thanh toán. Dừng ứng dụng mà vẫn giữ database bằng `docker compose down`; chạy lại bằng `docker compose up -d`. PostgreSQL lưu dữ liệu trong named volume `postgres_data`, nên restart hoặc `down` không xóa dữ liệu. **Không chạy `docker compose down -v` trên volume đang dùng**; lệnh đó xóa database Compose.
+Sau đó đăng ký/đăng nhập trên web, thêm món vào giỏ, rồi chạy checkout để kiểm tra xác thực và thanh toán. Dừng ứng dụng mà vẫn giữ database bằng `docker compose down`; chạy lại bằng `docker compose up -d`. PostgreSQL lưu dữ liệu qua volume `postgres_data` trong cấu hình Compose (tên thực tế tùy project hoặc `POSTGRES_VOLUME_NAME`), nên restart hoặc `down` không xóa dữ liệu. **Không chạy `docker compose down -v` trên volume đang dùng**; lệnh đó xóa database Compose.
+
+### Kiểm tra sau khi đổi tên project Docker (01/11/2026)
+
+- Project chính là `brewlite`; build và khởi động đủ web/API/PostgreSQL đạt. API và PostgreSQL `healthy`.
+- Đã sao lưu trước khi chuyển và dùng lại volume cũ bằng cấu hình cục bộ trong `.env`. Đối chiếu 11 bảng trước/sau: số bản ghi và checksum nội dung đều khớp (8 tài khoản, 11 đơn hàng trong bộ demo tại thời điểm kiểm tra).
+- Menu, trang đăng nhập, trang nhân viên và Products API trả HTTP 200. JWT của tài khoản CUSTOMER/STAFF đọc `/auth/me` được; khách bị chặn API nhân viên, nhân viên bị chặn tạo đơn/thanh toán bằng HTTP 403.
+- Bộ cũ đã dừng, không xóa volume. Bộ mới/máy mới với biến volume để mặc định có volume riêng theo project; bản sao lưu và `.env` cục bộ không đưa vào Git.
 
 ### Xử lý lỗi Docker
 
@@ -340,17 +358,25 @@ Sau đó đăng ký/đăng nhập trên web, thêm món vào giỏ, rồi chạy
 
 ### Kịch bản demo T09.2
 
-Để diễn tập tách khỏi volume Compose mặc định, dùng project name riêng `brewlite-t09-demo`. Compose sẽ tạo volume riêng cho lần demo này.
+Để diễn tập tách khỏi database đang dùng, tạo file env riêng từ mẫu (không sao chép `.env` cục bộ đang trỏ tới volume cũ):
 
-1. Chạy `docker compose -p brewlite-t09-demo up --build -d`, rồi chụp `docker compose -p brewlite-t09-demo ps` khi PostgreSQL, API và web đều hoạt động.
-2. Chạy seed bằng `docker compose -p brewlite-t09-demo exec api npm run prisma:seed`; mở web, đăng ký/đăng nhập và thực hiện checkout. Chụp Menu và kết quả checkout từ ứng dụng đang kết nối API thật.
-3. Ghi lại số đơn trong database, chạy `docker compose -p brewlite-t09-demo down` rồi `docker compose -p brewlite-t09-demo up -d`. Kiểm tra lại số đơn để xác nhận volume demo còn nguyên và chụp kết quả sau restart.
+```powershell
+if (!(Test-Path .env.t09-demo)) { Copy-Item .env.example .env.t09-demo }
+notepad .env.t09-demo
+```
+
+Điền JWT secret riêng như hướng dẫn phía trên, để `POSTGRES_VOLUME_NAME` trống và `POSTGRES_VOLUME_EXTERNAL=false`. Nếu chạy cùng bộ chính, đặt cổng riêng, ví dụ `WEB_PORT=3300`, `API_PORT=3301`, `POSTGRES_PORT=55433`, `FRONTEND_URL=http://localhost:3300`, `NEXT_PUBLIC_API_URL=http://localhost:3301`. File `.env.t09-demo` được Git bỏ qua. Các lệnh sau luôn truyền file env này và project riêng `brewlite-t09-demo`; mở web demo theo cổng đã đặt.
+
+1. Chạy `docker compose --env-file .env.t09-demo -p brewlite-t09-demo up --build -d`, rồi chụp `docker compose --env-file .env.t09-demo -p brewlite-t09-demo ps` khi PostgreSQL, API và web đều hoạt động.
+2. Chạy seed bằng `docker compose --env-file .env.t09-demo -p brewlite-t09-demo exec api npm run prisma:seed`; mở web, đăng ký/đăng nhập và thực hiện checkout. Chụp Menu và kết quả checkout từ ứng dụng đang kết nối API thật.
+3. Ghi lại số đơn trong database, chạy `docker compose --env-file .env.t09-demo -p brewlite-t09-demo down` rồi `docker compose --env-file .env.t09-demo -p brewlite-t09-demo up -d`. Kiểm tra lại số đơn để xác nhận volume demo còn nguyên và chụp kết quả sau restart.
 4. Trước khi chia sẻ ảnh, che JWT, mật khẩu, email cá nhân và mọi giá trị trong `.env`. Không chụp nội dung secret hoặc terminal hiển thị token.
 
 Khi dùng cấu hình PostgreSQL mặc định, có thể kiểm tra số đơn bằng:
 
 ```powershell
-docker compose -p brewlite-t09-demo exec postgres psql -U postgres -d brewlite_scrum -c 'SELECT COUNT(*) FROM "Order";'
+'SELECT COUNT(*) FROM "Order";' |
+    docker compose --env-file .env.t09-demo -p brewlite-t09-demo exec -T postgres psql -U postgres -d brewlite_scrum
 ```
 
 Nếu đổi `POSTGRES_USER` hoặc `POSTGRES_DB`, thay giá trị tương ứng trong câu lệnh. Lưu ảnh minh chứng đã chụp cùng tài liệu bàn giao; không dùng ảnh giả lập thay cho kết quả chạy thật. Lệnh `down` giữ volume demo. Chỉ xóa volume của project demo sau khi xác nhận không còn dữ liệu cần giữ; không xóa volume mặc định hoặc volume làm việc.
@@ -961,3 +987,221 @@ Bộ API test T07 dùng NestJS, ValidationPipe, JWT và bcrypt cùng Prisma mock
 - NestJS: <https://docs.nestjs.com/first-steps>
 - Prisma ORM: <https://www.prisma.io/docs/orm>
 - PostgreSQL: <https://www.postgresql.org/docs/>
+
+
+## T10: nghiệp vụ backend
+
+Phần Khoa (T10A) gồm máy trạng thái đơn hàng, khuyến mãi và điểm thưởng. Phần Hiển (T10B) gồm thanh toán idempotent và kiểm soát kho nguyên liệu khi đặt đồng thời. Hướng dẫn chạy và kiểm tra được trình bày ngay dưới đây.
+
+### Nghiệp vụ T10A và T10B
+
+- Luồng chính: `PENDING → PAID → PREPARING → READY → COMPLETED`; backend chặn chuyển trạng thái không hợp lệ.
+- Backend tính tiền từ dữ liệu sản phẩm, size/topping và mã khuyến mãi hợp lệ; cộng điểm sau khi đơn được thanh toán thành công.
+- Tạo đơn `PENDING` chỉ kiểm tra kho. Thanh toán thành công mới trừ nguyên liệu, cập nhật đơn, ghi Payment và cộng điểm trong cùng transaction; thanh toán thất bại không trừ kho/cộng điểm.
+- Gửi lại cùng tài khoản, `Idempotency-Key` và nội dung thanh toán sẽ nhận kết quả đã lưu. Cùng khóa nhưng khác nội dung trả HTTP 409. Mất phản hồi dùng lại khóa cũ; thử lại một lần thất bại đã biết dùng khóa mới trên cùng đơn.
+- Kho lưu nguyên liệu và định lượng theo size/topping. Số phần có thể pha bằng `min(floor(tồn / định lượng))` của các nguyên liệu bắt buộc. Backend gộp nhu cầu toàn đơn và dùng transaction + optimistic locking để tránh bán vượt tồn.
+
+### Chạy và kiểm tra T10
+
+Làm theo phần cài đặt ở đầu README: PostgreSQL → backend → frontend. Backend cần file `.env` hợp lệ. Trong terminal tại `backend`:
+
+```powershell
+npm ci
+npm run prisma:generate
+npm run prisma:deploy
+npm run prisma:seed
+npm run start:dev
+```
+
+Terminal khác tại `frontend`:
+
+```powershell
+npm ci
+npm run dev
+```
+
+Hoặc dùng Docker theo hướng dẫn chung; không chạy chồng Node và Docker trên cùng cổng. Seed không phải thao tác nhập kho và không khôi phục lượng tồn nguyên liệu đã dùng.
+
+Kiểm tra thanh toán thành công, thất bại rồi thử lại, gửi lặp cùng khóa, khóa cũ với nội dung khác và hai đơn cùng tranh nguyên liệu. Đối chiếu tổng tiền, mã đơn, điểm, Payment và lượng tồn; một yêu cầu thanh toán thành công chỉ được gây tác động một lần.
+
+Chạy unit test trong `backend` bằng `npm test`. Với kiểm thử PostgreSQL, tạo database riêng có tên kết thúc bằng `_test`, sau đó trong terminal `backend`:
+
+```powershell
+$env:TEST_DATABASE_URL='postgresql://USER:PASSWORD@localhost:PORT/brewlite_t10b_test?schema=public'
+$env:DATABASE_URL=$env:TEST_DATABASE_URL
+npm run prisma:deploy
+npm run prisma:seed
+npm run test:database
+npm run test:e2e
+```
+
+Thay chuỗi kết nối bằng database kiểm thử của bạn; không dùng database demo hoặc dữ liệu thật. Bộ database kiểm tra thanh toán đồng thời, tranh kho và rollback; một số E2E khác dùng Prisma mock. Đóng terminal thử nghiệm sau khi chạy để không dùng nhầm biến kết nối cho ứng dụng.
+
+
+
+## Kết quả kiểm tra T10B (31/10/2026)
+
+- Backend: 72 unit test đạt; 44 E2E đạt khi truyền TEST_DATABASE_URL (gồm bài database T10A của Khoa; một số bài khác dùng Prisma mock).
+- PostgreSQL riêng: 7 integration test đạt, gồm hai service, request cùng/khác khóa, tranh kho và rollback.
+- Frontend: 25 unit test đạt; lint frontend/backend và build production đạt.
+- Demo với API/PostgreSQL thật: PAYMENT_FAILED → thử lại cùng đơn → PAID → xác nhận → reload → lịch sử đạt. Đã chạy lặp; trang xác nhận được điều hướng trực tiếp sau PAID.
+- Kiểm tra CARD + BREW10: subtotal 58.000đ, giảm 5.800đ, tổng 52.200đ; chỉ cộng 5 điểm một lần. Replay trả kết quả cũ; khác payload hoặc khóa mới cho đơn đã PAID trả 409.
+- Sửa cấu hình Tailwind/PostCSS để build Webpack production có CSS, kiểm tra lại ảnh desktop/mobile.
+- Ở lần kiểm tra ban đầu, demo chạy frontend/backend trên máy và PostgreSQL trong Docker, bằng database riêng. Lần build Compose khi đó bị gián đoạn do npm registry báo `EIDLETIMEOUT`; đây là ghi nhận lịch sử, không phải trạng thái hiện tại. Kết quả tích hợp mới nằm ở mục bên dưới.
+- Các kết quả trong mục ngày 31/10 là ghi nhận tại thời điểm kiểm tra ban đầu. T10A/T10B sau đó đã được tích hợp vào `task-10/backend-logic`; trang nhân viên được gộp qua PR #34 ngày 01/11/2026. Chưa gộp T10 vào `main`.
+
+- Kiểm tra mất phản hồi: API thật đã ghi PAID, chặn phản hồi ở trình duyệt rồi bấm lại; frontend gửi cùng Idempotency-Key và vào xác nhận thành công. Tổng 148 test tự động đạt (72 backend unit + 44 E2E + 7 PostgreSQL T10B + 25 frontend unit).
+
+
+## Kết quả kiểm tra tích hợp T10 (01/11/2026)
+
+Kiểm tra trên nhánh `task-10/backend-logic`, commit `16594da` (đã gộp trang nhân viên qua PR #34). Đối chiếu bốn yêu cầu nghiệp vụ ở mục 9 và Definition of Done ở mục 10 của đề BrewLite.
+
+| Hạng mục | Kết quả và phạm vi |
+| --- | --- |
+| Máy trạng thái đơn hàng | Có PENDING → PAID → PREPARING → READY → COMPLETED; unit test chặn chuyển sai và API nhân viên chặn bỏ qua bước pha chế |
+| Thanh toán idempotent | Cùng tài khoản/khóa/nội dung trả kết quả đã lưu; kiểm tra hai service độc lập gửi đồng thời, không trừ kho/cộng điểm/ghi Payment lặp |
+| Kiểm soát tồn kho | PostgreSQL thật kiểm tra nhiều đơn tranh nguyên liệu, cộng gộp nhu cầu size/topping và nguyên liệu dùng chung; transaction + optimistic locking không cho bán vượt tồn |
+| Khuyến mãi và điểm thưởng | Có kiểm tra mã, thời gian áp dụng, giá trị tối thiểu và mức giảm; cộng điểm sau PAID, không cộng lần hai khi gửi lại thanh toán |
+| Phân quyền nhân viên | Khách không truy cập API quản lý; nhân viên không tạo đơn/thanh toán; thu hồi quyền có hiệu lực với JWT cũ |
+| Điều chỉnh kho | Kiểm tra version, không cho tồn âm, lưu lịch sử trước/sau và rollback khi ghi lịch sử thất bại |
+
+Kết quả lệnh vừa chạy trên bản tích hợp:
+
+| Bộ kiểm tra | Kết quả |
+| --- | --- |
+| Backend unit test (`npm test`) | 72/72 đạt |
+| Backend E2E (`npm run test:e2e`) | 44/44 đạt; một số bài dùng Prisma mock, bài PostgreSQL T10A dùng database thử |
+| PostgreSQL (`npm run test:database`) | 16/16 đạt: 7 T10B + 9 phần nhân viên, trên database riêng có tên kết thúc `_test` |
+| Frontend unit test (`npm test`) | 25/25 đạt |
+| Lint và production build | Backend/frontend đều đạt |
+| Migration trên database thử | `prisma migrate deploy` đạt, không còn migration chờ áp dụng |
+
+Tổng 157 kiểm thử tự động đạt; con số này không có nghĩa là toàn bộ ca thử đều dùng database hoặc trình duyệt thật.
+
+Trước khi đổi tên project, Docker Compose của bản tích hợp (`brewlite-t09-check`) đã khởi động đủ ba dịch vụ: PostgreSQL và API `healthy`, web `Up`; cổng tương ứng 5432, 3001 và 3000. Đây là kết quả kiểm tra trạng thái container, không thay thế việc thử toàn bộ luồng giao diện. Cách chạy và các bước thử tay khách/nhân viên nằm ngay bên dưới.
+
+Nhánh đã có commit tích hợp. Kết quả kỹ thuật trên không thay thế review của thành viên nhóm; hoàn tất review trước khi gộp T10 vào `main`. Bản hiện tại chưa có phân trang hoặc tự cập nhật dữ liệu trang nhân viên; các giới hạn được ghi trong hướng dẫn sử dụng.
+
+
+## T10 — Trang nhân viên (phần mở rộng)
+
+Trang nhân viên bổ sung giao diện để theo dõi nguyên liệu và xử lý đơn đã thanh toán. Theo mục 3.2 của đề, giao diện nhân viên là phần mở rộng ngoài MVP; nghiệp vụ backend T10 vẫn được kiểm thử riêng.
+
+### Chức năng và tài khoản
+
+- **Khách hàng (`CUSTOMER`):** xem thực đơn, chọn món, giỏ hàng, thanh toán và xem đơn của mình.
+- **Nhân viên (`STAFF`):** đăng nhập sẽ vào `/staff`, dùng giao diện quản lý riêng và không có giỏ hàng. Tài khoản nhân viên không được tạo đơn hoặc thanh toán, kể cả gọi API trực tiếp. Muốn mua hàng thì dùng tài khoản khách riêng; đây là quy ước phân quyền của nhóm.
+- **Nguyên liệu:** tìm theo tên/mã, xem tồn và đơn vị; chọn **Nhập thêm** hoặc **Hao hụt**, nhập số lượng dương và lý do. Biểu mẫu hiển thị lượng tồn dự kiến trước khi lưu.
+- **Công thức:** xem định lượng S/M/L và số phần có thể pha theo nguyên liệu bắt buộc. Số phần tính riêng từng món, chưa bao gồm topping; không cộng các số này thành tổng tồn vì nhiều món dùng chung nguyên liệu.
+- **Topping:** tính là hàng đã chuẩn bị sẵn. Mỗi ly chọn trân châu dùng 30 g, kem sữa dùng 40 ml, thạch cà phê dùng 35 g theo công thức mẫu trong seed. Hệ thống chưa quản lý khâu chế biến topping từ nguyên liệu thô.
+- **Đơn hàng:** xem đơn đã thanh toán, lần lượt **Nhận pha chế → Đã pha xong → Đã giao khách**.
+- **Điểm thưởng:** chỉ xem điểm và lịch sử cộng điểm, không có chức năng chỉnh điểm thủ công.
+- **Lịch sử kho:** xem người thực hiện, thời gian, lý do và lượng tồn trước/sau mỗi lần nhân viên điều chỉnh. Phần này không phải lịch sử tiêu hao nguyên liệu của mọi lần bán hàng.
+
+Thêm giỏ và tạo đơn `PENDING` chưa trừ nguyên liệu. Khi thanh toán thành công, backend trừ nguyên liệu và cộng điểm một lần; thanh toán thất bại không thực hiện hai việc này. Cập nhật trạng thái pha chế không trừ kho hoặc cộng điểm thêm.
+
+### Chạy trang nhân viên bằng Docker
+
+1. Mở Docker Desktop, đợi **Engine running**. Tại thư mục gốc dự án, dùng file `.env` đã thiết lập theo hướng dẫn Docker phía trên rồi chạy:
+
+```powershell
+docker compose up --build -d
+docker compose ps
+```
+
+Đợi PostgreSQL và API báo `healthy`, web báo `Up`. API tự áp migration khi khởi động. Chỉ cần một bộ web/API/PostgreSQL cho cả khách và nhân viên; không cần chạy thêm backend hoặc frontend bằng npm cùng lúc.
+
+2. Nếu database mới chưa có món và công thức, tạo dữ liệu mẫu:
+
+```powershell
+docker compose exec api npm run prisma:seed
+```
+
+3. Mở <http://localhost:3000/register>, đăng ký một tài khoản dành cho nhân viên. Nếu tài khoản đã tồn tại trong database Docker này thì bỏ qua đăng ký.
+
+4. Người quản lý dự án cấp quyền trong terminal. Thay email bên dưới bằng **đúng email đã đăng ký**:
+
+```powershell
+docker compose exec api npm run staff:role -- nhanvien@example.com STAFF
+```
+
+Nếu báo `P2025` hoặc không tìm thấy bản ghi, email đó chưa có trong database đang chạy. Kiểm tra lại email và tài khoản trước khi cấp quyền; lệnh này không tự tạo tài khoản mới.
+
+5. Đăng xuất rồi đăng nhập lại tài khoản vừa cấp quyền. Trang sẽ chuyển tới <http://localhost:3000/staff>. Nếu vừa sửa code mà vẫn thấy giao diện cũ, đợi build hoàn tất và tải lại bằng **Ctrl + Shift + R**.
+
+Khi cần thu hồi quyền:
+
+```powershell
+docker compose exec api npm run staff:role -- nhanvien@example.com CUSTOMER
+```
+
+API đọc quyền từ database khi xác thực request. Sau khi thu hồi quyền, tài khoản không còn được dùng API nhân viên dù JWT cũ chưa hết hạn.
+
+Với cách chạy trực tiếp bằng Node, dùng hướng dẫn PostgreSQL → backend → frontend ở phần đầu README. Tại thư mục `backend`, chạy migration và cấp quyền cho tài khoản đã đăng ký trong database tương ứng:
+
+```powershell
+npm run prisma:generate
+npm run prisma:deploy
+npm run staff:role -- nhanvien@example.com STAFF
+```
+
+Sau đó chạy backend/frontend như bình thường. Database PostgreSQL trên máy và database trong Docker có thể là hai bộ dữ liệu khác nhau; tài khoản phải được tạo và cấp quyền trong đúng database đang dùng.
+
+### Kiểm tra thủ công
+
+| Bước | Thao tác | Kết quả cần thấy |
+| --- | --- | --- |
+| 1 | Khách đăng nhập và mở `/staff` | Bị từ chối, không thấy dữ liệu quản lý |
+| 2 | Đăng nhập tài khoản STAFF | Vào quầy, không có giỏ hàng; mở `/cart` hoặc `/checkout` sẽ quay lại `/staff` |
+| 3 | Trong Nguyên liệu, chọn Nhập thêm, nhập 100 và lý do | Tồn dự kiến tăng 100; lưu xong tồn tăng đúng 100, có lịch sử trước/sau |
+| 4 | Chọn Hao hụt, nhập số lượng lớn hơn tồn | Không cho lưu, không thay đổi kho |
+| 5 | Mở biểu mẫu cùng nguyên liệu ở hai tab; lưu tab đầu rồi lưu tab sau | Tab sau báo kho đã thay đổi, không ghi đè; bấm Làm mới và mở lại biểu mẫu để thử lại |
+| 6 | Khách thanh toán thành công, nhân viên bấm Làm mới | Đơn xuất hiện ở Chờ pha chế; kho giảm theo size/topping và điểm cộng theo T10A |
+| 7 | Nhân viên lần lượt nhận pha, pha xong, giao khách | Trạng thái PREPARING → READY → COMPLETED; kho và điểm không thay đổi thêm |
+| 8 | Khách thanh toán thất bại rồi thử lại | Giữ giỏ, thất bại không trừ kho/cộng điểm; thành công mới đưa đơn vào hàng đợi pha chế |
+| 9 | Thu hồi quyền STAFF rồi tải lại dữ liệu | API từ chối quyền truy cập nhân viên |
+
+Để quan sát hai bên cùng lúc, dùng cửa sổ Chrome bình thường cho khách và cửa sổ ẩn danh (**Ctrl + Shift + N**) cho nhân viên. Hai bên dùng tài khoản riêng nhưng chung database. Hai tab trong cùng phiên trình duyệt dùng chung đăng nhập.
+
+Trang chưa cập nhật tự động: bấm **Làm mới** để xem dữ liệu từ máy khác. API hiện giới hạn 100 đơn và 100 lần chỉnh kho gần nhất, 200 tài khoản, mỗi tài khoản 30 giao dịch điểm; chưa có phân trang hoặc bộ lọc trạng thái đơn. Đây là giới hạn kỹ thuật của bản hiện tại, không phải yêu cầu của đề. Tìm kiếm nguyên liệu áp dụng trên danh sách đã tải.
+
+### Kiểm thử tự động phần nhân viên
+
+`backend/test/staff.database-test.ts` kiểm tra NestJS, JWT và PostgreSQL thật: quyền 401/403; chặn khách tự cấp quyền; chặn nhân viên mua hàng; chỉnh kho đồng thời; dữ liệu sai/âm kho; thứ tự pha chế; điểm chỉ xem; rollback khi ghi lịch sử thất bại; thu hồi quyền.
+
+Để chạy lại, tạo database kiểm thử riêng có tên kết thúc bằng `_test`. Trong terminal tại `backend`, thay chuỗi kết nối bằng database thử của bạn:
+
+```powershell
+$env:TEST_DATABASE_URL='postgresql://USER:PASSWORD@localhost:PORT/brewlite_staff_test?schema=public'
+$env:DATABASE_URL=$env:TEST_DATABASE_URL
+npm run prisma:generate
+npm run prisma:deploy
+npm run test:database
+```
+
+Không dùng database demo hoặc dữ liệu thật cho kiểm thử. Lệnh `test:database` chạy cả bộ PostgreSQL T10B và bộ nhân viên.
+
+### Hủy đơn trong Task 10
+
+Theo sơ đồ Mục 9.1: cho phép `PENDING → CANCELLED`, `PAYMENT_FAILED → CANCELLED`, `PAID → CANCELLED`; không cho hủy từ `PREPARING`, `READY`, `COMPLETED`. Thanh toán thử lại đi qua `PAYMENT_FAILED → PENDING → PAID/PAYMENT_FAILED` trong cùng transaction.
+
+Nhân viên có thể hủy đơn PAID trước khi nhận pha. Backend khóa dòng đơn trong transaction, hoàn kho theo snapshot lượng đã trừ, tăng version nguyên liệu, ghi lịch sử và thu hồi đúng điểm của đơn một lần (giữ bản ghi điểm với `reversed=true`). Hủy lặp trả trạng thái CANCELLED hiện tại, không tạo chuyển tiếp mới hoặc hoàn kho thêm. Hủy đồng thời với nhận pha chỉ một yêu cầu thắng.
+
+Snapshot được ghi cùng transaction thanh toán. Đơn PAID cũ chưa có snapshot phải đối soát, API trả 409 và không thay đổi dữ liệu; không đoán lượng hoàn bằng công thức mới. Chức năng hủy/hoàn kho chưa thực hiện hoàn tiền qua cổng thanh toán. Payment giữ kết quả lần thanh toán gốc để replay Idempotency-Key không tạo lại tác động; xem trạng thái đơn mới nhất qua API đơn hàng.
+
+Migration mới chỉ thêm cột `Order.inventorySnapshot` và `LoyaltyTransaction.reversed`; không xóa dữ liệu. Khi chạy Docker, API tự migrate trước khi khởi động.
+
+### Kiểm tra số lượng trước khi thêm vào giỏ (T10)
+
+- Trang chi tiết kiểm tra công thức theo size và topping, có tính nguyên liệu dùng chung với các món đang có trong giỏ. Khóa topping không đủ hàng và chặn thêm vượt kho.
+- Trước khi thêm món hoặc tăng số lượng trong giỏ, ứng dụng gọi `POST /inventory/check-cart`; chỉ cập nhật giỏ khi đủ nguyên liệu. API này chỉ đọc, không giữ chỗ hoặc trừ kho.
+- Giỏ cập nhật tình trạng khi thay đổi lựa chọn, quay lại cửa sổ và mỗi 15 giây; khách có thể giảm số lượng hoặc sửa size/topping khi thiếu hàng.
+- Khi thanh toán vẫn kiểm tra lại trong transaction để chống bán vượt kho khi nhiều khách cùng mua. Menu hiển thị Còn hàng (số lượng)/Tạm hết hàng; số lượng được tính theo công thức size S không topping, nhưng nhãn không ghi size. Khi chọn size/topping, hệ thống kiểm tra lại theo lựa chọn thực tế.
+- Thử tay: cho đào chỉ đủ 3 ly size L, thêm trà đào L vào giỏ và tăng lên 3; nút tăng bị khóa và không thêm ly thứ 4 từ trang chi tiết. Thử topping hết và hai món dùng chung sữa.
+
+### Nhiều phần topping trên mỗi ly
+
+Dùng nút −/+ ở trang chi tiết hoặc khung sửa giỏ. Ví dụ một ly thêm hai phần thạch gửi `toppings: ["jelly", "jelly"]`; mảng mã lặp giữ tương thích đơn cũ, mỗi mã tương ứng một phần. Tổng tối đa 30 phần mỗi ly để giới hạn đầu vào, không phải quy định của đề. Giá và lượng nguyên liệu đều nhân số phần rồi nhân số ly; backend tự tính giá. Chi tiết đơn hiển thị ví dụ `Thạch cà phê × 2` tương ứng số phần trên mỗi ly.
+
+Chỉ cho lưu size/topping khi dòng sau sửa đủ kho, có tính các dòng khác. Nút thanh toán mờ và bị chặn khi giỏ thiếu hàng hoặc chưa kiểm tra xong. Kiểm thử tay: 1 ly + 2 phần thạch; 2 ly + 2 phần thạch mỗi ly; đổi size làm thiếu kho thì không lưu được. Hủy một đơn PAID mới và đối chiếu kho/điểm/lịch sử; đơn PREPARING không có nút hủy.
