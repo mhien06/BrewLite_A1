@@ -46,10 +46,11 @@ export class StaffController {
     return this.staff.orders();
   }
   @Patch('orders/:id/status') status(
+    @CurrentUser() user: AuthUser,
     @Param('id', ParseIntPipe) id: number,
     @Body() dto: UpdateOrderStatusDto,
   ) {
-    return this.staff.updateStatus(id, dto);
+    return this.staff.updateStatus(id, dto, user.id);
   }
   @Get('loyalty') loyalty() {
     return this.staff.loyalty();

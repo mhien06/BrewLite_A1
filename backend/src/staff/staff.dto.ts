@@ -21,6 +21,6 @@ export class AdjustStockDto {
   reason!: string;
 }
 export class UpdateOrderStatusDto {
-  @IsIn(['PREPARING', 'READY', 'COMPLETED']) status!:
-    'PREPARING' | 'READY' | 'COMPLETED';
+  @IsIn(['PREPARING', 'READY', 'COMPLETED', 'CANCELLED']) status!:
+    'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
 }

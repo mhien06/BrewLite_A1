@@ -176,7 +176,8 @@ export class InventoryService {
         unit: r.ingredient.unit,
         stock: r.ingredient.stock,
         version: r.ingredient.version,
-        amountPerUnit: r.amount,
+        amountPerUnit:
+          r.amount * toppings.filter((code) => code === r.toppingCode).length,
         isRequired: r.isRequired,
       })),
     ];
@@ -387,6 +388,18 @@ export class InventoryService {
     // Bước 3: Xử lý lần lượt theo ID nguyên liệu để hạn chế deadlock.
     for (const demand of demands) {
       await this.deductOneIngredient(tx, demand);
+    }
+    // Lưu lượng THỰC TẾ đã trừ để hủy không phụ thuộc công thức hiện tại.
+    if (typeof tx.$executeRaw === 'function') {
+      await tx.order.update({
+        where: { id: orderId },
+        data: {
+          inventorySnapshot: demands.map((d) => ({
+            ingredientId: d.ingredientId,
+            amount: d.requiredAmount,
+          })),
+        },
+      });
     }
     return demands;
   }

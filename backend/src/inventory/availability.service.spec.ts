@@ -29,16 +29,14 @@ describe('Khả năng đáp ứng size/topping và cả giỏ', () => {
         findMany: vi.fn().mockResolvedValue([makeProduct(1), makeProduct(2)]),
       },
       toppingIngredient: {
-        findMany: vi
-          .fn()
-          .mockResolvedValue([
-            {
-              toppingCode: 'cream',
-              ingredientId: 2,
-              amount: 40,
-              ingredient: cream,
-            },
-          ]),
+        findMany: vi.fn().mockResolvedValue([
+          {
+            toppingCode: 'cream',
+            ingredientId: 2,
+            amount: 40,
+            ingredient: cream,
+          },
+        ]),
       },
     };
     const prisma = {
@@ -101,6 +99,18 @@ describe('Khả năng đáp ứng size/topping và cả giỏ', () => {
       (await service.checkCart({ items: [item('M', 1, ['cream'])] })).available,
     ).toBe(false);
     expect((await service.checkCart({ items: [item()] })).available).toBe(true);
+  });
+  it('hai phần kem mỗi ly phải dùng gấp đôi kho', async () => {
+    cream.stock = 80;
+    const result = await service.checkCart({
+      items: [item('M', 1, ['cream', 'cream'])],
+    });
+    expect(result.available).toBe(true);
+    expect(result.items[0].maxQuantity).toBe(1);
+    expect(
+      (await service.checkCart({ items: [item('M', 2, ['cream', 'cream'])] }))
+        .available,
+    ).toBe(false);
   });
   it('giỏ trống hợp lệ, không tạo nhu cầu kho', async () => {
     expect(await service.checkCart({ items: [] })).toEqual({

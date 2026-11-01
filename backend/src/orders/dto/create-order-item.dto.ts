@@ -1,4 +1,4 @@
-import { ArrayUnique, IsArray, IsIn, IsInt, Min } from 'class-validator';
+import { ArrayMaxSize, IsArray, IsIn, IsInt, Min } from 'class-validator';
 
 export class CreateOrderItemDto {
   @IsInt()
@@ -13,7 +13,7 @@ export class CreateOrderItemDto {
   quantity!: number;
 
   @IsArray()
-  @ArrayUnique()
+  @ArrayMaxSize(30)
   @IsIn(['pearls', 'cream', 'jelly'], { each: true })
   toppings: string[] = [];
 }

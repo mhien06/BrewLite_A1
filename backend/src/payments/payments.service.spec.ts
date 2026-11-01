@@ -195,6 +195,8 @@ describe('PaymentsService', () => {
     tx.order.findUnique
       .mockReset()
       .mockResolvedValueOnce({ id: 10, status: OrderStatus.PAYMENT_FAILED })
+      .mockResolvedValueOnce({ id: 10, status: OrderStatus.PENDING })
+      .mockResolvedValueOnce({ id: 10, status: OrderStatus.PENDING })
       .mockResolvedValue({
         id: 10,
         userId: 7,
@@ -219,11 +221,17 @@ describe('PaymentsService', () => {
 
     expect(tx.order.updateMany).toHaveBeenCalledWith(
       expect.objectContaining({
-        where: { id: 10, status: OrderStatus.PAYMENT_FAILED },
+        where: { id: 10, status: OrderStatus.PENDING },
         data: expect.objectContaining({
           status: OrderStatus.PAID,
           paidAt: expect.any(Date),
         }),
+      }),
+    );
+    expect(tx.order.updateMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: 10, status: OrderStatus.PAYMENT_FAILED },
+        data: { status: OrderStatus.PENDING },
       }),
     );
     expect(loyalty.awardPointsForPaidOrder).toHaveBeenCalledTimes(1);

@@ -1184,12 +1184,24 @@ Không dùng database demo hoặc dữ liệu thật cho kiểm thử. Lệnh `t
 
 ### Hủy đơn trong Task 10
 
-Chỉ cho hủy đơn trước khi thanh toán thành công (`PENDING` hoặc `PAYMENT_FAILED`). Đơn `PAID` và `PREPARING` không được chuyển sang `CANCELLED` vì hệ thống chưa hỗ trợ hoàn tiền và hoàn kho sau thanh toán.
+Theo sơ đồ Mục 9.1: cho phép `PENDING → CANCELLED`, `PAYMENT_FAILED → CANCELLED`, `PAID → CANCELLED`; không cho hủy từ `PREPARING`, `READY`, `COMPLETED`. Thanh toán thử lại đi qua `PAYMENT_FAILED → PENDING → PAID/PAYMENT_FAILED` trong cùng transaction.
+
+Nhân viên có thể hủy đơn PAID trước khi nhận pha. Backend khóa dòng đơn trong transaction, hoàn kho theo snapshot lượng đã trừ, tăng version nguyên liệu, ghi lịch sử và thu hồi đúng điểm của đơn một lần (giữ bản ghi điểm với `reversed=true`). Hủy lặp trả trạng thái CANCELLED hiện tại, không tạo chuyển tiếp mới hoặc hoàn kho thêm. Hủy đồng thời với nhận pha chỉ một yêu cầu thắng.
+
+Snapshot được ghi cùng transaction thanh toán. Đơn PAID cũ chưa có snapshot phải đối soát, API trả 409 và không thay đổi dữ liệu; không đoán lượng hoàn bằng công thức mới. Chức năng hủy/hoàn kho chưa thực hiện hoàn tiền qua cổng thanh toán. Payment giữ kết quả lần thanh toán gốc để replay Idempotency-Key không tạo lại tác động; xem trạng thái đơn mới nhất qua API đơn hàng.
+
+Migration mới chỉ thêm cột `Order.inventorySnapshot` và `LoyaltyTransaction.reversed`; không xóa dữ liệu. Khi chạy Docker, API tự migrate trước khi khởi động.
 
 ### Kiểm tra số lượng trước khi thêm vào giỏ (T10)
 
-- Trang chi tiết kiểm tra công thức theo size và topping, có tính nguyên liệu dùng chung với các món đang có trong giỏ. Hiển thị số ly còn có thể thêm và khóa topping hết hàng.
+- Trang chi tiết kiểm tra công thức theo size và topping, có tính nguyên liệu dùng chung với các món đang có trong giỏ. Khóa topping không đủ hàng và chặn thêm vượt kho.
 - Trước khi thêm món hoặc tăng số lượng trong giỏ, ứng dụng gọi `POST /inventory/check-cart`; chỉ cập nhật giỏ khi đủ nguyên liệu. API này chỉ đọc, không giữ chỗ hoặc trừ kho.
 - Giỏ cập nhật tình trạng khi thay đổi lựa chọn, quay lại cửa sổ và mỗi 15 giây; khách có thể giảm số lượng hoặc sửa size/topping khi thiếu hàng.
-- Khi thanh toán vẫn kiểm tra lại trong transaction để chống bán vượt kho khi nhiều khách cùng mua. Con số ở Menu là ước tính size S không topping.
+- Khi thanh toán vẫn kiểm tra lại trong transaction để chống bán vượt kho khi nhiều khách cùng mua. Menu hiển thị Còn hàng (số lượng)/Tạm hết hàng; số lượng được tính theo công thức size S không topping, nhưng nhãn không ghi size. Khi chọn size/topping, hệ thống kiểm tra lại theo lựa chọn thực tế.
 - Thử tay: cho đào chỉ đủ 3 ly size L, thêm trà đào L vào giỏ và tăng lên 3; nút tăng bị khóa và không thêm ly thứ 4 từ trang chi tiết. Thử topping hết và hai món dùng chung sữa.
+
+### Nhiều phần topping trên mỗi ly
+
+Dùng nút −/+ ở trang chi tiết hoặc khung sửa giỏ. Ví dụ một ly thêm hai phần thạch gửi `toppings: ["jelly", "jelly"]`; mảng mã lặp giữ tương thích đơn cũ, mỗi mã tương ứng một phần. Tổng tối đa 30 phần mỗi ly để giới hạn đầu vào, không phải quy định của đề. Giá và lượng nguyên liệu đều nhân số phần rồi nhân số ly; backend tự tính giá. Chi tiết đơn hiển thị ví dụ `Thạch cà phê × 2` tương ứng số phần trên mỗi ly.
+
+Chỉ cho lưu size/topping khi dòng sau sửa đủ kho, có tính các dòng khác. Nút thanh toán mờ và bị chặn khi giỏ thiếu hàng hoặc chưa kiểm tra xong. Kiểm thử tay: 1 ly + 2 phần thạch; 2 ly + 2 phần thạch mỗi ly; đổi size làm thiếu kho thì không lưu được. Hủy một đơn PAID mới và đối chiếu kho/điểm/lịch sử; đơn PREPARING không có nút hủy.

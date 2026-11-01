@@ -121,7 +121,7 @@ export class AvailabilityService {
             : 0;
           const toppings = TOPPINGS.map((topping) => {
             const needs = new Map(line.baseNeeds);
-            for (const code of new Set([...line.item.toppings, topping.code]))
+            for (const code of [...line.item.toppings, topping.code])
               this.addNeeds(needs, toppingNeeds.get(code) ?? new Map());
             const ownNeeds = toppingNeeds.get(topping.code) ?? new Map();
             const configured = ownNeeds.size > 0 && line.configured;

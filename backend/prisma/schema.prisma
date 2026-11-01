@@ -68,6 +68,7 @@ model Order {
   discountAmount     Int                 @default(0)
   total              Int
   inventoryDeducted  Boolean             @default(false)
+  inventorySnapshot  Json?
   createdAt          DateTime            @default(now())
   items              OrderItem[]
   payments           Payment[]
@@ -110,6 +111,7 @@ model LoyaltyTransaction {
   userId    Int
   orderId   Int      @unique
   points    Int
+  reversed  Boolean  @default(false)
   createdAt DateTime @default(now())
   user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
   order     Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)

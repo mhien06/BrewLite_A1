@@ -22,13 +22,13 @@ describe('OrderStateService', () => {
     [OrderStatus.PENDING, OrderStatus.PAID],
     [OrderStatus.PENDING, OrderStatus.PAYMENT_FAILED],
     [OrderStatus.PENDING, OrderStatus.CANCELLED],
-    [OrderStatus.PAYMENT_FAILED, OrderStatus.PAID],
-    [OrderStatus.PAYMENT_FAILED, OrderStatus.PAYMENT_FAILED],
+
     [OrderStatus.PAYMENT_FAILED, OrderStatus.PENDING],
     [OrderStatus.PAYMENT_FAILED, OrderStatus.CANCELLED],
     [OrderStatus.PAID, OrderStatus.PREPARING],
     [OrderStatus.PREPARING, OrderStatus.READY],
     [OrderStatus.READY, OrderStatus.COMPLETED],
+    [OrderStatus.PAID, OrderStatus.CANCELLED],
   ])('allows %s -> %s', (from, to) => {
     expect(() => service.assertTransition(from, to)).not.toThrow();
   });
@@ -43,13 +43,15 @@ describe('OrderStateService', () => {
     [OrderStatus.COMPLETED, OrderStatus.COMPLETED],
     [OrderStatus.CANCELLED, OrderStatus.PAID],
     [OrderStatus.CANCELLED, OrderStatus.CANCELLED],
-    [OrderStatus.PAID, OrderStatus.CANCELLED],
+
     [OrderStatus.PREPARING, OrderStatus.CANCELLED],
+    [OrderStatus.PAYMENT_FAILED, OrderStatus.PAID],
+    [OrderStatus.PAYMENT_FAILED, OrderStatus.PAYMENT_FAILED],
   ])('rejects %s -> %s', (from, to) => {
     expect(() => service.assertTransition(from, to)).toThrow(ConflictException);
   });
 
-  it.each([OrderStatus.PAID, OrderStatus.PREPARING, OrderStatus.COMPLETED])(
+  it.each([OrderStatus.PREPARING, OrderStatus.COMPLETED])(
     'does not update when cancelling %s',
     async (status) => {
       prisma.order.findUnique.mockResolvedValue({

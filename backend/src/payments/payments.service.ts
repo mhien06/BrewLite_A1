@@ -284,7 +284,7 @@ export class PaymentsService {
       if (saved) return saved;
     }
 
-    const currentStatus = await this.readCurrentOrderStatus(
+    let currentStatus = await this.readCurrentOrderStatus(
       transaction,
       userId,
       dto.orderId,
@@ -294,7 +294,15 @@ export class PaymentsService {
       ? OrderStatus.PAID
       : OrderStatus.PAYMENT_FAILED;
 
-    // Gọi quy tắc chuyển trạng thái của Khoa, không viết lại quy tắc ở đây.
+    if (currentStatus === OrderStatus.PAYMENT_FAILED) {
+      await this.orderState.transition(
+        dto.orderId,
+        OrderStatus.PENDING,
+        transaction,
+      );
+      currentStatus = OrderStatus.PENDING;
+    }
+    // Kiểm tra trước khi trừ kho hoặc cộng điểm.
     this.orderState.assertTransition(currentStatus, nextStatus);
     return this.applyPayment(transaction, userId, dto, key);
   }
