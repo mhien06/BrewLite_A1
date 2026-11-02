@@ -61,16 +61,24 @@ export async function loginApi(
 ): Promise<AuthResponse> {
   const endpoint = `${API_BASE_URL.replace(/\/$/, '')}/auth/login`;
 
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
-    },
-    body: JSON.stringify({ email, password }),
-  });
+  let res: Response;
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+  } catch {
+    throw new AuthServiceError('Không thể kết nối máy chủ. Vui lòng thử lại.');
+  }
 
   if (!res.ok) {
+    if (res.status === 401) {
+      throw new AuthServiceError('Email hoặc mật khẩu không hợp lệ.', res.status);
+    }
     const message = await parseErrorMessage(
       res,
       'Đăng nhập thất bại. Vui lòng kiểm tra lại thông tin.',

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth.store";
+import { placeLoginError } from "./login-errors";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,10 +12,8 @@ export default function LoginPage() {
   const isLoading = useAuthStore((state) => state.isLoading);
   const storeError = useAuthStore((state) => state.error);
   const clearError = useAuthStore((state) => state.clearError);
-  const loginError = storeError?.toLowerCase().includes("failed to fetch")
-    ? "Email hoặc mật khẩu không hợp lệ"
-    : storeError;
-
+  const { emailError: apiEmailError, passwordError: apiPasswordError, formError } =
+    placeLoginError(storeError);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -111,8 +110,8 @@ export default function LoginPage() {
               name="email"
               type="email"
               autoComplete="email"
-              aria-invalid={Boolean(fieldErrors.email)}
-              aria-describedby={fieldErrors.email ? "email-error" : undefined}
+              aria-invalid={Boolean(fieldErrors.email || apiEmailError)}
+              aria-describedby={fieldErrors.email || apiEmailError ? "email-error" : undefined}
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
@@ -122,9 +121,9 @@ export default function LoginPage() {
               placeholder="ten@example.com"
               className="mt-1.5 w-full rounded-xl border border-[#ead8c7] bg-white px-4 py-2.5 text-sm text-[#40241b] transition focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
             />
-            {fieldErrors.email && (
+            {(fieldErrors.email || apiEmailError) && (
               <p id="email-error" role="alert" className="mt-1.5 text-sm text-red-700">
-                {fieldErrors.email}
+                {fieldErrors.email || apiEmailError}
               </p>
             )}
           </div>
@@ -142,9 +141,9 @@ export default function LoginPage() {
                 name="password"
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
-                aria-invalid={Boolean(fieldErrors.password || loginError)}
+                aria-invalid={Boolean(fieldErrors.password || apiPasswordError)}
                 aria-describedby={
-                  fieldErrors.password || loginError ? "password-error" : undefined
+                  fieldErrors.password || apiPasswordError ? "password-error" : undefined
                 }
                 value={password}
                 onChange={(e) => {
@@ -188,12 +187,18 @@ export default function LoginPage() {
                 </svg>
               </button>
             </div>
-            {(fieldErrors.password || loginError) && (
+            {(fieldErrors.password || apiPasswordError) && (
               <p id="password-error" role="alert" className="mt-1.5 text-sm text-red-700">
-                {fieldErrors.password || loginError}
+                {fieldErrors.password || apiPasswordError}
               </p>
             )}
           </div>
+
+          {formError && (
+            <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700">
+              {formError}
+            </p>
+          )}
 
           <button
             type="submit"
