@@ -216,7 +216,7 @@ Các test T10 kiểm tra chuyển trạng thái sai, thanh toán lặp, tồn kh
 
 ### Kiểm tra trên main ngày 02/11/2026
 
-Bản mã nguồn được kiểm tra: commit `fe832a5` (đã merge T10 qua PR #35). Kết quả này được ghi nhận trước đợt dọn tài liệu và ảnh mẫu.
+Bản mã nguồn được kiểm tra: commit `005d1ef` (main ngày 02/11/2026). Đã chạy lại các kiểm tra dưới đây trên mã nguồn này.
 
 | Bộ kiểm tra | Kết quả xác nhận |
 |---|---|
@@ -226,9 +226,17 @@ Bản mã nguồn được kiểm tra: commit `fe832a5` (đã merge T10 qua PR #
 | Frontend lint — `npm run lint` | Đạt |
 | Backend build — `npm run build` | Đạt |
 | Frontend production build — `npm run build` | Đạt, dùng Webpack |
-| Kiểm tra khoảng trắng — `git diff --check` | Đạt tại thời điểm cập nhật README |
+| Docker Compose | Build và chạy đủ PostgreSQL/API/web; PostgreSQL/API healthy; trang chủ, đăng nhập, checkout, xác nhận, lịch sử và `GET /products` trả HTTP 200 |
+| URL API và Menu SSR | Menu server-side hiển thị dữ liệu seed; bundle browser dùng `http://localhost:18081`, không làm lộ hostname nội bộ `http://api:3001` |
+| Xác thực và lịch sử API | Đăng nhập demo, `/auth/me` và `/orders/me` trả 200; `/orders/me` không token trả 401 |
+| Giao diện trên Docker | Chụp menu, xác nhận đơn `#1` trạng thái `PAID` tổng `49.000đ`, và lịch sử khớp cùng mã/trạng thái/tổng tiền |
+| Seed và lưu dữ liệu | Seed chạy hai lần; số lượng Product/User/Promotion giữ nguyên (4/1/2); sau restart các dịch vụ healthy và dữ liệu vẫn 4/1/2 |
+| CSS production | Tài nguyên CSS được phục vụ HTTP 200 (49,789 bytes) |
+| Kiểm tra khoảng trắng — `git diff --check` | Đạt trên thay đổi tài liệu hiện tại |
 
-Bảng kiểm tra main ở trên chỉ ghi nhận unit test, lint và build. Kết quả E2E/PostgreSQL lịch sử nằm ở phần dưới; báo cáo kiểm thử bàn giao mới được tổng hợp tại comment GitHub. Chưa thực hiện demo thao tác đầy đủ trên trình duyệt hoặc đo thời gian phản hồi API theo tiêu chí hiệu năng.
+Bài kiểm tra Docker dùng project và volume riêng `brewlite-issue11-hiep`, không dùng hoặc xóa volume đang làm việc. Build production Next.js dùng Webpack. Đã kiểm tra giao diện desktop và đối chiếu xác nhận/lịch sử qua ảnh; chưa kiểm tra viewport mobile hoặc đo thời gian phản hồi API theo tiêu chí hiệu năng.
+
+Log Docker/HTTP, báo cáo bàn giao và ảnh của Hiệp: [`docs/evidence/issue-11-hiep-docker-readme.log`](docs/evidence/issue-11-hiep-docker-readme.log), [`docs/evidence/issue-11-hiep-docker-readme.md`](docs/evidence/issue-11-hiep-docker-readme.md), [`docs/evidence/issue-11-hiep/`](docs/evidence/issue-11-hiep/).
 
 ### Kết quả theo từng task T01–T10
 
