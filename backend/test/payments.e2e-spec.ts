@@ -28,6 +28,7 @@ describe('Payments API (e2e)', () => {
     loyaltyPoints: 0,
     createdAt: new Date(),
   };
+  const awardedOrders = new Set<number>();
 
   type MockOrder = {
     id: number;
@@ -62,6 +63,10 @@ describe('Payments API (e2e)', () => {
 
         return Promise.resolve(null);
       }),
+      update: vi.fn().mockImplementation(({ data }) => {
+        mockUser.loyaltyPoints += data.loyaltyPoints.increment;
+        return Promise.resolve(mockUser);
+      }),
     },
     order: {
       findFirst: vi.fn().mockImplementation(({ where }) => {
@@ -74,15 +79,29 @@ describe('Payments API (e2e)', () => {
 
         return Promise.resolve(null);
       }),
-      update: vi.fn().mockImplementation(({ data }) => {
-        mockOrder = {
-          ...mockOrder,
-          ...data,
-        };
-
-        return Promise.resolve(mockOrder);
+      findUnique: vi.fn().mockImplementation(({ where }) =>
+        where.id === mockOrder.id ? Promise.resolve(mockOrder) : Promise.resolve(null),
+      ),
+      updateMany: vi.fn().mockImplementation(({ where, data }) => {
+        if (where.id !== mockOrder.id || where.status !== mockOrder.status) {
+          return Promise.resolve({ count: 0 });
+        }
+        mockOrder = { ...mockOrder, ...data };
+        return Promise.resolve({ count: 1 });
+      }),
+      findUniqueOrThrow: vi.fn().mockImplementation(() => Promise.resolve(mockOrder)),
+    },
+    loyaltyTransaction: {
+      createMany: vi.fn().mockImplementation(({ data }) => {
+        const entry = data[0] as { orderId: number };
+        if (awardedOrders.has(entry.orderId)) {
+          return Promise.resolve({ count: 0 });
+        }
+        awardedOrders.add(entry.orderId);
+        return Promise.resolve({ count: 1 });
       }),
     },
+    $transaction: vi.fn().mockImplementation((callback) => callback(mockPrisma)),
   };
 
   beforeAll(async () => {
@@ -128,6 +147,8 @@ describe('Payments API (e2e)', () => {
       total: 58_000,
       createdAt: new Date(),
     };
+    mockUser.loyaltyPoints = 0;
+    awardedOrders.clear();
   });
 
   it('returns 401 without an access token', () => {
@@ -191,6 +212,7 @@ describe('Payments API (e2e)', () => {
       total: 58_000,
     });
     expect(response.body.paidAt).toEqual(expect.any(String));
+    expect(mockUser.loyaltyPoints).toBe(5);
   });
 
   it('allows a failed payment to be retried', async () => {
@@ -215,6 +237,7 @@ describe('Payments API (e2e)', () => {
       .expect(200);
 
     expect(response.body.status).toBe(OrderStatus.PAID);
+    expect(mockUser.loyaltyPoints).toBe(5);
   });
 
   it('rejects an order that is already paid', async () => {

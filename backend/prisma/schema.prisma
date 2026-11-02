@@ -7,29 +7,48 @@ datasource db {
   provider = "postgresql"
 }
 
+enum UserRole {
+  CUSTOMER
+  STAFF
+}
+
 model User {
-  id            Int      @id @default(autoincrement())
-  email         String   @unique
-  name          String   @default("KHACH HANG")
-  passwordHash  String
-  loyaltyPoints Int      @default(0)
-  createdAt     DateTime @default(now())
-  orders        Order[]
+  role                UserRole             @default(CUSTOMER)
+  inventoryMovements  InventoryMovement[]
+  id                  Int                  @id @default(autoincrement())
+  email               String               @unique
+  name                String               @default("KHACH HANG")
+  passwordHash        String
+  loyaltyPoints       Int                  @default(0)
+  createdAt           DateTime             @default(now())
+  orders              Order[]
+  payments            Payment[]
+  loyaltyTransactions LoyaltyTransaction[]
 }
 
 model Product {
-  id         Int         @id @default(autoincrement())
+  id         Int                 @id @default(autoincrement())
   name       String
   price      Int
   imageUrl   String
-  stock      Int         @default(0)
+  stock      Int                 @default(0)
   orderItems OrderItem[]
+  recipes    ProductIngredient[]
 }
 
 enum OrderStatus {
   PENDING
   PAID
   PAYMENT_FAILED
+  PREPARING
+  READY
+  COMPLETED
+  CANCELLED
+}
+
+enum PromotionType {
+  PERCENT
+  FIXED_AMOUNT
 }
 
 enum PaymentMethod {
@@ -38,15 +57,22 @@ enum PaymentMethod {
 }
 
 model Order {
-  id        Int         @id @default(autoincrement())
-  userId    Int
-  user      User        @relation(fields: [userId], references: [id], onDelete: Restrict)
-  status    OrderStatus @default(PENDING)
-  paymentMethod PaymentMethod?
-  paidAt       DateTime?
-  total     Int
-  createdAt DateTime    @default(now())
-  items     OrderItem[]
+  id                 Int                 @id @default(autoincrement())
+  userId             Int
+  user               User                @relation(fields: [userId], references: [id], onDelete: Restrict)
+  status             OrderStatus         @default(PENDING)
+  paymentMethod      PaymentMethod?
+  paidAt             DateTime?
+  promotionCode      String?
+  subtotal           Int                 @default(0)
+  discountAmount     Int                 @default(0)
+  total              Int
+  inventoryDeducted  Boolean             @default(false)
+  inventorySnapshot  Json?
+  createdAt          DateTime            @default(now())
+  items              OrderItem[]
+  payments           Payment[]
+  loyaltyTransaction LoyaltyTransaction?
 
   @@index([userId])
 }
@@ -65,4 +91,105 @@ model OrderItem {
 
   @@index([orderId])
   @@index([productId])
+}
+
+model Promotion {
+  id            Int           @id @default(autoincrement())
+  code          String        @unique
+  type          PromotionType
+  value         Int
+  minOrderTotal Int
+  maxDiscount   Int?
+  startsAt      DateTime?
+  expiresAt     DateTime?
+  isActive      Boolean       @default(true)
+  createdAt     DateTime      @default(now())
+}
+
+model LoyaltyTransaction {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  orderId   Int      @unique
+  points    Int
+  reversed  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Restrict)
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@index([userId])
+}
+
+model Payment {
+  id              Int           @id @default(autoincrement())
+  userId          Int
+  orderId         Int
+  idempotencyKey  String
+  method          PaymentMethod
+  simulateSuccess Boolean       @default(true)
+  amount          Int
+  status          OrderStatus
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+  user            User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  order           Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+
+  @@unique([userId, idempotencyKey])
+  @@index([orderId])
+}
+
+model InventoryMovement {
+  id           Int        @id @default(autoincrement())
+  ingredientId Int
+  actorId      Int
+  delta        Int
+  before       Int
+  after        Int
+  reason       String
+  createdAt    DateTime   @default(now())
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+  actor        User       @relation(fields: [actorId], references: [id], onDelete: Restrict)
+
+  @@index([ingredientId, createdAt])
+}
+
+model Ingredient {
+  movements      InventoryMovement[]
+  id             Int                 @id @default(autoincrement())
+  code           String              @unique
+  name           String
+  unit           String
+  stock          Int                 @default(0)
+  version        Int                 @default(1)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+  productRecipes ProductIngredient[]
+  toppingRecipes ToppingIngredient[]
+}
+
+model ProductIngredient {
+  id           Int        @id @default(autoincrement())
+  productId    Int
+  ingredientId Int
+  amountS      Int
+  amountM      Int
+  amountL      Int
+  isRequired   Boolean    @default(true)
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@unique([productId, ingredientId])
+  @@index([productId])
+  @@index([ingredientId])
+}
+
+model ToppingIngredient {
+  id           Int        @id @default(autoincrement())
+  toppingCode  String
+  ingredientId Int
+  amount       Int
+  isRequired   Boolean    @default(true)
+  ingredient   Ingredient @relation(fields: [ingredientId], references: [id], onDelete: Restrict)
+
+  @@unique([toppingCode, ingredientId])
+  @@index([toppingCode])
 }

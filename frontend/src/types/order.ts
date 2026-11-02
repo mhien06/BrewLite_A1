@@ -1,6 +1,13 @@
-import type { PaymentMethod } from '@/types/checkout';
+import type { PaymentMethod } from "@/types/checkout";
 
-export type OrderStatus = 'PENDING' | 'PAID' | 'PAYMENT_FAILED';
+export type OrderStatus =
+  | "PENDING"
+  | "PAID"
+  | "PAYMENT_FAILED"
+  | "PREPARING"
+  | "READY"
+  | "COMPLETED"
+  | "CANCELLED";
 
 export interface OrderItemProduct {
   id: number;

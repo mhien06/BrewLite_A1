@@ -1,23 +1,14 @@
-'use client';
+"use client";
 
-import { useEffect } from 'react';
-import Link from 'next/link';
-import { useAuthStore } from '@/stores/auth.store';
-import {
-  selectTotalQuantity,
-  useCartStore,
-} from '@/stores/cart.store';
+import Link from "next/link";
+import { useAuthStore } from "@/stores/auth.store";
+import { selectTotalQuantity, useCartStore } from "@/stores/cart.store";
 
 export default function Header() {
   const totalQuantity = useCartStore(selectTotalQuantity);
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
   const logout = useAuthStore((state) => state.logout);
-  const initialize = useAuthStore((state) => state.initialize);
-
-  useEffect(() => {
-    initialize();
-  }, [initialize]);
 
   return (
     <header className="sticky top-0 z-40 w-full border-b border-amber-900/10 bg-amber-50/80 backdrop-blur-md">
@@ -79,11 +70,19 @@ export default function Header() {
               >
                 Đơn hàng
               </Link>
+              {user.role === "STAFF" && (
+                <Link
+                  href="/staff"
+                  className="rounded-full bg-amber-800 px-3 py-2 text-xs font-bold text-white"
+                >
+                  Quầy nhân viên
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={() => {
                   logout();
-                  window.dispatchEvent(new Event('brewlite:logout'));
+                  window.dispatchEvent(new Event("brewlite:logout"));
                 }}
                 className="inline-flex items-center rounded-full border border-amber-900/15 bg-white px-3 py-1.5 text-xs font-bold text-amber-950 transition hover:bg-amber-100 sm:px-3.5 sm:py-2"
                 aria-label="Đăng xuất"

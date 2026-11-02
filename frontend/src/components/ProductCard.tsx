@@ -1,9 +1,9 @@
-'use client';
+"use client";
 
-import React, { useState } from 'react';
-import Image from 'next/image';
-import Link from 'next/link';
-import { Product } from '@/types/product';
+import React, { useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { Product } from "@/types/product";
 
 interface ProductCardProps {
   product: Product;
@@ -13,16 +13,16 @@ export default function ProductCard({ product }: ProductCardProps) {
   const [imageError, setImageError] = useState(false);
   const isAvailable = product.stock > 0;
 
-  const formattedPrice = new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
+  const formattedPrice = new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
   }).format(product.price);
 
   return (
     <article
       data-testid={`product-card-${product.id}`}
       className={`group relative flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-amber-900/10 bg-white shadow-xs transition-all duration-300 hover:-translate-y-1 hover:shadow-lg hover:shadow-amber-950/10 ${
-        !isAvailable ? 'opacity-75 grayscale-25' : ''
+        !isAvailable ? "opacity-75 grayscale-25" : ""
       }`}
     >
       {/* Product Image Container */}
@@ -35,7 +35,7 @@ export default function ProductCard({ product }: ProductCardProps) {
             sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
             className="object-cover transition-transform duration-500 ease-out group-hover:scale-105"
             onError={() => setImageError(true)}
-            unoptimized={product.imageUrl.includes('placehold.co')}
+            unoptimized={product.imageUrl.includes("placehold.co")}
           />
         ) : (
           <div className="flex h-full w-full flex-col items-center justify-center bg-gradient-to-br from-amber-50 to-amber-200/60 p-4 text-amber-800/70">
@@ -66,7 +66,12 @@ export default function ProductCard({ product }: ProductCardProps) {
           {isAvailable ? (
             <span className="inline-flex items-center gap-1 truncate rounded-full bg-white/90 px-2.5 py-1 text-xs font-semibold text-emerald-800 shadow-xs backdrop-blur-xs ring-1 ring-emerald-600/20">
               <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-600"></span>
-              <span className="truncate">Còn hàng ({product.stock})</span>
+              <span
+
+                className="truncate"
+              >
+                Còn hàng ({product.stock})
+              </span>
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 truncate rounded-full bg-stone-900/80 px-2.5 py-1 text-xs font-semibold text-stone-200 shadow-xs backdrop-blur-xs">
@@ -90,7 +95,7 @@ export default function ProductCard({ product }: ProductCardProps) {
             </Link>
           </h3>
           <p className="mt-1 text-xs text-stone-500">
-            Mã món: #{String(product.id).padStart(3, '0')}
+            Mã món: #{String(product.id).padStart(3, "0")}
           </p>
         </div>
 
@@ -104,10 +109,10 @@ export default function ProductCard({ product }: ProductCardProps) {
 
           <span
             className={`text-xs font-semibold ${
-              isAvailable ? 'text-amber-700' : 'text-stone-600'
+              isAvailable ? "text-amber-700" : "text-stone-600"
             }`}
           >
-            {isAvailable ? 'Sẵn sàng phục vụ' : 'Hẹn lần sau'}
+            {isAvailable ? "Sẵn sàng phục vụ" : "Hẹn lần sau"}
           </span>
         </div>
       </div>

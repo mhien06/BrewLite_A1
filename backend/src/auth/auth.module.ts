@@ -1,3 +1,4 @@
+import { CustomerGuard } from './guards/customer.guard.js';
 import { Module } from '@nestjs/common';
 import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
@@ -22,7 +23,13 @@ import { JwtStrategy } from './strategies/jwt.strategy.js';
     }),
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtAuthGuard],
-  exports: [AuthService, JwtAuthGuard, PassportModule, JwtModule],
+  providers: [AuthService, JwtStrategy, JwtAuthGuard, CustomerGuard],
+  exports: [
+    AuthService,
+    JwtAuthGuard,
+    CustomerGuard,
+    PassportModule,
+    JwtModule,
+  ],
 })
 export class AuthModule {}

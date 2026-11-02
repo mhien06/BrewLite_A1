@@ -7,7 +7,23 @@ interface PendingOrder {
   cartFingerprint: string;
 }
 
+interface PaymentAttempt {
+  userId: number;
+  orderId: number;
+  method: string;
+  simulateSuccess: boolean;
+  key: string;
+}
+
 interface CheckoutStore {
+  paymentAttempt: PaymentAttempt | null;
+  getPaymentKey: (
+    userId: number,
+    orderId: number,
+    method: string,
+    simulateSuccess: boolean,
+  ) => string;
+  clearPaymentAttempt: () => void;
   pendingOrder: PendingOrder | null;
   setPendingOrder: (
     userId: number,
@@ -39,7 +55,25 @@ export const isCheckoutContextCurrent = (
   submitted.token === currentToken &&
   submitted.cartFingerprint === createCartFingerprint(currentItems);
 
-export const useCheckoutStore = create<CheckoutStore>((set) => ({
+export const useCheckoutStore = create<CheckoutStore>((set, get) => ({
+  paymentAttempt: null,
+  getPaymentKey: (userId, orderId, method, simulateSuccess) => {
+    const previous = get().paymentAttempt;
+    // Mất mạng chưa biết kết quả: gửi lại đúng khóa cũ để không trả tiền hai lần.
+    if (
+      previous &&
+      previous.userId === userId &&
+      previous.orderId === orderId &&
+      previous.method === method &&
+      previous.simulateSuccess === simulateSuccess
+    ) {
+      return previous.key;
+    }
+    const key = `checkout-${orderId}-${crypto.randomUUID()}`;
+    set({ paymentAttempt: { userId, orderId, method, simulateSuccess, key } });
+    return key;
+  },
+  clearPaymentAttempt: () => set({ paymentAttempt: null }),
   pendingOrder: null,
 
   setPendingOrder: (userId, orderId, cartFingerprint) =>
