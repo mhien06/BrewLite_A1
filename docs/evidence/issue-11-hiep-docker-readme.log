@@ -1,0 +1,26 @@
+Issue #11 Hiệp Docker/README verification
+Commit: 005d1ef
+Date: 2026-11-02
+
+Compose status:
+SERVICE    STATE     <no value>   PORTS
+api        running   healthy      0.0.0.0:18081->3001/tcp, [::]:18081->3001/tcp
+postgres   running   healthy      0.0.0.0:55433->5432/tcp, [::]:55433->5432/tcp
+web        running                0.0.0.0:18080->3000/tcp, [::]:18080->3000/tcp
+GET web: HTTP 200
+GET login: HTTP 200
+GET checkout: HTTP 200
+GET confirmation: HTTP 200
+GET orders: HTTP 200
+GET products-api: HTTP 200
+POST /auth/login with demo account: HTTP 200
+GET /auth/me with JWT: HTTP 200
+GET /orders/me with JWT: HTTP 200
+GET /orders/me without JWT: HTTP 401
+Production CSS: HTTP 200, 49789 bytes
+Manual desktop UI screenshots: menu has 4 products; confirmation order #1 PAID 49,000 VND; order history matches order #1/status/total.
+Product/User/Promotion after restart: 4|1|2
+Backend lint + unit: PASS (82/82)
+Frontend lint + unit: PASS (30/30)
+Docker production build: PASS
+Note: mobile viewport, performance, and payment failure/retry visual flow were not checked in this evidence set.
