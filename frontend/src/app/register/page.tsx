@@ -18,7 +18,12 @@ export default function RegisterPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    name?: string;
+    email?: string;
+    password?: string;
+    confirmPassword?: string;
+  }>({});
 
   useEffect(() => {
     clearError();
@@ -27,36 +32,36 @@ export default function RegisterPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLocalError(null);
+    setFieldErrors({});
     clearError();
 
     const normalizedName = name.trim().replace(/\s+/g, ' ');
     if (!normalizedName) {
-      setLocalError('Vui lòng nhập tên người dùng.');
+      setFieldErrors({ name: 'Vui lòng nhập tên người dùng.' });
       return;
     }
     if (!/^\p{Lu}+(?: \p{Lu}+)*$/u.test(normalizedName)) {
-      setLocalError('Tên người dùng chỉ gồm chữ cái và khoảng trắng, phải viết HOA và không được chứa số.');
+      setFieldErrors({ name: 'Tên người dùng chỉ gồm chữ cái và khoảng trắng, phải viết HOA và không được chứa số.' });
       return;
     }
     if (!email.trim()) {
-      setLocalError('Vui lòng nhập email.');
+      setFieldErrors({ email: 'Vui lòng nhập email.' });
       return;
     }
     if (!/^[a-zA-Z0-9._%+-]+@gmail\.com$/i.test(email.trim())) {
-      setLocalError('Email đăng ký phải có định dạng @gmail.com.');
+      setFieldErrors({ email: 'Email đăng ký phải có định dạng @gmail.com.' });
       return;
     }
     if (!password) {
-      setLocalError('Vui lòng nhập mật khẩu.');
+      setFieldErrors({ password: 'Vui lòng nhập mật khẩu.' });
       return;
     }
     if (password.length < 6) {
-      setLocalError('Mật khẩu phải có ít nhất 6 ký tự.');
+      setFieldErrors({ password: 'Mật khẩu phải có ít nhất 6 ký tự.' });
       return;
     }
     if (password !== confirmPassword) {
-      setLocalError('Mật khẩu xác nhận không khớp.');
+      setFieldErrors({ confirmPassword: 'Mật khẩu xác nhận không khớp.' });
       return;
     }
 
@@ -66,7 +71,17 @@ export default function RegisterPage() {
     }
   };
 
-  const errorMessage = localError || storeError;
+  const normalizedStoreError = storeError?.toLocaleLowerCase('vi');
+  const storeFieldError = normalizedStoreError?.includes('email')
+    ? 'email'
+    : normalizedStoreError?.includes('mật khẩu') ||
+        normalizedStoreError?.includes('password')
+      ? 'password'
+      : normalizedStoreError?.includes('tên') ||
+          normalizedStoreError?.includes('name')
+        ? 'name'
+        : null;
+  const generalStoreError = storeError && !storeFieldError ? storeError : null;
 
   return (
     <main className="mx-auto flex min-h-[calc(100vh-140px)] w-full max-w-md flex-col justify-center px-4 py-12 sm:px-6">
@@ -101,16 +116,7 @@ export default function RegisterPage() {
           </p>
         </div>
 
-        {errorMessage && (
-          <div
-            role="alert"
-            className="mt-6 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700"
-          >
-            {errorMessage}
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
           <div>
             <label
               htmlFor="name"
@@ -123,12 +129,24 @@ export default function RegisterPage() {
               name="name"
               type="text"
               autoComplete="name"
-              required
+              aria-invalid={Boolean(fieldErrors.name || storeFieldError === 'name')}
+              aria-describedby={
+                fieldErrors.name || storeFieldError === 'name' ? 'name-error' : undefined
+              }
               value={name}
-              onChange={(e) => setName(e.target.value.toLocaleUpperCase('vi-VN'))}
+              onChange={(e) => {
+                setName(e.target.value.toLocaleUpperCase('vi-VN'));
+                setFieldErrors((errors) => ({ ...errors, name: undefined }));
+                clearError();
+              }}
               placeholder="NGUYEN VAN A"
               className="mt-1.5 w-full rounded-xl border border-[#ead8c7] bg-white px-4 py-2.5 text-sm text-[#40241b] transition focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
             />
+            {(fieldErrors.name || storeFieldError === 'name') && (
+              <p id="name-error" role="alert" className="mt-1.5 text-sm text-red-700">
+                {fieldErrors.name || storeError}
+              </p>
+            )}
           </div>
 
           <div>
@@ -143,13 +161,24 @@ export default function RegisterPage() {
               name="email"
               type="email"
               autoComplete="email"
-              required
-              pattern="[A-Za-z0-9._%+-]+@gmail\.com"
+              aria-invalid={Boolean(fieldErrors.email || storeFieldError === 'email')}
+              aria-describedby={
+                fieldErrors.email || storeFieldError === 'email' ? 'email-error' : undefined
+              }
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setFieldErrors((errors) => ({ ...errors, email: undefined }));
+                clearError();
+              }}
               placeholder="user@gmail.com"
               className="mt-1.5 w-full rounded-xl border border-[#ead8c7] bg-white px-4 py-2.5 text-sm text-[#40241b] transition focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
             />
+            {(fieldErrors.email || storeFieldError === 'email') && (
+              <p id="email-error" role="alert" className="mt-1.5 text-sm text-red-700">
+                {fieldErrors.email || storeError}
+              </p>
+            )}
           </div>
 
           <div>
@@ -165,10 +194,22 @@ export default function RegisterPage() {
                 name="password"
                 type={showPassword ? 'text' : 'password'}
                 autoComplete="new-password"
-                required
-                minLength={6}
+                aria-invalid={Boolean(fieldErrors.password || storeFieldError === 'password')}
+                aria-describedby={
+                  fieldErrors.password || storeFieldError === 'password'
+                    ? 'password-error'
+                    : undefined
+                }
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setFieldErrors((errors) => ({
+                    ...errors,
+                    password: undefined,
+                    confirmPassword: undefined,
+                  }));
+                  clearError();
+                }}
                 placeholder="••••••••"
                 className="w-full rounded-xl border border-[#ead8c7] bg-white px-4 py-2.5 pr-12 text-sm text-[#40241b] transition focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
               />
@@ -196,6 +237,11 @@ export default function RegisterPage() {
                 </svg>
               </button>
             </div>
+            {(fieldErrors.password || storeFieldError === 'password') && (
+              <p id="password-error" role="alert" className="mt-1.5 text-sm text-red-700">
+                {fieldErrors.password || storeError}
+              </p>
+            )}
           </div>
 
           <div>
@@ -211,10 +257,16 @@ export default function RegisterPage() {
                 name="confirmPassword"
                 type={showConfirmPassword ? 'text' : 'password'}
                 autoComplete="new-password"
-                required
-                minLength={6}
+                aria-invalid={Boolean(fieldErrors.confirmPassword)}
+                aria-describedby={
+                  fieldErrors.confirmPassword ? 'confirm-password-error' : undefined
+                }
                 value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  setFieldErrors((errors) => ({ ...errors, confirmPassword: undefined }));
+                  clearError();
+                }}
                 placeholder="••••••••"
                 className="w-full rounded-xl border border-[#ead8c7] bg-white px-4 py-2.5 pr-12 text-sm text-[#40241b] transition focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
               />
@@ -242,7 +294,22 @@ export default function RegisterPage() {
                 </svg>
               </button>
             </div>
+            {fieldErrors.confirmPassword && (
+              <p
+                id="confirm-password-error"
+                role="alert"
+                className="mt-1.5 text-sm text-red-700"
+              >
+                {fieldErrors.confirmPassword}
+              </p>
+            )}
           </div>
+
+          {generalStoreError && (
+            <p role="alert" className="text-sm text-red-700">
+              {generalStoreError}
+            </p>
+          )}
 
           <button
             type="submit"
