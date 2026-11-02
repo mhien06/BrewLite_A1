@@ -7,8 +7,13 @@ describe('placeLoginError', () => {
     expect(placeLoginError(message)).toEqual({ emailError: message, passwordError: null, formError: null });
   });
 
-  it('places invalid credentials below password without identifying the account field', () => {
+  it('keeps invalid credentials in the shared form error area', () => {
     const message = 'Email ho\u1eb7c m\u1eadt kh\u1ea9u kh\u00f4ng h\u1ee3p l\u1ec7.';
+    expect(placeLoginError(message)).toEqual({ emailError: null, passwordError: null, formError: message });
+  });
+
+  it('places API password validation errors below the password field', () => {
+    const message = 'M\u1eadt kh\u1ea9u kh\u00f4ng \u0111\u01b0\u1ee3c v\u01b0\u1ee3t qu\u00e1 72 byte.';
     expect(placeLoginError(message)).toEqual({ emailError: null, passwordError: message, formError: null });
   });
 
