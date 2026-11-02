@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth.store";
+import { placeLoginError } from "./login-errors";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -11,11 +12,15 @@ export default function LoginPage() {
   const isLoading = useAuthStore((state) => state.isLoading);
   const storeError = useAuthStore((state) => state.error);
   const clearError = useAuthStore((state) => state.clearError);
-
+  const { emailError: apiEmailError, passwordError: apiPasswordError, formError } =
+    placeLoginError(storeError);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [localError, setLocalError] = useState<string | null>(null);
+  const [fieldErrors, setFieldErrors] = useState<{
+    email?: string;
+    password?: string;
+  }>({});
 
   useEffect(() => {
     clearError();
@@ -23,7 +28,7 @@ export default function LoginPage() {
     const handleLogout = () => {
       setEmail("");
       setPassword("");
-      setLocalError(null);
+      setFieldErrors({});
       clearError();
     };
 
@@ -36,15 +41,19 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setLocalError(null);
+    setFieldErrors({});
     clearError();
 
     if (!email.trim()) {
-      setLocalError("Vui lòng nhập email.");
+      setFieldErrors({ email: "Vui lòng nhập email." });
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setFieldErrors({ email: "Vui lòng nhập email hợp lệ." });
       return;
     }
     if (!password) {
-      setLocalError("Vui lòng nhập mật khẩu.");
+      setFieldErrors({ password: "Vui lòng nhập mật khẩu." });
       return;
     }
 
@@ -54,8 +63,6 @@ export default function LoginPage() {
       router.replace(user?.role === "STAFF" ? "/staff" : "/");
     }
   };
-
-  const errorMessage = localError || storeError;
 
   return (
     <main className="mx-auto flex min-h-[calc(100vh-140px)] w-full max-w-md flex-col justify-center px-4 py-12 sm:px-6">
@@ -90,15 +97,7 @@ export default function LoginPage() {
           </p>
         </div>
 
-        {errorMessage && (
-          <div
-            role="alert"
-            className="mt-6 rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700"
-          >
-            {errorMessage}
-          </div>
-        )}
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+        <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
           <div>
             <label
               htmlFor="email"
@@ -111,12 +110,22 @@ export default function LoginPage() {
               name="email"
               type="email"
               autoComplete="email"
-              required
+              aria-invalid={Boolean(fieldErrors.email || apiEmailError)}
+              aria-describedby={fieldErrors.email || apiEmailError ? "email-error" : undefined}
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => {
+                setEmail(e.target.value);
+                setFieldErrors((errors) => ({ ...errors, email: undefined }));
+                clearError();
+              }}
               placeholder="ten@example.com"
               className="mt-1.5 w-full rounded-xl border border-[#ead8c7] bg-white px-4 py-2.5 text-sm text-[#40241b] transition focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
             />
+            {(fieldErrors.email || apiEmailError) && (
+              <p id="email-error" role="alert" className="mt-1.5 text-sm text-red-700">
+                {fieldErrors.email || apiEmailError}
+              </p>
+            )}
           </div>
 
           <div>
@@ -132,9 +141,16 @@ export default function LoginPage() {
                 name="password"
                 type={showPassword ? "text" : "password"}
                 autoComplete="current-password"
-                required
+                aria-invalid={Boolean(fieldErrors.password || apiPasswordError)}
+                aria-describedby={
+                  fieldErrors.password || apiPasswordError ? "password-error" : undefined
+                }
                 value={password}
-                onChange={(e) => setPassword(e.target.value)}
+                onChange={(e) => {
+                  setPassword(e.target.value);
+                  setFieldErrors((errors) => ({ ...errors, password: undefined }));
+                  clearError();
+                }}
                 placeholder="••••••••"
                 className="w-full rounded-xl border border-[#ead8c7] bg-white px-4 py-2.5 pr-12 text-sm text-[#40241b] transition focus:border-amber-600 focus:outline-none focus:ring-2 focus:ring-amber-500/20"
               />
@@ -171,7 +187,18 @@ export default function LoginPage() {
                 </svg>
               </button>
             </div>
+            {(fieldErrors.password || apiPasswordError) && (
+              <p id="password-error" role="alert" className="mt-1.5 text-sm text-red-700">
+                {fieldErrors.password || apiPasswordError}
+              </p>
+            )}
           </div>
+
+          {formError && (
+            <p role="alert" className="rounded-xl border border-red-200 bg-red-50 p-3.5 text-sm text-red-700">
+              {formError}
+            </p>
+          )}
 
           <button
             type="submit"
