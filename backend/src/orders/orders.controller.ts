@@ -1,13 +1,6 @@
+import { ParseDatabaseIdPipe } from '../common/pipes/parse-database-id.pipe.js';
 import { CustomerGuard } from '../auth/guards/customer.guard.js';
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  ParseIntPipe,
-  Post,
-  UseGuards,
-} from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, UseGuards } from '@nestjs/common';
 import {
   CurrentUser,
   type AuthUser,
@@ -35,7 +28,7 @@ export class OrdersController {
   @Get(':id')
   findOne(
     @CurrentUser() user: AuthUser,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseDatabaseIdPipe) id: number,
   ) {
     return this.ordersService.findOne(user.id, id);
   }
