@@ -75,6 +75,17 @@ docker compose exec api npm run prisma:seed
 
 API tự chạy migration trước khi khởi động. Đợi API/PostgreSQL có trạng thái `healthy` và web ở trạng thái `Up` trước khi seed hoặc mở web.
 
+Nếu build bị chờ lâu ở `apt-get` hoặc `npm ci`, xem build log trước. Với Docker Engine hỗ trợ host build network, có thể thêm `BUILD_NETWORK=host` vào `.env` rồi chạy lại:
+
+```powershell
+docker compose build --no-cache
+docker compose up --no-build -d
+```
+
+`BUILD_NETWORK` chỉ chọn network cho build, mặc định là `default`; không thay đổi runtime network, port hoặc database. Đặt lại `BUILD_NETWORK=default` khi không cần. Không đổi dependency versions chỉ để xử lý lỗi kết nối tải package.
+
+Backend Docker build hiện fetch/install log của npm và thử lại `npm ci` tối đa 3 lần nếu install thất bại; download cache được giữ giữa các lần thử trong cùng build step. Nếu cả 3 lần đều lỗi, build vẫn dừng với exit code khác 0. Dependency versions tiếp tục lấy từ lockfile.
+
 | Thành phần | Địa chỉ mặc định |
 |---|---|
 | Trang khách hàng | http://localhost:3000 |
@@ -145,13 +156,13 @@ Frontend dùng `NEXT_PUBLIC_API_URL` cho trình duyệt và `API_URL_INTERNAL` c
 2. Cấp quyền cho tài khoản đã tồn tại:
 
 ```powershell
-docker compose exec api npm run staff:role -- nhanvien@example.com STAFF
+docker compose exec api npm run staff:role -- nhanvien@gmail.com STAFF
 ```
 
 3. Đăng xuất rồi đăng nhập lại và vào `/staff`. Để quan sát đồng thời khách và nhân viên, dùng hai trình duyệt hoặc một cửa sổ thường và một cửa sổ ẩn danh.
 4. Khi cần thu hồi quyền, thay `STAFF` bằng `CUSTOMER`.
 
-Nếu chạy trực tiếp, dùng `npm run staff:role -- nhanvien@example.com STAFF` tại thư mục `backend`.
+Nếu chạy trực tiếp, dùng `npm run staff:role -- nhanvien@gmail.com STAFF` tại thư mục `backend`.
 
 Nhân viên nhập/điều chỉnh kho kèm lý do, xem công thức và chuyển trạng thái đơn. Điểm thưởng chỉ được xem, không chỉnh thủ công.
 
@@ -214,25 +225,41 @@ Các test T10 kiểm tra chuyển trạng thái sai, thanh toán lặp, tồn kh
 
 ## 8. Kết quả kiểm tra
 
-### Kiểm tra trên main ngày 02/11/2026
+### Kiểm tra ngày 03/11/2026
 
-Bản mã nguồn được kiểm tra: commit `fe832a5` (đã merge T10 qua PR #35). Kết quả này được ghi nhận trước đợt dọn tài liệu và ảnh mẫu.
+Baseline: main `ddb3013`; bản sửa input validation: commit `901bbe9` trên nhánh `fix/a1-handover`. Các số dưới đây là kết quả chạy lại sau bản sửa, không cộng dồn kết quả lịch sử.
 
-| Bộ kiểm tra | Kết quả xác nhận |
+| Test suite / check | Kết quả |
 |---|---|
-| Backend unit — `npm test` | 82/82 test đạt, 14 file test |
-| Frontend unit — `npm test` | 30/30 test đạt, 6 file test |
-| Backend lint — `npm run lint` | Đạt |
-| Frontend lint — `npm run lint` | Đạt |
-| Backend build — `npm run build` | Đạt |
-| Frontend production build — `npm run build` | Đạt, dùng Webpack |
-| Kiểm tra khoảng trắng — `git diff --check` | Đạt tại thời điểm cập nhật README |
+| Backend unit test — `npm test` | 82/82, 14 test file |
+| Frontend unit test — `npm test` | 37/37, 8 test file |
+| Backend E2E test — `npm run test:e2e` | 102/102, 8 test file; gồm 58 HTTP regression test mới cho ID validation |
+| Database integration test — `npm run test:database` | 27/27, 3 test file; PostgreSQL riêng |
+| Tổng bốn test suite | 248/248 |
+| Backend/frontend lint — `npm run lint` | Đạt |
+| Backend/frontend build — `npm run build` | Đạt; frontend dùng Webpack |
 
-Bảng kiểm tra main ở trên chỉ ghi nhận unit test, lint và build. Kết quả E2E/PostgreSQL lịch sử nằm ở phần dưới; báo cáo kiểm thử bàn giao mới được tổng hợp tại comment GitHub. Chưa thực hiện demo thao tác đầy đủ trên trình duyệt hoặc đo thời gian phản hồi API theo tiêu chí hiệu năng.
+ID trong route params và DTO phải là số nguyên từ `1` đến `2147483647`. Invalid ID trả HTTP 400; ID hợp lệ nhưng không tồn tại vẫn trả HTTP 404. Áp dụng cho products, orders, payments, inventory/check-cart và các route ID của staff. Không thay đổi payment flow, stock logic hay authorization.
+
+Chạy riêng HTTP regression test tại `backend`:
+
+```powershell
+npx vitest run --config vitest.config.e2e.ts test/id-validation.e2e-spec.ts
+```
+
+Trên Docker runtime của bản sửa, HTTP smoke test đạt 35/35 và Chrome UI check đạt 21/21 với API/PostgreSQL thật. Đã kiểm tra đăng ký/đăng nhập, size/topping, cart, payment failure giữ cart, retry cùng order, confirmation sau reload và order history. Backend image đã cài dependency sạch bằng npm ci và build thành công; frontend image build đạt với build cache.
+
+Performance audit trước bản sửa trên main `ddb3013`: 300 request trên 10 endpoint, concurrency 1, max response time 72,74 ms, tất cả dưới 500 ms. Đây là kết quả local với sample data, chưa phải load test hay xác nhận mọi browser.
+
+Kết quả Docker clean build và runtime sau bản sửa được ghi tại [verification report](docs/verification-2026-11-03.md). UI test và technical verification không thay thế Sprint Review/nghiệm thu; minh chứng Scrum và nghiệm thu cuối được hoàn thiện riêng.
+
+### Kết quả lịch sử trên main ngày 02/11/2026
+
+Commit `fe832a5`: backend unit test 82/82; frontend unit test 30/30; lint/build hai ứng dụng đạt. Giữ mốc này để truy vết; không dùng làm số liệu của phiên bản hiện tại.
 
 ### Kết quả theo từng task T01–T10
 
-Bảng dưới tổng hợp kết quả đã ghi trong README trước khi rút gọn. Ngày là thời điểm kiểm tra từng task; số test là số được ghi nhận lúc đó, không cộng dồn và không đại diện cho số test hiện tại. Kết quả chạy lại trên main được ghi riêng ở bảng phía trên.
+Bảng dưới tổng hợp kết quả đã ghi trong README trước khi rút gọn. Ngày là thời điểm kiểm tra từng task; số test là số được ghi nhận lúc đó, không cộng dồn và không đại diện cho số test hiện tại. Kết quả chạy lại trên bản sửa từ main được ghi riêng ở bảng phía trên.
 
 | Task | Ngày kiểm tra | Nội dung và kết quả đã ghi nhận |
 |---|---|---|
@@ -259,18 +286,18 @@ Theo bản README trước khi rút gọn, ngày 01/11/2026 trên nhánh `task-1
 | PostgreSQL integration | 16/16 đạt: 7 T10B và 9 phần nhân viên |
 | Migration trên database thử | `prisma migrate deploy` đạt |
 
-Đây là kết quả lịch sử của bản mã nguồn nêu trên, chưa phải kết quả chạy lại trên main hiện tại. Khi kiểm thử bàn giao, cập nhật ngày, commit, kết quả thực tế và lỗi còn tồn tại vào mục này.
+Đây là kết quả lịch sử của commit nêu trên. Kết quả chạy lại ngày 03/11/2026 được ghi riêng phía trên và trong verification report.
 
 ## 9. Checklist demo và bàn giao A1
 
-- [ ] Khởi động được PostgreSQL, API và web bằng Compose.
-- [ ] Menu tải dữ liệu; mở món, đổi size/topping và kiểm tra giá.
-- [ ] Thêm giỏ, đổi số lượng, chỉnh sửa món, xóa và kiểm tra tổng tiền.
-- [ ] Đăng ký/đăng nhập; tạo đơn và thanh toán thành công, nút thanh toán hiện tổng tiền.
-- [ ] Trang xác nhận hiển thị mã/trạng thái; tải lại và kiểm tra lịch sử đơn.
-- [ ] Mô phỏng thanh toán thất bại: giữ giỏ, thử lại thành công.
-- [ ] Kiểm tra khuyến mãi, điểm thưởng, thiếu kho và các trường hợp T10 bằng test.
-- [ ] Chuẩn bị mã nguồn Git, Compose, README và kết quả kiểm thử thực tế.
+- [x] Khởi động được PostgreSQL, API và web bằng Compose.
+- [x] Menu tải dữ liệu; mở món, đổi size/topping và kiểm tra giá.
+- [x] Thêm giỏ, đổi số lượng, chỉnh sửa món, xóa và kiểm tra tổng tiền.
+- [x] Đăng ký/đăng nhập; tạo đơn và thanh toán thành công, nút thanh toán hiện tổng tiền.
+- [x] Trang xác nhận hiển thị mã/trạng thái; tải lại và kiểm tra lịch sử đơn.
+- [x] Mô phỏng thanh toán thất bại: giữ giỏ, thử lại thành công.
+- [x] Kiểm tra khuyến mãi, điểm thưởng, thiếu kho và các trường hợp T10 bằng test.
+- [x] Chuẩn bị mã nguồn Git, Compose, README và kết quả kiểm thử thực tế.
 - [ ] Sprint Review/Demo với giảng viên, trình bày Retrospective và ghi nhận phản hồi cho backlog.
 
-Checklist là nội dung cần kiểm tra khi bàn giao, không phải xác nhận mọi mục đã được nghiệm thu. Dự án A1 mô phỏng thanh toán, không kết nối cổng thanh toán thật.
+Các mục đã tích là technical verification ngày 03/11/2026, không thay thế nghiệm thu với giảng viên. Sprint Review, Sprint Retrospective và minh chứng Scrum được hoàn thiện riêng. Dự án A1 mô phỏng thanh toán, không kết nối cổng thanh toán thật.
