@@ -22,6 +22,7 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
+      network: ${BUILD_NETWORK:-default}
     restart: unless-stopped
     environment:
       PORT: 3001
@@ -51,6 +52,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      network: ${BUILD_NETWORK:-default}
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:3001}
     restart: unless-stopped

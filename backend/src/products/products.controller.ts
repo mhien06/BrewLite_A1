@@ -1,4 +1,5 @@
-import { Controller, Get, Param, ParseIntPipe } from '@nestjs/common';
+import { ParseDatabaseIdPipe } from '../common/pipes/parse-database-id.pipe.js';
+import { Controller, Get, Param } from '@nestjs/common';
 import type { Product } from '../generated/prisma/client.js';
 import { ProductsService } from './products.service.js';
 
@@ -12,7 +13,7 @@ export class ProductsController {
   }
 
   @Get(':id')
-  findOne(@Param('id', ParseIntPipe) id: number): Promise<Product> {
+  findOne(@Param('id', ParseDatabaseIdPipe) id: number): Promise<Product> {
     return this.productsService.findOne(id);
   }
 }

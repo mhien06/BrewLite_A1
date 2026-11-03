@@ -1,12 +1,5 @@
-import {
-  Body,
-  Controller,
-  Get,
-  Param,
-  ParseIntPipe,
-  Patch,
-  UseGuards,
-} from '@nestjs/common';
+import { ParseDatabaseIdPipe } from '../common/pipes/parse-database-id.pipe.js';
+import { Body, Controller, Get, Param, Patch, UseGuards } from '@nestjs/common';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import {
   CurrentUser,
@@ -37,7 +30,7 @@ export class StaffController {
   }
   @Patch('ingredients/:id') adjust(
     @CurrentUser() user: AuthUser,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseDatabaseIdPipe) id: number,
     @Body() dto: AdjustStockDto,
   ) {
     return this.staff.adjustStock(user.id, id, dto);
@@ -47,7 +40,7 @@ export class StaffController {
   }
   @Patch('orders/:id/status') status(
     @CurrentUser() user: AuthUser,
-    @Param('id', ParseIntPipe) id: number,
+    @Param('id', ParseDatabaseIdPipe) id: number,
     @Body() dto: UpdateOrderStatusDto,
   ) {
     return this.staff.updateStatus(id, dto, user.id);

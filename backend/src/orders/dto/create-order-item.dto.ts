@@ -1,8 +1,10 @@
-import { ArrayMaxSize, IsArray, IsIn, IsInt, Min } from 'class-validator';
+import { MAX_DATABASE_ID } from '../../common/database-id.js';
+import { ArrayMaxSize, IsArray, IsIn, IsInt, Max, Min } from 'class-validator';
 
 export class CreateOrderItemDto {
   @IsInt()
   @Min(1)
+  @Max(MAX_DATABASE_ID)
   productId!: number;
 
   @IsIn(['S', 'M', 'L'])
