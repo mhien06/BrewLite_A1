@@ -79,9 +79,13 @@ describe('Payments API (e2e)', () => {
 
         return Promise.resolve(null);
       }),
-      findUnique: vi.fn().mockImplementation(({ where }) =>
-        where.id === mockOrder.id ? Promise.resolve(mockOrder) : Promise.resolve(null),
-      ),
+      findUnique: vi
+        .fn()
+        .mockImplementation(({ where }) =>
+          where.id === mockOrder.id
+            ? Promise.resolve(mockOrder)
+            : Promise.resolve(null),
+        ),
       updateMany: vi.fn().mockImplementation(({ where, data }) => {
         if (where.id !== mockOrder.id || where.status !== mockOrder.status) {
           return Promise.resolve({ count: 0 });
@@ -89,7 +93,9 @@ describe('Payments API (e2e)', () => {
         mockOrder = { ...mockOrder, ...data };
         return Promise.resolve({ count: 1 });
       }),
-      findUniqueOrThrow: vi.fn().mockImplementation(() => Promise.resolve(mockOrder)),
+      findUniqueOrThrow: vi
+        .fn()
+        .mockImplementation(() => Promise.resolve(mockOrder)),
     },
     loyaltyTransaction: {
       createMany: vi.fn().mockImplementation(({ data }) => {
@@ -101,7 +107,9 @@ describe('Payments API (e2e)', () => {
         return Promise.resolve({ count: 1 });
       }),
     },
-    $transaction: vi.fn().mockImplementation((callback) => callback(mockPrisma)),
+    $transaction: vi
+      .fn()
+      .mockImplementation((callback) => callback(mockPrisma)),
   };
 
   beforeAll(async () => {
@@ -169,6 +177,18 @@ describe('Payments API (e2e)', () => {
       .send({
         orderId: mockOrder.id,
         method: 'CASH',
+        simulateSuccess: true,
+      })
+      .expect(400);
+  });
+
+  it('rejects VNPAY on the mock payment endpoint', () => {
+    return request(app.getHttpServer())
+      .post('/payments')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({
+        orderId: mockOrder.id,
+        method: PaymentMethod.VNPAY,
         simulateSuccess: true,
       })
       .expect(400);

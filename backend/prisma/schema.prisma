@@ -54,6 +54,7 @@ enum PromotionType {
 enum PaymentMethod {
   WALLET
   CARD
+  VNPAY
 }
 
 model Order {
@@ -120,18 +121,26 @@ model LoyaltyTransaction {
 }
 
 model Payment {
-  id              Int           @id @default(autoincrement())
-  userId          Int
-  orderId         Int
-  idempotencyKey  String
-  method          PaymentMethod
-  simulateSuccess Boolean       @default(true)
-  amount          Int
-  status          OrderStatus
-  paidAt          DateTime?
-  createdAt       DateTime      @default(now())
-  user            User          @relation(fields: [userId], references: [id], onDelete: Restrict)
-  order           Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  id                        Int           @id @default(autoincrement())
+  userId                    Int
+  orderId                   Int
+  idempotencyKey            String
+  method                    PaymentMethod
+  simulateSuccess           Boolean?      @default(true)
+  amount                    Int
+  status                    OrderStatus
+  paidAt                    DateTime?
+  providerTxnRef            String?       @unique
+  providerTransactionNo     String?
+  providerResponseCode      String?
+  providerTransactionStatus String?
+  providerPayDate           String?
+  providerBankCode          String?
+  expiresAt                 DateTime?
+  createdAt                 DateTime      @default(now())
+  updatedAt                 DateTime      @default(now()) @updatedAt
+  user                      User          @relation(fields: [userId], references: [id], onDelete: Restrict)
+  order                     Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
 
   @@unique([userId, idempotencyKey])
   @@index([orderId])

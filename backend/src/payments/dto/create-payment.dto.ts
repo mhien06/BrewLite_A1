@@ -1,5 +1,5 @@
 import { MAX_DATABASE_ID } from '../../common/database-id.js';
-import { IsBoolean, IsEnum, IsInt, Max, Min } from 'class-validator';
+import { IsBoolean, IsIn, IsInt, Max, Min } from 'class-validator';
 import { PaymentMethod } from '../../generated/prisma/client.js';
 
 export class CreatePaymentDto {
@@ -8,8 +8,8 @@ export class CreatePaymentDto {
   @Max(MAX_DATABASE_ID)
   orderId!: number;
 
-  @IsEnum(PaymentMethod)
-  method!: PaymentMethod;
+  @IsIn([PaymentMethod.WALLET, PaymentMethod.CARD])
+  method!: typeof PaymentMethod.WALLET | typeof PaymentMethod.CARD;
 
   @IsBoolean()
   simulateSuccess!: boolean;
