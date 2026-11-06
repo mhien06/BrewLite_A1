@@ -140,6 +140,21 @@ export class VnpayIpnService {
       currentStatus = OrderStatus.PENDING;
     }
 
+    if (currentStatus === OrderStatus.CANCELLED) {
+      // Gateway đã thu tiền dù BrewLite không còn phục vụ đơn này.
+      const paidAt = new Date();
+      await transaction.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: OrderStatus.PAID,
+          paidAt,
+          refundRequestedAt: paidAt,
+          ...this.providerResult(params),
+        },
+      });
+      return this.response('00', 'Confirm Success');
+    }
+
     if (currentStatus !== OrderStatus.PENDING) {
       return this.response('02', 'Order already confirmed');
     }

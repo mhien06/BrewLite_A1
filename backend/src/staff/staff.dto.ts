@@ -2,6 +2,7 @@ import { Transform } from 'class-transformer';
 import {
   IsIn,
   IsInt,
+  IsOptional,
   IsString,
   Max,
   MaxLength,
@@ -23,4 +24,6 @@ export class AdjustStockDto {
 export class UpdateOrderStatusDto {
   @IsIn(['PREPARING', 'READY', 'COMPLETED', 'CANCELLED']) status!:
     'PREPARING' | 'READY' | 'COMPLETED' | 'CANCELLED';
+
+  @IsOptional() @IsString() @MaxLength(200) reason?: string;
 }

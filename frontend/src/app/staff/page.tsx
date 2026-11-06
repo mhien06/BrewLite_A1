@@ -68,17 +68,14 @@ const toppingNames: Record<string, string> = {
 const buttonClass =
   "rounded-xl bg-amber-800 px-4 py-2.5 text-sm font-semibold text-white hover:bg-amber-900 disabled:opacity-50";
 
-const cardClass =
-  "rounded-2xl border border-stone-200 bg-white p-5";
+const cardClass = "rounded-2xl border border-stone-200 bg-white p-5";
 
 // Tính số phần có thể pha riêng cho một món và một size.
 function getAvailableUnits(
   product: Recipe,
   size: "amountS" | "amountM" | "amountL",
 ) {
-  const requiredRecipes = product.recipes.filter(
-    (recipe) => recipe.isRequired,
-  );
+  const requiredRecipes = product.recipes.filter((recipe) => recipe.isRequired);
 
   if (requiredRecipes.length === 0) return 0;
 
@@ -113,6 +110,9 @@ export default function StaffPage() {
   const [allowed, setAllowed] = useState(false);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [cancelOrderId, setCancelOrderId] = useState<number | null>(null);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState("");
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
 
@@ -141,9 +141,7 @@ export default function StaffPage() {
         if (!active) return;
 
         setError(
-          err instanceof Error
-            ? err.message
-            : "Không kết nối được máy chủ.",
+          err instanceof Error ? err.message : "Không kết nối được máy chủ.",
         );
       } finally {
         if (active) setLoading(false);
@@ -177,9 +175,7 @@ export default function StaffPage() {
       if (useAuthStore.getState().token !== token) return false;
 
       setAllowed(false);
-      setError(
-        err instanceof Error ? err.message : "Không tải được dữ liệu.",
-      );
+      setError(err instanceof Error ? err.message : "Không tải được dữ liệu.");
       return false;
     } finally {
       if (useAuthStore.getState().token === token) {
@@ -201,16 +197,11 @@ export default function StaffPage() {
     setNotice("");
 
     try {
-      await staffRequest(
-        token,
-        `ingredients/${selected.id}`,
-        "PATCH",
-        {
-          delta: Number(form.get("delta")),
-          version: selected.version,
-          reason: String(form.get("reason") || "").trim(),
-        },
-      );
+      await staffRequest(token, `ingredients/${selected.id}`, "PATCH", {
+        delta: Number(form.get("delta")),
+        version: selected.version,
+        reason: String(form.get("reason") || "").trim(),
+      });
 
       setSelected(null);
 
@@ -220,19 +211,23 @@ export default function StaffPage() {
         setNotice("Đã cập nhật nguyên liệu và lưu lịch sử kho.");
       }
     } catch (err) {
-      setError(
-        err instanceof Error ? err.message : "Không cập nhật được kho.",
-      );
+      setError(err instanceof Error ? err.message : "Không cập nhật được kho.");
     } finally {
       setBusy(false);
     }
   }
 
   // Chuyển đơn sang bước pha chế tiếp theo.
-  async function advance(order: Order, cancel = false) {
-    const next = cancel ? { status: "CANCELLED", label: "Hủy đơn" } : nextStatus[order.status];
+  function openCancellation(orderId: number) {
+    setCancelOrderId(orderId);
+    setCancelReason("");
+    setCancelError("");
+  }
 
-    if (!token || !next || busy) return;
+  async function advance(order: Order, reason?: string) {
+    const status =
+      reason === undefined ? nextStatus[order.status]?.status : "CANCELLED";
+    if (!token || !status || busy) return;
 
     setBusy(true);
     setError("");
@@ -240,20 +235,21 @@ export default function StaffPage() {
 
     try {
       await staffRequest(token, `orders/${order.id}/status`, "PATCH", {
-        status: next.status,
+        status,
+        reason,
       });
 
+      if (status === "CANCELLED") setCancelOrderId(null);
       const refreshed = await refresh();
 
       if (refreshed) {
         setNotice(`Đã cập nhật đơn #${order.id}.`);
       }
     } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Không cập nhật được đơn hàng.",
-      );
+      const message =
+        err instanceof Error ? err.message : "Không cập nhật được đơn hàng.";
+      if (status === "CANCELLED") setCancelError(message);
+      else setError(message);
     } finally {
       setBusy(false);
     }
@@ -261,6 +257,7 @@ export default function StaffPage() {
 
   function changeTab(index: number) {
     setTab(index);
+    setCancelOrderId(null);
     setSelected(null);
     setNotice("");
   }
@@ -288,10 +285,11 @@ export default function StaffPage() {
                 disabled={busy}
                 aria-pressed={tab === index}
                 onClick={() => changeTab(index)}
-                className={`shrink-0 rounded-xl px-4 py-3 text-left text-sm font-medium transition disabled:opacity-50 ${tab === index
-                  ? "bg-amber-800 text-white"
-                  : "text-stone-600 hover:bg-stone-100"
-                  }`}
+                className={`shrink-0 rounded-xl px-4 py-3 text-left text-sm font-medium transition disabled:opacity-50 ${
+                  tab === index
+                    ? "bg-amber-800 text-white"
+                    : "text-stone-600 hover:bg-stone-100"
+                }`}
               >
                 {label}
               </button>
@@ -303,9 +301,7 @@ export default function StaffPage() {
         <section className="min-w-0">
           <header className="mb-6 flex flex-wrap items-center justify-between gap-4">
             <div>
-              <p className="text-sm text-stone-500">
-                Khu vực nhân viên
-              </p>
+              <p className="text-sm text-stone-500">Khu vực nhân viên</p>
               <h2 className="mt-1 text-2xl font-bold tracking-tight">
                 {tabs[tab]}
               </h2>
@@ -381,8 +377,8 @@ export default function StaffPage() {
               {tab === 1 && (
                 <div className="space-y-5">
                   <p className="text-sm text-stone-500">
-                    Định lượng cho một ly. Số phần có thể pha chưa bao
-                    gồm topping; các món có thể dùng chung nguyên liệu.
+                    Định lượng cho một ly. Số phần có thể pha chưa bao gồm
+                    topping; các món có thể dùng chung nguyên liệu.
                   </p>
 
                   {data.recipes.length === 0 && (
@@ -422,9 +418,7 @@ export default function StaffPage() {
                               <th className="px-5 py-3 font-medium">S</th>
                               <th className="px-5 py-3 font-medium">M</th>
                               <th className="px-5 py-3 font-medium">L</th>
-                              <th className="px-5 py-3 font-medium">
-                                Đơn vị
-                              </th>
+                              <th className="px-5 py-3 font-medium">Đơn vị</th>
                             </tr>
                           </thead>
 
@@ -439,15 +433,9 @@ export default function StaffPage() {
                                     </span>
                                   )}
                                 </td>
-                                <td className="px-5 py-3">
-                                  {recipe.amountS}
-                                </td>
-                                <td className="px-5 py-3">
-                                  {recipe.amountM}
-                                </td>
-                                <td className="px-5 py-3">
-                                  {recipe.amountL}
-                                </td>
+                                <td className="px-5 py-3">{recipe.amountS}</td>
+                                <td className="px-5 py-3">{recipe.amountM}</td>
+                                <td className="px-5 py-3">{recipe.amountL}</td>
                                 <td className="px-5 py-3 text-stone-500">
                                   {recipe.ingredient.unit}
                                 </td>
@@ -479,8 +467,7 @@ export default function StaffPage() {
                         >
                           <span>{topping.ingredient.name}</span>
                           <span className="whitespace-nowrap font-semibold">
-                            {topping.amount}{" "}
-                            {topping.ingredient.unit}/phần
+                            {topping.amount} {topping.ingredient.unit}/phần
                           </span>
                         </div>
                       ))}
@@ -530,7 +517,11 @@ export default function StaffPage() {
                             {item.toppings.length > 0 && (
                               <p className="mt-1 text-xs text-stone-500">
                                 Topping:{" "}
-                                {formatToppingLabels(item.toppings.map((code) => toppingNames[code] || code))}
+                                {formatToppingLabels(
+                                  item.toppings.map(
+                                    (code) => toppingNames[code] || code,
+                                  ),
+                                )}
                               </p>
                             )}
                           </div>
@@ -542,7 +533,17 @@ export default function StaffPage() {
                           {order.total.toLocaleString("vi-VN")} đ
                         </p>
 
-                        {order.status === "PAID" && <button type="button" disabled={busy || loading} onClick={() => { if (window.confirm("Hủy đơn và hoàn kho? Thao tác này chưa thực hiện hoàn tiền.")) void advance(order, true); }} className="rounded-full border border-red-200 px-5 py-3 text-sm font-semibold text-red-700 disabled:opacity-50">Hủy đơn</button>}
+                        {order.status === "PAID" &&
+                          cancelOrderId !== order.id && (
+                            <button
+                              type="button"
+                              disabled={busy || loading}
+                              onClick={() => openCancellation(order.id)}
+                              className="rounded-full border border-red-200 px-5 py-3 text-sm font-semibold text-red-700 disabled:opacity-50"
+                            >
+                              Hủy đơn
+                            </button>
+                          )}
                         {nextStatus[order.status] && (
                           <button
                             type="button"
@@ -556,6 +557,71 @@ export default function StaffPage() {
                           </button>
                         )}
                       </div>
+                      {order.status === "PAID" &&
+                        cancelOrderId === order.id && (
+                          <form
+                            className="mt-4 space-y-4 rounded-2xl border border-amber-200 bg-amber-50/60 p-5"
+                            onSubmit={(event) => {
+                              event.preventDefault();
+                              const reason = cancelReason.trim();
+                              if (reason.length < 3 || reason.length > 200) {
+                                setCancelError(
+                                  "Lý do hủy cần từ 3 đến 200 ký tự.",
+                                );
+                                return;
+                              }
+                              setCancelError("");
+                              void advance(order, reason);
+                            }}
+                          >
+                            <div>
+                              <h3 className="font-bold text-stone-900">
+                                Hủy đơn #{order.id}
+                              </h3>
+                              <p className="mt-1 text-sm text-stone-600">
+                                Hủy đơn sẽ hoàn lại nguyên liệu và thu hồi điểm
+                                thưởng của đơn. Khoản thanh toán cần được xử lý
+                                hoàn tiền riêng.
+                              </p>
+                            </div>
+                            <label className="block text-sm font-semibold text-stone-700">
+                              Lý do hủy
+                              <textarea
+                                rows={2}
+                                maxLength={200}
+                                value={cancelReason}
+                                disabled={busy}
+                                onChange={(event) =>
+                                  setCancelReason(event.target.value)
+                                }
+                                placeholder="Ví dụ: Khách đặt nhầm món"
+                                className="mt-2 block w-full rounded-xl border border-amber-200 bg-white px-4 py-3 font-normal focus:border-amber-600 focus:outline-none"
+                              />
+                            </label>
+                            {cancelError && (
+                              <p role="alert" className="text-sm text-red-700">
+                                {cancelError}
+                              </p>
+                            )}
+                            <div className="flex flex-wrap justify-end gap-2">
+                              <button
+                                type="button"
+                                disabled={busy}
+                                onClick={() => setCancelOrderId(null)}
+                                className="rounded-full border border-stone-200 bg-white px-5 py-2 text-sm font-semibold disabled:opacity-50"
+                              >
+                                Quay lại
+                              </button>
+                              <button
+                                type="submit"
+                                disabled={busy || loading}
+                                className="rounded-full bg-red-700 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                              >
+                                {busy ? "Đang xử lý…" : "Xác nhận hủy đơn"}
+                              </button>
+                            </div>
+                          </form>
+                        )}
                     </article>
                   ))}
                 </div>
@@ -569,9 +635,7 @@ export default function StaffPage() {
                   </p>
 
                   {data.customers.length === 0 && (
-                    <p className={cardClass}>
-                      Chưa có dữ liệu khách hàng.
-                    </p>
+                    <p className={cardClass}>Chưa có dữ liệu khách hàng.</p>
                   )}
 
                   {data.customers.map((customer) => (
@@ -580,9 +644,7 @@ export default function StaffPage() {
                       className="rounded-2xl border border-stone-200 bg-white"
                     >
                       <summary className="cursor-pointer p-5">
-                        <span className="font-semibold">
-                          {customer.name}
-                        </span>
+                        <span className="font-semibold">{customer.name}</span>
                         <span className="ml-3 rounded-full bg-amber-50 px-3 py-1 text-sm font-semibold text-amber-800">
                           {customer.loyaltyPoints} điểm
                         </span>
@@ -606,14 +668,16 @@ export default function StaffPage() {
                             <div>
                               <p>Đơn #{transaction.orderId}</p>
                               <p className="mt-1 text-xs text-stone-500">
-                                {new Date(
-                                  transaction.createdAt,
-                                ).toLocaleString("vi-VN")}
+                                {new Date(transaction.createdAt).toLocaleString(
+                                  "vi-VN",
+                                )}
                               </p>
                             </div>
 
                             <span className="font-semibold text-green-700">
-                              {transaction.reversed ? `Đã thu hồi ${transaction.points} điểm` : `+${transaction.points} điểm`}
+                              {transaction.reversed
+                                ? `Đã thu hồi ${transaction.points} điểm`
+                                : `+${transaction.points} điểm`}
                             </span>
                           </div>
                         ))}
@@ -634,18 +698,10 @@ export default function StaffPage() {
                     <table className="w-full text-left text-sm">
                       <thead className="bg-stone-50 text-stone-500">
                         <tr>
-                          <th className="px-5 py-4 font-medium">
-                            Nguyên liệu
-                          </th>
-                          <th className="px-5 py-4 font-medium">
-                            Thay đổi
-                          </th>
-                          <th className="px-5 py-4 font-medium">
-                            Trước → Sau
-                          </th>
-                          <th className="px-5 py-4 font-medium">
-                            Lý do
-                          </th>
+                          <th className="px-5 py-4 font-medium">Nguyên liệu</th>
+                          <th className="px-5 py-4 font-medium">Thay đổi</th>
+                          <th className="px-5 py-4 font-medium">Trước → Sau</th>
+                          <th className="px-5 py-4 font-medium">Lý do</th>
                           <th className="px-5 py-4 font-medium">
                             Người thực hiện
                           </th>
@@ -660,10 +716,11 @@ export default function StaffPage() {
                             </td>
 
                             <td
-                              className={`whitespace-nowrap px-5 py-4 font-semibold ${movement.delta > 0
-                                ? "text-green-700"
-                                : "text-red-700"
-                                }`}
+                              className={`whitespace-nowrap px-5 py-4 font-semibold ${
+                                movement.delta > 0
+                                  ? "text-green-700"
+                                  : "text-red-700"
+                              }`}
                             >
                               {movement.delta > 0 ? "+" : ""}
                               {movement.delta.toLocaleString("vi-VN")}{" "}
@@ -682,9 +739,9 @@ export default function StaffPage() {
                             <td className="px-5 py-4">
                               <p>{movement.actor.name}</p>
                               <p className="mt-1 whitespace-nowrap text-xs text-stone-400">
-                                {new Date(
-                                  movement.createdAt,
-                                ).toLocaleString("vi-VN")}
+                                {new Date(movement.createdAt).toLocaleString(
+                                  "vi-VN",
+                                )}
                               </p>
                             </td>
                           </tr>

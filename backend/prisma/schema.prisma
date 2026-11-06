@@ -57,6 +57,12 @@ enum PaymentMethod {
   VNPAY
 }
 
+enum CancellationSource {
+  CUSTOMER
+  STAFF
+  SYSTEM
+}
+
 model Order {
   id                 Int                 @id @default(autoincrement())
   userId             Int
@@ -70,6 +76,10 @@ model Order {
   total              Int
   inventoryDeducted  Boolean             @default(false)
   inventorySnapshot  Json?
+  cancelledAt        DateTime?
+  cancellationSource CancellationSource?
+  cancelledById      Int?
+  cancellationReason String?
   createdAt          DateTime            @default(now())
   items              OrderItem[]
   payments           Payment[]
@@ -136,6 +146,7 @@ model Payment {
   providerTransactionStatus String?
   providerPayDate           String?
   providerBankCode          String?
+  refundRequestedAt         DateTime?
   expiresAt                 DateTime?
   createdAt                 DateTime      @default(now())
   updatedAt                 DateTime      @default(now()) @updatedAt
