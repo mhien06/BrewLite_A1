@@ -8,7 +8,12 @@ import PaymentFailure from "@/components/PaymentFailure";
 import PaymentSuccess from "@/components/PaymentSuccess";
 import PaymentMethodPanel from "@/components/PaymentMethodPanel";
 import { checkCartAvailability } from "@/services/availability.service";
-import { createOrderApi, createPaymentApi } from "@/services/checkout.service";
+import {
+  createOrderApi,
+  createPaymentApi,
+  createVnpayPaymentUrlApi,
+} from "@/services/checkout.service";
+import { saveVnpayCheckoutSession } from "@/utils/vnpay-session";
 import { useAuthStore } from "@/stores/auth.store";
 import {
   createCartFingerprint,
@@ -178,7 +183,36 @@ export default function CheckoutPage() {
         setServerDiscount(order.discountAmount ?? 0);
         setPendingOrder(user.id, order.id, cartFingerprint);
       }
+      if (method === "VNPAY") {
+        const idempotencyKey = useCheckoutStore
+          .getState()
+          .getVnpayPaymentKey(user.id, orderId);
 
+        const vnpayPayment = await createVnpayPaymentUrlApi(
+          token,
+          {
+            orderId,
+            locale: "vn",
+          },
+          idempotencyKey,
+        );
+
+        if (!isCurrentSubmission()) return;
+
+        saveVnpayCheckoutSession({
+          userId: user.id,
+          orderId,
+          cartFingerprint,
+          promotionCode: normalizedPromo,
+          items,
+          idempotencyKey,
+          txnRef: vnpayPayment.txnRef,
+          expiresAt: vnpayPayment.expiresAt,
+        });
+
+        window.location.assign(vnpayPayment.paymentUrl);
+        return;
+      }
       const idempotencyKey = useCheckoutStore
         .getState()
         .getPaymentKey(user.id, orderId, method, simulateSuccess);

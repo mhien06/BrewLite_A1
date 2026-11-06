@@ -1,24 +1,24 @@
-'use client';
+"use client";
 
 import { formatToppingLabels } from "@/utils/toppings";
-import { Suspense, useCallback, useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { getOrderByIdApi, OrdersServiceError } from '@/services/orders.service';
-import { useAuthStore } from '@/stores/auth.store';
-import type { Order, OrderStatus } from '@/types/order';
+import { Suspense, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
+import { getOrderByIdApi, OrdersServiceError } from "@/services/orders.service";
+import { useAuthStore } from "@/stores/auth.store";
+import type { Order, OrderStatus } from "@/types/order";
 
 const formatPrice = (price: number) =>
-  new Intl.NumberFormat('vi-VN', {
-    style: 'currency',
-    currency: 'VND',
+  new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
   }).format(price);
 
 const formatDate = (dateStr: string) => {
   try {
-    return new Intl.DateTimeFormat('vi-VN', {
-      dateStyle: 'medium',
-      timeStyle: 'short',
+    return new Intl.DateTimeFormat("vi-VN", {
+      dateStyle: "medium",
+      timeStyle: "short",
     }).format(new Date(dateStr));
   } catch {
     return dateStr;
@@ -26,9 +26,9 @@ const formatDate = (dateStr: string) => {
 };
 
 const TOPPING_LABELS: Record<string, string> = {
-  pearls: 'Trân châu',
-  cream: 'Kem sữa',
-  jelly: 'Thạch cà phê',
+  pearls: "Trân châu",
+  cream: "Kem sữa",
+  jelly: "Thạch cà phê",
 };
 
 const formatTopping = (toppingId: string) =>
@@ -36,40 +36,43 @@ const formatTopping = (toppingId: string) =>
 
 const getStatusConfig = (status: OrderStatus) => {
   switch (status) {
-    case 'PAID':
+    case "PAID":
       return {
-        icon: '✓',
-        iconColor: 'text-emerald-600',
-        title: 'Thanh toán thành công',
-        subtitle: 'Cảm ơn bạn đã đặt đồ uống tại BrewLite! Đơn hàng đang được barista chuẩn bị.',
-        badgeClass: 'bg-emerald-50 text-emerald-700 border-emerald-200',
-        badgeLabel: 'PAID (Đã thanh toán)',
+        icon: "✓",
+        iconColor: "text-emerald-600",
+        title: "Thanh toán thành công",
+        subtitle:
+          "Cảm ơn bạn đã đặt đồ uống tại BrewLite! Đơn hàng đang được barista chuẩn bị.",
+        badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        badgeLabel: "PAID (Đã thanh toán)",
       };
-    case 'PENDING':
+    case "PENDING":
       return {
-        icon: '⏳',
-        iconColor: 'text-amber-600',
-        title: 'Đơn hàng đang chờ thanh toán',
-        subtitle: 'Đơn hàng đã được lưu trên hệ thống và đang chờ hoàn tất thanh toán.',
-        badgeClass: 'bg-amber-50 text-amber-800 border-amber-200',
-        badgeLabel: 'PENDING (Chờ thanh toán)',
+        icon: "⏳",
+        iconColor: "text-amber-600",
+        title: "Đơn hàng đang chờ thanh toán",
+        subtitle:
+          "Đơn hàng đã được lưu trên hệ thống và đang chờ hoàn tất thanh toán.",
+        badgeClass: "bg-amber-50 text-amber-800 border-amber-200",
+        badgeLabel: "PENDING (Chờ thanh toán)",
       };
-    case 'PAYMENT_FAILED':
+    case "PAYMENT_FAILED":
       return {
-        icon: '⚠️',
-        iconColor: 'text-rose-600',
-        title: 'Thanh toán không thành công',
-        subtitle: 'Giao dịch thanh toán chưa hoàn tất. Bạn có thể kiểm tra lại số dư hoặc thử lại.',
-        badgeClass: 'bg-rose-50 text-rose-700 border-rose-200',
-        badgeLabel: 'PAYMENT_FAILED (Thất bại)',
+        icon: "⚠️",
+        iconColor: "text-rose-600",
+        title: "Thanh toán không thành công",
+        subtitle:
+          "Giao dịch thanh toán chưa hoàn tất. Bạn có thể kiểm tra lại số dư hoặc thử lại.",
+        badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
+        badgeLabel: "PAYMENT_FAILED (Thất bại)",
       };
     default:
       return {
-        icon: '📋',
-        iconColor: 'text-stone-600',
-        title: 'Chi tiết đơn hàng',
-        subtitle: 'Thông tin chi tiết đơn hàng của bạn.',
-        badgeClass: 'bg-stone-50 text-stone-700 border-stone-200',
+        icon: "📋",
+        iconColor: "text-stone-600",
+        title: "Chi tiết đơn hàng",
+        subtitle: "Thông tin chi tiết đơn hàng của bạn.",
+        badgeClass: "bg-stone-50 text-stone-700 border-stone-200",
         badgeLabel: status,
       };
   }
@@ -77,9 +80,11 @@ const getStatusConfig = (status: OrderStatus) => {
 
 function OrderConfirmationContent() {
   const searchParams = useSearchParams();
-  const rawOrderId = searchParams.get('orderId');
-  const orderId = rawOrderId && /^[1-9]\d*$/.test(rawOrderId) ? Number(rawOrderId) : NaN;
-  const isInvalidId = !rawOrderId || !Number.isSafeInteger(orderId) || orderId <= 0;
+  const rawOrderId = searchParams.get("orderId");
+  const orderId =
+    rawOrderId && /^[1-9]\d*$/.test(rawOrderId) ? Number(rawOrderId) : NaN;
+  const isInvalidId =
+    !rawOrderId || !Number.isSafeInteger(orderId) || orderId <= 0;
 
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
@@ -103,14 +108,16 @@ function OrderConfirmationContent() {
     } catch (err) {
       if (err instanceof OrdersServiceError && err.status === 401) {
         logout();
-        setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+        setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
       } else if (err instanceof OrdersServiceError && err.status === 404) {
-        setError('Không tìm thấy đơn hàng hoặc bạn không có quyền xem đơn hàng này.');
+        setError(
+          "Không tìm thấy đơn hàng hoặc bạn không có quyền xem đơn hàng này.",
+        );
       } else {
         const message =
           err instanceof Error
             ? err.message
-            : 'Không thể tải thông tin đơn hàng. Vui lòng thử lại.';
+            : "Không thể tải thông tin đơn hàng. Vui lòng thử lại.";
         setError(message);
       }
     } finally {
@@ -136,16 +143,16 @@ function OrderConfirmationContent() {
         if (!ignore) {
           if (err instanceof OrdersServiceError && err.status === 401) {
             logout();
-            setError('Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
+            setError("Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.");
           } else if (err instanceof OrdersServiceError && err.status === 404) {
             setError(
-              'Không tìm thấy đơn hàng hoặc bạn không có quyền xem đơn hàng này.',
+              "Không tìm thấy đơn hàng hoặc bạn không có quyền xem đơn hàng này.",
             );
           } else {
             const message =
               err instanceof Error
                 ? err.message
-                : 'Không thể tải thông tin đơn hàng. Vui lòng thử lại.';
+                : "Không thể tải thông tin đơn hàng. Vui lòng thử lại.";
             setError(message);
           }
           setIsLoading(false);
@@ -181,7 +188,8 @@ function OrderConfirmationContent() {
             Mã đơn hàng không hợp lệ
           </h1>
           <p className="mx-auto mt-2 max-w-md text-sm text-[#9a7c6b]">
-            Đường dẫn xác nhận đơn thiếu hoặc chứa mã đơn hàng không đúng định dạng.
+            Đường dẫn xác nhận đơn thiếu hoặc chứa mã đơn hàng không đúng định
+            dạng.
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <Link
@@ -231,7 +239,9 @@ function OrderConfirmationContent() {
       <main className="mx-auto w-full max-w-4xl px-4 py-16 text-center sm:px-6 lg:px-8">
         <div className="mx-auto max-w-md space-y-4 rounded-[22px] border border-[#ead8c7] bg-white p-8">
           <div className="mx-auto h-12 w-12 animate-spin rounded-full border-4 border-amber-600 border-t-transparent" />
-          <p className="font-semibold text-[#40241b]">Đang tải dữ liệu đơn hàng #{orderId}...</p>
+          <p className="font-semibold text-[#40241b]">
+            Đang tải dữ liệu đơn hàng #{orderId}...
+          </p>
         </div>
       </main>
     );
@@ -248,7 +258,7 @@ function OrderConfirmationContent() {
             Không thể tải đơn hàng
           </h1>
           <p className="mx-auto mt-2 max-w-md text-sm text-rose-700">
-            {error || 'Đơn hàng không tồn tại hoặc bạn không có quyền xem.'}
+            {error || "Đơn hàng không tồn tại hoặc bạn không có quyền xem."}
           </p>
           <div className="mt-6 flex flex-wrap justify-center gap-3">
             <button
@@ -272,11 +282,13 @@ function OrderConfirmationContent() {
 
   const config = getStatusConfig(order.status);
   const methodLabel =
-    order.paymentMethod === 'WALLET'
-      ? 'Ví điện tử'
-      : order.paymentMethod === 'CARD'
-        ? 'Thẻ ngân hàng'
-        : 'Chưa thanh toán';
+    order.paymentMethod === "WALLET"
+      ? "Ví điện tử"
+      : order.paymentMethod === "CARD"
+        ? "Thẻ ngân hàng"
+        : order.paymentMethod === "VNPAY"
+          ? "VNPAY"
+          : "Chưa thanh toán";
 
   return (
     <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6 lg:px-8">
@@ -300,7 +312,10 @@ function OrderConfirmationContent() {
         aria-live="polite"
       >
         <div className="text-center">
-          <div className={`text-5xl font-black ${config.iconColor}`} aria-hidden="true">
+          <div
+            className={`text-5xl font-black ${config.iconColor}`}
+            aria-hidden="true"
+          >
             {config.icon}
           </div>
 
@@ -313,9 +328,7 @@ function OrderConfirmationContent() {
           </p>
 
           <div className="mt-4 inline-flex items-center rounded-full border px-4 py-1.5 text-xs font-extrabold uppercase tracking-wide">
-            <span className={config.badgeClass}>
-              {config.badgeLabel}
-            </span>
+            <span className={config.badgeClass}>{config.badgeLabel}</span>
           </div>
         </div>
 
@@ -327,13 +340,17 @@ function OrderConfirmationContent() {
 
           <div className="flex justify-between gap-4 py-2.5">
             <dt className="text-[#9a7c6b]">Thời gian đặt</dt>
-            <dd className="font-semibold text-[#40241b]">{formatDate(order.createdAt)}</dd>
+            <dd className="font-semibold text-[#40241b]">
+              {formatDate(order.createdAt)}
+            </dd>
           </div>
 
           {order.paidAt && (
             <div className="flex justify-between gap-4 py-2.5">
               <dt className="text-[#9a7c6b]">Thời gian thanh toán</dt>
-              <dd className="font-semibold text-[#40241b]">{formatDate(order.paidAt)}</dd>
+              <dd className="font-semibold text-[#40241b]">
+                {formatDate(order.paidAt)}
+              </dd>
             </div>
           )}
 
@@ -344,7 +361,9 @@ function OrderConfirmationContent() {
 
           <div className="flex justify-between gap-4 py-2.5">
             <dt className="text-[#9a7c6b]">Khách hàng</dt>
-            <dd className="font-semibold text-[#40241b]">{user.name} ({user.email})</dd>
+            <dd className="font-semibold text-[#40241b]">
+              {user.name} ({user.email})
+            </dd>
           </div>
         </dl>
 
@@ -368,7 +387,8 @@ function OrderConfirmationContent() {
                   </p>
                   {item.toppings && item.toppings.length > 0 && (
                     <p className="mt-0.5 text-xs text-[#9a7c6b]">
-                      Topping: {formatToppingLabels(item.toppings.map(formatTopping))}
+                      Topping:{" "}
+                      {formatToppingLabels(item.toppings.map(formatTopping))}
                     </p>
                   )}
                   <p className="mt-0.5 text-xs text-[#9a7c6b]">
@@ -386,7 +406,9 @@ function OrderConfirmationContent() {
 
             <div className="flex items-center justify-between bg-[#fffaf5] p-4 text-base font-extrabold">
               <span className="text-[#40241b]">Tổng thanh toán</span>
-              <span className="text-xl text-[#7a3b22]">{formatPrice(order.total)}</span>
+              <span className="text-xl text-[#7a3b22]">
+                {formatPrice(order.total)}
+              </span>
             </div>
           </div>
         </div>
@@ -415,7 +437,9 @@ export default function OrderConfirmationPage() {
     <Suspense
       fallback={
         <main className="mx-auto w-full max-w-4xl px-4 py-16 text-center">
-          <p className="font-semibold text-[#9a7c6b]">Đang tải màn hình xác nhận...</p>
+          <p className="font-semibold text-[#9a7c6b]">
+            Đang tải màn hình xác nhận...
+          </p>
         </main>
       }
     >

@@ -1,12 +1,13 @@
 import type {
   CreateOrderRequest,
   CreatePaymentRequest,
+  CreateVnpayPaymentUrlRequest,
   OrderResponse,
   PaymentResponse,
-} from '@/types/checkout';
+  VnpayPaymentUrlResponse,
+} from "@/types/checkout";
 
-const API_BASE_URL =
-  process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001';
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
 
 export class CheckoutServiceError extends Error {
   constructor(
@@ -14,7 +15,7 @@ export class CheckoutServiceError extends Error {
     public readonly status?: number,
   ) {
     super(message);
-    this.name = 'CheckoutServiceError';
+    this.name = "CheckoutServiceError";
   }
 }
 
@@ -25,11 +26,11 @@ async function parseErrorMessage(
   try {
     const data: unknown = await response.json();
 
-    if (typeof data === 'object' && data !== null && 'message' in data) {
+    if (typeof data === "object" && data !== null && "message" in data) {
       const message = (data as { message: unknown }).message;
 
-      if (typeof message === 'string') return message;
-      if (Array.isArray(message)) return message.join(', ');
+      if (typeof message === "string") return message;
+      if (Array.isArray(message)) return message.join(", ");
     }
   } catch {
     // Dùng thông báo mặc định nếu response không phải JSON.
@@ -45,14 +46,14 @@ async function postApi<T>(
   defaultMessage: string,
   extraHeaders: Record<string, string> = {},
 ): Promise<T> {
-  const endpoint = `${API_BASE_URL.replace(/\/$/, '')}${path}`;
+  const endpoint = `${API_BASE_URL.replace(/\/$/, "")}${path}`;
 
   const response = await fetch(endpoint, {
-    method: 'POST',
+    method: "POST",
     headers: {
       Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      Accept: 'application/json',
+      "Content-Type": "application/json",
+      Accept: "application/json",
       ...extraHeaders,
     },
     body: JSON.stringify(body),
@@ -70,12 +71,7 @@ export function createOrderApi(
   token: string,
   request: CreateOrderRequest,
 ): Promise<OrderResponse> {
-  return postApi(
-    '/orders',
-    token,
-    request,
-    'Không thể tạo đơn hàng.',
-  );
+  return postApi("/orders", token, request, "Không thể tạo đơn hàng.");
 }
 
 export function createPaymentApi(
@@ -84,11 +80,32 @@ export function createPaymentApi(
   idempotencyKey?: string,
 ): Promise<PaymentResponse> {
   const trimmedKey = idempotencyKey?.trim();
+
   return postApi(
-    '/payments',
+    "/payments",
     token,
     request,
-    'Không thể xử lý thanh toán.',
-    trimmedKey ? { 'Idempotency-Key': trimmedKey } : {},
+    "Không thể xử lý thanh toán.",
+    trimmedKey ? { "Idempotency-Key": trimmedKey } : {},
+  );
+}
+
+export function createVnpayPaymentUrlApi(
+  token: string,
+  request: CreateVnpayPaymentUrlRequest,
+  idempotencyKey: string,
+): Promise<VnpayPaymentUrlResponse> {
+  const trimmedKey = idempotencyKey.trim();
+
+  if (!trimmedKey) {
+    throw new CheckoutServiceError("Không thể tạo khóa thanh toán VNPAY.");
+  }
+
+  return postApi(
+    "/payments/vnpay/create-url",
+    token,
+    request,
+    "Không thể tạo phiên thanh toán VNPAY.",
+    { "Idempotency-Key": trimmedKey },
   );
 }
