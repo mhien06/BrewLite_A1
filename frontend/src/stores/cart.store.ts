@@ -3,6 +3,9 @@ import type { AddCartItemInput, CartItem } from "@/types/cart";
 
 interface CartStore {
   items: CartItem[];
+  excludedKeys: string[];
+  toggleSelection: (key: string) => void;
+  removePurchasedItems: (items: CartItem[]) => void;
   addItem: (item: AddCartItemInput) => void;
   updateQuantity: (key: string, quantity: number) => void;
   removeItem: (key: string) => void;
@@ -21,6 +24,24 @@ const createCartItemKey = (item: AddCartItemInput) => {
 
 export const useCartStore = create<CartStore>((set, get) => ({
   items: [],
+  excludedKeys: [],
+
+  toggleSelection: (key) =>
+    set(({ excludedKeys }) => ({
+      excludedKeys: excludedKeys.includes(key)
+        ? excludedKeys.filter((excluded) => excluded !== key)
+        : [...excludedKeys, key],
+    })),
+
+  removePurchasedItems: (purchased) =>
+    set(({ items }) => ({
+      items: items.flatMap((item) => {
+        const bought = purchased.find((line) => line.key === item.key);
+        if (!bought) return [item];
+        const quantity = item.quantity - bought.quantity;
+        return quantity > 0 ? [{ ...item, quantity }] : [];
+      }),
+    })),
 
   addItem: (item) =>
     set((state) => {
@@ -114,7 +135,7 @@ export const useCartStore = create<CartStore>((set, get) => ({
     set({ items: next });
     return true;
   },
-  clearCart: () => set({ items: [] }),
+  clearCart: () => set({ items: [], excludedKeys: [] }),
 }));
 
 export const selectTotalQuantity = (state: CartStore) =>
@@ -125,3 +146,6 @@ export const selectTotalPrice = (state: CartStore) =>
     (total, item) => total + item.unitPrice * item.quantity,
     0,
   );
+
+export const selectCheckoutItems = ({ items, excludedKeys }: Pick<CartStore, "items" | "excludedKeys">) =>
+  items.filter((item) => !excludedKeys.includes(item.key));

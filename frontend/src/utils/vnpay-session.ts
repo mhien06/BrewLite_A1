@@ -8,6 +8,8 @@ export interface VnpayCheckoutSession {
   cartFingerprint: string;
   promotionCode: string;
   items: CartItem[];
+  cartItems?: CartItem[];
+  fromOrderDetails?: boolean;
   idempotencyKey: string;
   txnRef: string;
   expiresAt: string;
@@ -44,6 +46,7 @@ const isVnpayCheckoutSession = (
     typeof session.cartFingerprint === "string" &&
     typeof session.promotionCode === "string" &&
     Array.isArray(session.items) &&
+    (session.cartItems === undefined || Array.isArray(session.cartItems)) &&
     typeof session.idempotencyKey === "string" &&
     session.idempotencyKey.length > 0 &&
     typeof session.txnRef === "string" &&
@@ -82,3 +85,19 @@ export const loadVnpayCheckoutSession = (): VnpayCheckoutSession | null => {
 export const clearVnpayCheckoutSession = (): void => {
   getSessionStorage()?.removeItem(VNPAY_SESSION_KEY);
 };
+
+export function openVnpayTab(): Window | null {
+  // Mở trong thao tác bấm nút để trình duyệt không chặn popup.
+  const tab = window.open("about:blank", "_blank");
+  if (tab) tab.opener = null;
+  return tab;
+}
+
+export function vnpayStatusPath(orderId: number, txnRef: string): string {
+  const query = new URLSearchParams({
+    watch: "1",
+    orderId: String(orderId),
+    txnRef,
+  });
+  return `/payment/vnpay-return?${query}`;
+}

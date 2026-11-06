@@ -1,11 +1,24 @@
 "use client";
 
 import { formatToppingLabels } from "@/utils/toppings";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getOrderByIdApi, OrdersServiceError } from "@/services/orders.service";
+import { useCartStore } from "@/stores/cart.store";
 import { useAuthStore } from "@/stores/auth.store";
+import {
+  createPaymentApi,
+  createVnpayPaymentUrlApi,
+} from "@/services/checkout.service";
+import {
+  clearVnpayCheckoutSession,
+  openVnpayTab,
+  vnpayStatusPath,
+  loadVnpayCheckoutSession,
+  saveVnpayCheckoutSession,
+} from "@/utils/vnpay-session";
+import type { PaymentMethod } from "@/types/checkout";
 import type { Order, OrderStatus } from "@/types/order";
 
 const formatPrice = (price: number) =>
@@ -80,6 +93,7 @@ const getStatusConfig = (status: OrderStatus) => {
 
 function OrderConfirmationContent() {
   const searchParams = useSearchParams();
+  const router = useRouter();
   const rawOrderId = searchParams.get("orderId");
   const orderId =
     rawOrderId && /^[1-9]\d*$/.test(rawOrderId) ? Number(rawOrderId) : NaN;
@@ -95,6 +109,106 @@ function OrderConfirmationContent() {
   const [order, setOrder] = useState<Order | null>(null);
   const [isLoading, setIsLoading] = useState(!isInvalidId);
   const [error, setError] = useState<string | null>(null);
+
+  const [retryMethod, setRetryMethod] = useState<PaymentMethod>("VNPAY");
+  const [retrying, setRetrying] = useState(false);
+  const [retryError, setRetryError] = useState("");
+  const retryAttempt = useRef<{
+    orderId: number;
+    method: PaymentMethod;
+    key: string;
+  } | null>(null);
+  const retryInFlight = useRef(false);
+
+  async function retryPayment() {
+    if (
+      !order ||
+      !token ||
+      !user ||
+      retryInFlight.current ||
+      order.status !== "PAYMENT_FAILED" ||
+      order.paymentMethod !== "VNPAY"
+    )
+      return;
+
+    const paymentTab = retryMethod === "VNPAY" ? openVnpayTab() : null;
+    let redirected = false;
+    retryInFlight.current = true;
+    setRetrying(true);
+    setRetryError("");
+    if (
+      retryAttempt.current?.orderId !== order.id ||
+      retryAttempt.current.method !== retryMethod
+    ) {
+      retryAttempt.current = {
+        orderId: order.id,
+        method: retryMethod,
+        key: crypto.randomUUID(),
+      };
+    }
+    const key = retryAttempt.current.key;
+
+    try {
+      if (retryMethod !== "VNPAY") {
+        const result = await createPaymentApi(
+          token,
+          { orderId: order.id, method: retryMethod, simulateSuccess: true },
+          key,
+        );
+        if (useAuthStore.getState().user?.id !== user.id) return;
+
+        if (result.status === "PAID") {
+          const session = loadVnpayCheckoutSession();
+          if (session?.orderId === order.id && session.userId === user.id) {
+            useCartStore.getState().removePurchasedItems(session.items);
+            clearVnpayCheckoutSession();
+          }
+        }
+        setOrder({ ...order, ...result });
+        return;
+      }
+
+      const payment = await createVnpayPaymentUrlApi(
+        token,
+        { orderId: order.id, locale: "vn" },
+        key,
+      );
+      if (useAuthStore.getState().user?.id !== user.id) return;
+
+      const previous = loadVnpayCheckoutSession();
+      const sameOrder =
+        previous?.orderId === order.id && previous.userId === user.id;
+      saveVnpayCheckoutSession({
+        userId: user.id,
+        orderId: order.id,
+        fromOrderDetails: true,
+        items: sameOrder ? previous.items : [],
+        cartItems: useCartStore.getState().items,
+        cartFingerprint: sameOrder ? previous.cartFingerprint : "",
+        promotionCode: sameOrder ? previous.promotionCode : "",
+        idempotencyKey: key,
+        txnRef: payment.txnRef,
+        expiresAt: payment.expiresAt,
+      });
+      redirected = true;
+      if (paymentTab && !paymentTab.closed) {
+        paymentTab.location.replace(payment.paymentUrl);
+        router.push(vnpayStatusPath(order.id, payment.txnRef));
+      } else {
+        window.location.assign(payment.paymentUrl);
+      }
+    } catch (error) {
+      setRetryError(
+        error instanceof Error
+          ? error.message
+          : "Không thể thử thanh toán lại.",
+      );
+    } finally {
+      if (!redirected) paymentTab?.close();
+      retryInFlight.current = false;
+      setRetrying(false);
+    }
+  }
 
   const fetchOrder = useCallback(async () => {
     if (isInvalidId || !token) return;
@@ -414,6 +528,37 @@ function OrderConfirmationContent() {
         </div>
 
         <div className="mt-10 flex flex-wrap justify-center gap-4 border-t border-amber-900/10 pt-6">
+          {order.status === "PAYMENT_FAILED" &&
+            order.paymentMethod === "VNPAY" && (
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <label className="flex items-center gap-2 text-sm font-bold">
+                  Phương thức
+                  <select
+                    value={retryMethod}
+                    disabled={retrying}
+                    onChange={(event) =>
+                      setRetryMethod(event.target.value as PaymentMethod)
+                    }
+                    className="rounded-lg border border-[#ead8c7] bg-white px-3 py-2"
+                  >
+                    <option value="VNPAY">VNPAY Sandbox</option>
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void retryPayment()}
+                  disabled={retrying}
+                  className="rounded-full bg-[#f6a14a] px-6 py-3 text-sm font-extrabold text-[#40241b] disabled:opacity-60"
+                >
+                  {retrying ? "Đang xử lý…" : `Thanh toán lại đơn #${order.id}`}
+                </button>
+              </div>
+            )}
+          {retryError && (
+            <p role="alert" className="w-full text-center text-sm text-red-700">
+              {retryError}
+            </p>
+          )}
           <Link
             href="/orders"
             className="inline-flex min-w-44 items-center justify-center rounded-full bg-[#f6a14a] px-6 py-3 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435]"

@@ -2,7 +2,7 @@
 
 import { formatToppingLabels } from "@/utils/toppings";
 import Image from "next/image";
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import CartItemEditor from "@/components/cart/CartItemEditor";
 import { useCartAvailability } from "@/hooks/useCartAvailability";
 import {
@@ -12,7 +12,7 @@ import {
 import type { CartItem } from "@/types/cart";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/auth.store";
-import { selectTotalPrice, useCartStore } from "@/stores/cart.store";
+import { selectCheckoutItems, useCartStore } from "@/stores/cart.store";
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat("vi-VN", {
@@ -23,7 +23,17 @@ const formatPrice = (price: number) =>
 export default function CartPage() {
   const items = useCartStore((state) => state.items);
   const removeItem = useCartStore((state) => state.removeItem);
-  const totalPrice = useCartStore(selectTotalPrice);
+  const excludedKeys = useCartStore((state) => state.excludedKeys);
+  const toggleSelection = useCartStore((state) => state.toggleSelection);
+  const selectedItems = useMemo(
+    () => selectCheckoutItems({ items, excludedKeys }),
+    [items, excludedKeys],
+  );
+  const totalPrice = selectedItems.reduce(
+    (sum, item) => sum + item.unitPrice * item.quantity,
+    0,
+  );
+  const selectedAvailability = useCartAvailability(selectedItems);
   const user = useAuthStore((state) => state.user);
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
 
@@ -32,7 +42,7 @@ export default function CartPage() {
   const [message, setMessage] = useState("");
   const [editingKey, setEditingKey] = useState<string | null>(null);
   const submitting = useRef(false);
-  const checkoutAllowed = Boolean(availability.result?.available) && !busy;
+  const checkoutAllowed = selectedItems.length > 0 && Boolean(selectedAvailability.result?.available) && !busy;
 
   async function changeQuantity(item: CartItem, quantity: number) {
     if (submitting.current) return;
@@ -192,6 +202,16 @@ export default function CartPage() {
               return (
                 <div key={item.key}>
                   <article className="flex flex-col gap-5 rounded-[22px] border border-[#ead8c7] bg-white p-5 sm:flex-row sm:items-center">
+                    <label className="flex shrink-0 items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        aria-label={`Chọn ${item.name} để thanh toán`}
+                        checked={!excludedKeys.includes(item.key)}
+                        onChange={() => toggleSelection(item.key)}
+                        className="size-5 accent-amber-700"
+                      />
+                      Chọn mua
+                    </label>
                     <div className="relative h-28 w-full shrink-0 overflow-hidden rounded-xl bg-[#f7eadf] sm:w-32">
                       <Image
                         src={item.imageUrl}

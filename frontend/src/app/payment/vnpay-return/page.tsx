@@ -25,6 +25,7 @@ const PAID_STATUSES: OrderStatus[] = [
 function VnpayReturnContent() {
   const searchParams = useSearchParams();
   const valid = searchParams.get("valid");
+  const watching = searchParams.get("watch") === "1";
   const rawOrderId = searchParams.get("orderId");
   const txnRef = searchParams.get("txnRef");
 
@@ -40,6 +41,8 @@ function VnpayReturnContent() {
   const [returnState, setReturnState] = useState<ReturnState>("checking");
   const [message, setMessage] = useState("Đang kiểm tra kết quả thanh toán...");
   const [refreshKey, setRefreshKey] = useState(0);
+  const hasOrderId = Number.isSafeInteger(orderId) && orderId > 0;
+  const orderDetailsPath = `/order-confirmation?orderId=${orderId}`;
 
   useEffect(() => {
     let ignore = false;
@@ -60,21 +63,12 @@ function VnpayReturnContent() {
 
       const checkoutSession = loadVnpayCheckoutSession();
 
-      if (!checkoutSession) {
-        setReturnState("error");
-        setMessage("Không tìm thấy phiên thanh toán VNPAY.");
-        return;
-      }
+      const matchingSession =
+        checkoutSession?.userId === user.id &&
+        checkoutSession.orderId === orderId &&
+        checkoutSession.txnRef === txnRef;
 
-      if (
-        valid !== "true" ||
-        !Number.isSafeInteger(orderId) ||
-        orderId <= 0 ||
-        !txnRef ||
-        checkoutSession.userId !== user.id ||
-        checkoutSession.orderId !== orderId ||
-        checkoutSession.txnRef !== txnRef
-      ) {
+      if (!hasOrderId || !txnRef || (!watching && valid !== "true")) {
         setReturnState("error");
         setMessage(
           "Thông tin VNPAY trả về không hợp lệ hoặc không khớp phiên thanh toán.",
@@ -82,22 +76,40 @@ function VnpayReturnContent() {
         return;
       }
 
-      // Khôi phục dữ liệu trước khi kiểm tra trạng thái thật từ backend.
-      useCartStore.setState({
-        items: checkoutSession.items,
-      });
-
-      useCheckoutStore
-        .getState()
-        .setPendingOrder(user.id, orderId, checkoutSession.cartFingerprint);
-
-      useCheckoutStore
-        .getState()
-        .restoreVnpayPaymentAttempt(
-          user.id,
-          orderId,
-          checkoutSession.idempotencyKey,
+      if (
+        matchingSession &&
+        checkoutSession.fromOrderDetails &&
+        !useCartStore.getState().items.length
+      ) {
+        useCartStore.setState({ items: checkoutSession.cartItems ?? [] });
+      }
+      if (matchingSession && !checkoutSession.fromOrderDetails) {
+        const currentItems = useCartStore.getState().items;
+        const restoredItems = currentItems.length
+          ? currentItems
+          : (checkoutSession.cartItems ?? checkoutSession.items);
+        const purchasedKeys = new Set(
+          checkoutSession.items.map((item) => item.key),
         );
+        useCartStore.setState({
+          items: restoredItems,
+          excludedKeys: restoredItems
+            .filter((item) => !purchasedKeys.has(item.key))
+            .map((item) => item.key),
+        });
+
+        useCheckoutStore
+          .getState()
+          .setPendingOrder(user.id, orderId, checkoutSession.cartFingerprint);
+
+        useCheckoutStore
+          .getState()
+          .restoreVnpayPaymentAttempt(
+            user.id,
+            orderId,
+            checkoutSession.idempotencyKey,
+          );
+      }
 
       try {
         const order = await getOrderByIdApi(token, orderId);
@@ -105,10 +117,13 @@ function VnpayReturnContent() {
         if (ignore) return;
 
         if (PAID_STATUSES.includes(order.status)) {
-          useCartStore.getState().clearCart();
-          useCheckoutStore.getState().clearPendingOrder();
-          useCheckoutStore.getState().clearPaymentAttempt();
-          clearVnpayCheckoutSession();
+          if (matchingSession) {
+            useCartStore.getState().removePurchasedItems(checkoutSession.items);
+            if (useCheckoutStore.getState().pendingOrder?.orderId === orderId)
+              useCheckoutStore.getState().clearPendingOrder();
+            useCheckoutStore.getState().clearPaymentAttempt();
+            clearVnpayCheckoutSession();
+          }
 
           setReturnState("paid");
           setMessage("Thanh toán VNPAY đã được xác nhận.");
@@ -116,7 +131,8 @@ function VnpayReturnContent() {
         }
 
         if (order.status === "PAYMENT_FAILED" || order.status === "CANCELLED") {
-          useCheckoutStore.getState().clearPaymentAttempt();
+          if (matchingSession)
+            useCheckoutStore.getState().clearPaymentAttempt();
 
           setReturnState("failed");
           setMessage(
@@ -128,7 +144,9 @@ function VnpayReturnContent() {
         }
 
         setReturnState("pending");
-        setMessage("Backend chưa nhận được xác nhận cuối cùng từ VNPAY.");
+        setMessage(
+          "Chờ thanh toán. Trang này sẽ tự kiểm tra kết quả từ VNPAY.",
+        );
       } catch (error) {
         if (ignore) return;
 
@@ -162,19 +180,35 @@ function VnpayReturnContent() {
     txnRef,
     logout,
     refreshKey,
+    watching,
+    hasOrderId,
   ]);
+
+  useEffect(() => {
+    if (returnState !== "pending") return;
+    const timer = window.setTimeout(
+      () => setRefreshKey((value) => value + 1),
+      3000,
+    );
+    return () => window.clearTimeout(timer);
+  }, [returnState]);
 
   return (
     <main className="mx-auto w-full max-w-xl px-4 py-16 text-center">
       <section className="rounded-[24px] border border-[#ead8c7] bg-white p-8 shadow-sm">
         <h1 className="text-2xl font-extrabold text-[#40241b]">
-          Kết quả thanh toán VNPAY
+          {returnState === "pending"
+            ? "Chờ thanh toán VNPAY"
+            : "Kết quả thanh toán VNPAY"}
         </h1>
 
         {returnState === "checking" && (
           <div className="mx-auto mt-6 h-12 w-12 animate-spin rounded-full border-4 border-amber-600 border-t-transparent" />
         )}
 
+        {Number.isSafeInteger(orderId) && (
+          <p className="mt-3 text-sm">Đơn #{orderId}</p>
+        )}
         <p className="mt-5 text-sm font-semibold text-[#7a5a4b]">{message}</p>
 
         {returnState === "paid" && (
@@ -188,10 +222,10 @@ function VnpayReturnContent() {
 
         {returnState === "failed" && (
           <Link
-            href="/checkout"
+            href={orderDetailsPath}
             className="mt-6 inline-flex rounded-full bg-[#f6a14a] px-7 py-3 text-sm font-bold text-[#40241b]"
           >
-            Thử thanh toán lại
+            Xem chi tiết đơn
           </Link>
         )}
 
@@ -208,10 +242,10 @@ function VnpayReturnContent() {
         {returnState === "error" && (
           <div className="mt-6 flex justify-center gap-3">
             <Link
-              href="/checkout"
+              href={hasOrderId ? orderDetailsPath : "/checkout"}
               className="rounded-full border border-[#ead8c7] px-6 py-3 text-sm font-bold text-[#40241b]"
             >
-              Về thanh toán
+              {hasOrderId ? "Xem chi tiết đơn" : "Về thanh toán"}
             </Link>
 
             {!isAuthenticated && (
