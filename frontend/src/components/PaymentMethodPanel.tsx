@@ -36,8 +36,7 @@ export default function PaymentMethodPanel({
 
       <div className="mt-4 space-y-3">
         {[
-          { value: "WALLET", label: "Ví điện tử" },
-          { value: "CARD", label: "Thẻ ngân hàng" },
+          { value: "VNPAY", label: "VNPAY Sandbox" },
         ].map((option) => (
           <label
             key={option.value}
@@ -106,16 +105,11 @@ export default function PaymentMethodPanel({
         onClick={() => onSubmit(true)}
         className="mt-5 w-full rounded-full bg-[#f6a14a] px-5 py-3.5 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435] disabled:cursor-not-allowed disabled:opacity-60"
       >
-        {isSubmitting ? "Đang xử lý..." : `Thanh toán · ${formatPrice(total)}`}
-      </button>
-
-      <button
-        type="button"
-        disabled={isSubmitting}
-        onClick={() => onSubmit(false)}
-        className="mt-3 w-full rounded-full border border-[#ead8c7] bg-white px-5 py-3.5 text-sm font-extrabold text-[#492214] transition hover:border-[#492214] hover:bg-[#fffaf5] disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        Mô phỏng thanh toán lỗi
+        {isSubmitting
+          ? "Đang xử lý..."
+          : method === "VNPAY"
+            ? `Thanh toán qua VNPAY · ${formatPrice(total)}`
+            : `Thanh toán · ${formatPrice(total)}`}
       </button>
     </aside>
   );

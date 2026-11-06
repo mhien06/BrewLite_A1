@@ -8,14 +8,24 @@ import PaymentFailure from "@/components/PaymentFailure";
 import PaymentSuccess from "@/components/PaymentSuccess";
 import PaymentMethodPanel from "@/components/PaymentMethodPanel";
 import { checkCartAvailability } from "@/services/availability.service";
-import { createOrderApi, createPaymentApi } from "@/services/checkout.service";
+import {
+  createOrderApi,
+  createPaymentApi,
+  createVnpayPaymentUrlApi,
+} from "@/services/checkout.service";
+import {
+  loadVnpayCheckoutSession,
+  saveVnpayCheckoutSession,
+  openVnpayTab,
+  vnpayStatusPath,
+} from "@/utils/vnpay-session";
 import { useAuthStore } from "@/stores/auth.store";
 import {
   createCartFingerprint,
   isCheckoutContextCurrent,
   useCheckoutStore,
 } from "@/stores/checkout.store";
-import { selectTotalPrice, useCartStore } from "@/stores/cart.store";
+import { selectCheckoutItems, useCartStore } from "@/stores/cart.store";
 import type { PaymentMethod, PaymentResponse } from "@/types/checkout";
 
 function calculatePreviewDiscount(rawCode: string, subtotal: number): number {
@@ -41,9 +51,16 @@ export default function CheckoutPage() {
       isMountedRef.current = false;
     };
   }, []);
-  const items = useCartStore((state) => state.items);
-  const totalPrice = useCartStore(selectTotalPrice);
-  const clearCart = useCartStore((state) => state.clearCart);
+  const cartItems = useCartStore((state) => state.items);
+  const excludedKeys = useCartStore((state) => state.excludedKeys);
+  const items = useMemo(
+    () => selectCheckoutItems({ items: cartItems, excludedKeys }),
+    [cartItems, excludedKeys],
+  );
+  const totalPrice = items.reduce(
+    (sum, item) => sum + item.unitPrice * item.quantity,
+    0,
+  );
 
   const token = useAuthStore((state) => state.token);
   const user = useAuthStore((state) => state.user);
@@ -56,8 +73,20 @@ export default function CheckoutPage() {
     (state) => state.clearPendingOrder,
   );
 
-  const [method, setMethod] = useState<PaymentMethod>("WALLET");
-  const [promotionCode, setPromotionCode] = useState("");
+  const [retrySession] = useState(() => {
+    const session = loadVnpayCheckoutSession();
+    return session &&
+      pendingOrder?.orderId === session.orderId &&
+      pendingOrder.userId === session.userId
+      ? session
+      : null;
+  });
+  const [method, setMethod] = useState<PaymentMethod>(
+    "VNPAY",
+  );
+  const [promotionCode, setPromotionCode] = useState(
+    retrySession?.promotionCode ?? "",
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentFailed, setPaymentFailed] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState<PaymentResponse | null>(
@@ -132,11 +161,13 @@ export default function CheckoutPage() {
           submittedContext,
           currentAuth.user?.id,
           currentAuth.token,
-          useCartStore.getState().items,
+          selectCheckoutItems(useCartStore.getState()),
         )
       );
     };
 
+    const paymentTab = method === "VNPAY" ? openVnpayTab() : null;
+    let redirected = false;
     submittingRef.current = true;
     setIsSubmitting(true);
     setError("");
@@ -178,7 +209,43 @@ export default function CheckoutPage() {
         setServerDiscount(order.discountAmount ?? 0);
         setPendingOrder(user.id, order.id, cartFingerprint);
       }
+      if (method === "VNPAY") {
+        const idempotencyKey = useCheckoutStore
+          .getState()
+          .getVnpayPaymentKey(user.id, orderId);
 
+        const vnpayPayment = await createVnpayPaymentUrlApi(
+          token,
+          {
+            orderId,
+            locale: "vn",
+          },
+          idempotencyKey,
+        );
+
+        if (!isCurrentSubmission()) return;
+
+        saveVnpayCheckoutSession({
+          userId: user.id,
+          orderId,
+          cartFingerprint,
+          promotionCode: normalizedPromo,
+          items,
+          cartItems,
+          idempotencyKey,
+          txnRef: vnpayPayment.txnRef,
+          expiresAt: vnpayPayment.expiresAt,
+        });
+
+        redirected = true;
+        if (paymentTab && !paymentTab.closed) {
+          paymentTab.location.replace(vnpayPayment.paymentUrl);
+          router.push(vnpayStatusPath(orderId, vnpayPayment.txnRef));
+        } else {
+          window.location.assign(vnpayPayment.paymentUrl);
+        }
+        return;
+      }
       const idempotencyKey = useCheckoutStore
         .getState()
         .getPaymentKey(user.id, orderId, method, simulateSuccess);
@@ -200,7 +267,7 @@ export default function CheckoutPage() {
 
       if (payment.status === "PAID") {
         setPaymentSuccess(payment);
-        clearCart();
+        useCartStore.getState().removePurchasedItems(items);
         clearPendingOrder();
         // Trang xác nhận lấy lại đơn từ API; reload vẫn giữ được kết quả.
         router.replace(`/order-confirmation?orderId=${payment.id}`);
@@ -218,6 +285,7 @@ export default function CheckoutPage() {
           : "Không thể xử lý thanh toán.",
       );
     } finally {
+      if (!redirected) paymentTab?.close();
       submittingRef.current = false;
       if (isMountedRef.current) {
         setIsSubmitting(false);

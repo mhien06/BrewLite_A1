@@ -11,7 +11,7 @@ interface PaymentAttempt {
   userId: number;
   orderId: number;
   method: string;
-  simulateSuccess: boolean;
+  simulateSuccess: boolean | null;
   key: string;
 }
 
@@ -23,6 +23,12 @@ interface CheckoutStore {
     method: string,
     simulateSuccess: boolean,
   ) => string;
+  getVnpayPaymentKey: (userId: number, orderId: number) => string;
+  restoreVnpayPaymentAttempt: (
+    userId: number,
+    orderId: number,
+    key: string,
+  ) => void;
   clearPaymentAttempt: () => void;
   pendingOrder: PendingOrder | null;
   setPendingOrder: (
@@ -57,9 +63,11 @@ export const isCheckoutContextCurrent = (
 
 export const useCheckoutStore = create<CheckoutStore>((set, get) => ({
   paymentAttempt: null,
+
   getPaymentKey: (userId, orderId, method, simulateSuccess) => {
     const previous = get().paymentAttempt;
-    // Mất mạng chưa biết kết quả: gửi lại đúng khóa cũ để không trả tiền hai lần.
+
+    // Mất mạng chưa biết kết quả: gửi lại đúng khóa cũ.
     if (
       previous &&
       previous.userId === userId &&
@@ -69,11 +77,63 @@ export const useCheckoutStore = create<CheckoutStore>((set, get) => ({
     ) {
       return previous.key;
     }
+
     const key = `checkout-${orderId}-${crypto.randomUUID()}`;
-    set({ paymentAttempt: { userId, orderId, method, simulateSuccess, key } });
+
+    set({
+      paymentAttempt: {
+        userId,
+        orderId,
+        method,
+        simulateSuccess,
+        key,
+      },
+    });
+
     return key;
   },
+
+  getVnpayPaymentKey: (userId, orderId) => {
+    const previous = get().paymentAttempt;
+
+    if (
+      previous &&
+      previous.userId === userId &&
+      previous.orderId === orderId &&
+      previous.method === "VNPAY" &&
+      previous.simulateSuccess === null
+    ) {
+      return previous.key;
+    }
+
+    const key = `vnpay-${orderId}-${crypto.randomUUID()}`;
+
+    set({
+      paymentAttempt: {
+        userId,
+        orderId,
+        method: "VNPAY",
+        simulateSuccess: null,
+        key,
+      },
+    });
+
+    return key;
+  },
+
+  restoreVnpayPaymentAttempt: (userId, orderId, key) =>
+    set({
+      paymentAttempt: {
+        userId,
+        orderId,
+        method: "VNPAY",
+        simulateSuccess: null,
+        key,
+      },
+    }),
+
   clearPaymentAttempt: () => set({ paymentAttempt: null }),
+
   pendingOrder: null,
 
   setPendingOrder: (userId, orderId, cartFingerprint) =>

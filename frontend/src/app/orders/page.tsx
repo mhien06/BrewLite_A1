@@ -243,11 +243,13 @@ export default function OrderHistoryPage() {
           {orders.map((order) => {
             const badge = getStatusBadge(order.status);
             const methodLabel =
-              order.paymentMethod === 'WALLET'
-                ? 'Ví điện tử'
-                : order.paymentMethod === 'CARD'
-                  ? 'Thẻ ngân hàng'
-                  : 'Chưa thanh toán';
+              order.paymentMethod === "WALLET"
+                ? "Ví điện tử"
+                : order.paymentMethod === "CARD"
+                  ? "Thẻ ngân hàng"
+                  : order.paymentMethod === "VNPAY"
+                    ? "VNPAY"
+                    : "Chưa thanh toán";
 
             return (
               <article

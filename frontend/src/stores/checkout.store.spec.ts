@@ -83,4 +83,32 @@ describe("checkout store", () => {
     expect(store.getPaymentKey(1, 10, "WALLET", true)).not.toBe(firstKey);
     expect(store.getPaymentKey(2, 10, "WALLET", true)).not.toBe(firstKey);
   });
+  it("reuses the VNPAY key for the same order", () => {
+    const store = useCheckoutStore.getState();
+    store.clearPaymentAttempt();
+
+    const firstKey = store.getVnpayPaymentKey(1, 10);
+
+    expect(store.getVnpayPaymentKey(1, 10)).toBe(firstKey);
+
+    store.clearPaymentAttempt();
+
+    expect(store.getVnpayPaymentKey(1, 10)).not.toBe(firstKey);
+    expect(store.getVnpayPaymentKey(2, 10)).not.toBe(firstKey);
+  });
+  it("restores the VNPAY key after returning from the payment gateway", () => {
+    const store = useCheckoutStore.getState();
+
+    store.clearPaymentAttempt();
+    store.restoreVnpayPaymentAttempt(1, 10, "saved-vnpay-key");
+
+    expect(store.getVnpayPaymentKey(1, 10)).toBe("saved-vnpay-key");
+    expect(useCheckoutStore.getState().paymentAttempt).toEqual({
+      userId: 1,
+      orderId: 10,
+      method: "VNPAY",
+      simulateSuccess: null,
+      key: "saved-vnpay-key",
+    });
+  });
 });
