@@ -207,7 +207,10 @@ export class VnpayIpnService {
           paidAt: null,
         },
       );
-    } else if (currentStatus !== OrderStatus.PAYMENT_FAILED) {
+    } else if (
+      currentStatus !== OrderStatus.PAYMENT_FAILED &&
+      currentStatus !== OrderStatus.CANCELLED
+    ) {
       return this.response('02', 'Order already confirmed');
     }
 
