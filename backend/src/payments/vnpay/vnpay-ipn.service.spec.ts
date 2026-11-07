@@ -231,7 +231,8 @@ describe('VnpayIpnService', () => {
       const payment = { id: 5, userId: 7, orderId: 10, amount: 172_800 };
       transaction.payment.findUnique
         .mockResolvedValueOnce({ ...payment, status: OrderStatus.PENDING })
-        .mockResolvedValueOnce({ ...payment, status: paymentStatus });
+        .mockResolvedValueOnce({ ...payment, status: OrderStatus.PENDING })
+        .mockResolvedValue({ ...payment, status: paymentStatus });
 
       const query = signedQuery({
         vnp_ResponseCode: code,
@@ -245,7 +246,7 @@ describe('VnpayIpnService', () => {
         data: {
           status: paymentStatus,
           paidAt: code === '00' ? expect.any(Date) : null,
-          ...(code === '00' ? { refundRequestedAt: expect.any(Date) } : {}),
+          ...(code === '00' ? { refundRequestedAt: expect.any(Date), refundStatus: 'QUEUED' } : {}),
           providerTransactionNo: '14567890',
           providerResponseCode: code,
           providerTransactionStatus: providerStatus,

@@ -20,6 +20,7 @@ describe('VnpayService - create payment URL', () => {
   };
 
   const prisma = {
+    order: { findFirst: vi.fn() },
     payment: {
       findUnique: vi.fn(),
     },
@@ -44,6 +45,7 @@ describe('VnpayService - create payment URL', () => {
     process.env.VNPAY_RETURN_URL = 'https://example.test/payments/vnpay/return';
     process.env.FRONTEND_URL = 'http://localhost:3000';
 
+    prisma.order.findFirst.mockResolvedValue({ status: OrderStatus.PENDING });
     prisma.payment.findUnique.mockResolvedValue(null);
     transaction.payment.findUnique.mockResolvedValue(null);
     transaction.payment.findFirst.mockResolvedValue(null);
@@ -84,6 +86,7 @@ describe('VnpayService - create payment URL', () => {
         id: true,
         status: true,
         total: true,
+        createdAt: true,
       },
     });
 

@@ -1,4 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  Injectable,
+  Logger,
+} from '@nestjs/common';
 import {
   OrderStatus,
   PaymentMethod,
@@ -69,6 +74,12 @@ export class VnpayIpnService {
     params: VnpayParams,
     txnRef: string,
   ): Promise<VnpayIpnResponse> {
+    // Luôn khóa Order trước Payment, cùng thứ tự với hủy đơn để tránh deadlock.
+    const reference = await transaction.payment.findUnique({
+      where: { providerTxnRef: txnRef },
+    });
+    if (!reference) return this.response('01', 'Order not Found');
+    await this.lockOrder(transaction, reference.orderId);
     await this.lockPayment(transaction, txnRef);
 
     const payment = await transaction.payment.findUnique({
@@ -87,8 +98,6 @@ export class VnpayIpnService {
       return this.response('02', 'Order already confirmed');
     }
 
-    await this.lockOrder(transaction, payment.orderId);
-
     const order = await transaction.order.findUnique({
       where: { id: payment.orderId },
     });
@@ -103,6 +112,35 @@ export class VnpayIpnService {
 
     const successful =
       params.vnp_ResponseCode === '00' && params.vnp_TransactionStatus === '00';
+
+    if (
+      successful &&
+      payment.expiresAt &&
+      payment.expiresAt.getTime() <= Date.now() &&
+      (order.status === OrderStatus.PENDING ||
+        order.status === OrderStatus.PAYMENT_FAILED)
+    ) {
+      const latest = await transaction.payment.findFirst({
+        where: { orderId: order.id },
+        orderBy: { id: 'desc' },
+      });
+      if (latest?.id === payment.id) {
+        await this.orderState.transition(
+          order.id,
+          OrderStatus.CANCELLED,
+          transaction,
+          {
+            cancelledAt: new Date(),
+            cancellationSource: 'SYSTEM',
+            cancelledById: null,
+            cancellationReason:
+              'Thanh toán được xác nhận sau khi giao dịch hết hạn.',
+          },
+        );
+      }
+      await this.recordPaymentForRefund(transaction, payment.id, params);
+      return this.response('00', 'Confirm Success');
+    }
 
     if (successful) {
       return this.confirmSuccessfulPayment(
@@ -140,28 +178,44 @@ export class VnpayIpnService {
       currentStatus = OrderStatus.PENDING;
     }
 
-    if (currentStatus === OrderStatus.CANCELLED) {
-      // Gateway đã thu tiền dù BrewLite không còn phục vụ đơn này.
-      const paidAt = new Date();
-      await transaction.payment.update({
-        where: { id: payment.id },
-        data: {
-          status: OrderStatus.PAID,
-          paidAt,
-          refundRequestedAt: paidAt,
-          ...this.providerResult(params),
-        },
-      });
+    if (currentStatus !== OrderStatus.PENDING) {
+      // Đơn hủy hoặc đã được trả bằng giao dịch khác: lưu khoản tiền đến trễ để hoàn.
+      await this.recordPaymentForRefund(transaction, payment.id, params);
       return this.response('00', 'Confirm Success');
     }
 
-    if (currentStatus !== OrderStatus.PENDING) {
-      return this.response('02', 'Order already confirmed');
-    }
-
     const paidAt = new Date();
-
-    await this.inventory.deductForPaidOrder(transaction, payment.orderId);
+    const hasSavepoint = typeof transaction.$executeRaw === 'function';
+    if (hasSavepoint)
+      await transaction.$executeRaw`SAVEPOINT inventory_deduction`;
+    try {
+      await this.inventory.deductForPaidOrder(transaction, payment.orderId);
+    } catch (error) {
+      if (!(
+        error instanceof ConflictException ||
+        error instanceof BadRequestException
+      ))
+        throw error;
+      // Khôi phục cả các nguyên liệu đã trừ trước khi một nguyên liệu khác bị thiếu.
+      if (hasSavepoint)
+        await transaction.$executeRaw`ROLLBACK TO SAVEPOINT inventory_deduction`;
+      await this.orderState.transition(
+        payment.orderId,
+        OrderStatus.CANCELLED,
+        transaction,
+        {
+          cancelledAt: paidAt,
+          cancellationSource: 'SYSTEM',
+          cancelledById: null,
+          cancellationReason:
+            'Đã nhận thanh toán nhưng nguyên liệu không còn đủ. Yêu cầu hoàn tiền.',
+        },
+      );
+      await this.recordPaymentForRefund(transaction, payment.id, params);
+      return this.response('00', 'Confirm Success');
+    }
+    if (hasSavepoint)
+      await transaction.$executeRaw`RELEASE SAVEPOINT inventory_deduction`;
 
     const updatedOrder = await this.orderState.transition(
       payment.orderId,
@@ -197,7 +251,18 @@ export class VnpayIpnService {
     currentStatus: OrderStatus,
     params: VnpayParams,
   ): Promise<VnpayIpnResponse> {
-    if (currentStatus === OrderStatus.PENDING) {
+    const latest =
+      typeof transaction.payment.findFirst === 'function'
+        ? await transaction.payment.findFirst({
+            where: { orderId: payment.orderId },
+            orderBy: { id: 'desc' },
+          })
+        : null;
+    // Callback của lần thử cũ không được làm hỏng lần thử mới đang chờ.
+    if (
+      currentStatus === OrderStatus.PENDING &&
+      (!latest || latest.id === payment.id)
+    ) {
       await this.orderState.transition(
         payment.orderId,
         OrderStatus.PAYMENT_FAILED,
@@ -207,11 +272,6 @@ export class VnpayIpnService {
           paidAt: null,
         },
       );
-    } else if (
-      currentStatus !== OrderStatus.PAYMENT_FAILED &&
-      currentStatus !== OrderStatus.CANCELLED
-    ) {
-      return this.response('02', 'Order already confirmed');
     }
 
     await transaction.payment.update({
@@ -224,6 +284,24 @@ export class VnpayIpnService {
     });
 
     return this.response('00', 'Confirm Success');
+  }
+
+  private async recordPaymentForRefund(
+    tx: Prisma.TransactionClient,
+    id: number,
+    params: VnpayParams,
+  ) {
+    const now = new Date();
+    await tx.payment.update({
+      where: { id },
+      data: {
+        status: OrderStatus.PAID,
+        paidAt: now,
+        refundRequestedAt: now,
+        refundStatus: 'QUEUED',
+        ...this.providerResult(params),
+      },
+    });
   }
 
   private providerResult(params: VnpayParams) {

@@ -169,7 +169,7 @@ Nhân viên nhập/điều chỉnh kho kèm lý do, xem công thức và chuyể
 ## 6. Nghiệp vụ T10
 
 - **Trạng thái:** `PENDING → PAID / PAYMENT_FAILED / CANCELLED`; `PAYMENT_FAILED → PENDING / CANCELLED`; `PAID → PREPARING / CANCELLED`; `PREPARING → READY`; `READY → COMPLETED`. `CANCELLED` và `COMPLETED` là trạng thái kết thúc.
-- **Hủy đơn PAID:** trước khi pha, hoàn kho theo snapshot và thu hồi điểm trong transaction đúng một lần. Không hủy từ PREPARING. Đơn cũ thiếu snapshot trả lỗi để đối soát, không tự đoán lượng hoàn. Chưa có hoàn tiền qua cổng thật.
+- **Hủy đơn PAID:** trước khi pha, hoàn kho theo snapshot và thu hồi điểm trong transaction đúng một lần. Không hủy từ PREPARING. Đơn cũ thiếu snapshot trả lỗi để đối soát, không tự đoán lượng hoàn. Với VNPAY, tạo yêu cầu hoàn tiền riêng và chỉ ghi nhận hoàn thành khi phản hồi đã xác thực xác nhận giao dịch hoàn thành công.
 - **Chống thanh toán lặp:** gửi lại cùng `Idempotency-Key` và dữ liệu trả kết quả đã lưu, không trừ kho/cộng điểm thêm; cùng khóa nhưng khác dữ liệu bị từ chối.
 - **Tồn kho:** kiểm tra cả món theo size và số phần topping, tính nguyên liệu dùng chung của toàn giỏ. Chặn thêm/tăng/lưu lựa chọn vượt kho. Kiểm tra giỏ chưa giữ chỗ; khi thanh toán backend vẫn kiểm tra và trừ kho trong transaction với optimistic locking.
 - **Menu:** số ly hiển thị được quy đổi theo công thức size S; số thực tế mua được phụ thuộc size, topping và các món trong giỏ.
@@ -301,3 +301,16 @@ Theo bản README trước khi rút gọn, ngày 01/11/2026 trên nhánh `task-1
 - [ ] Sprint Review/Demo với giảng viên, trình bày Retrospective và ghi nhận phản hồi cho backlog.
 
 Các mục đã tích là technical verification ngày 03/11/2026, không thay thế nghiệm thu với giảng viên. Sprint Review, Sprint Retrospective và minh chứng Scrum được hoàn thiện riêng. Dự án A1 mô phỏng thanh toán, không kết nối cổng thanh toán thật.
+
+### Hủy, quá hạn và hoàn tiền VNPAY
+
+- API tự kiểm tra đơn quá hạn mỗi 30 giây và kiểm tra lại ngay khi khởi động. Không cần mở trình duyệt. Thời hạn mặc định 15 phút, cấu hình bằng `VNPAY_PAYMENT_EXPIRY_MINUTES`. Khi có giao dịch VNPAY, dùng thời hạn đã lưu của lần thử mới nhất; đơn chưa tạo giao dịch dùng thời gian tạo đơn. Sau hạn, không tạo lại URL cho đơn đó; khách đặt đơn mới.
+- Khách hủy đơn chưa trả tiền của mình. Nhân viên hủy đơn PAID trước khi nhận pha, nhập lý do. Lưu người/nguồn hủy và thời gian; giữ chặn hủy từ PREPARING. Đơn chưa trừ kho không được hoàn kho.
+- Tiền đến sau hủy/hết hạn hoặc không còn đủ nguyên liệu: giữ kết quả thu tiền ở Payment, không cộng điểm hay phục vụ đơn; tạo yêu cầu hoàn. Hoàn kho và hoàn tiền là hai nghiệp vụ riêng.
+- Hàng đợi hoàn tiền lưu trong database: `QUEUED` → `PENDING` → `SUCCEEDED` hoặc `FAILED`. Mã yêu cầu được lưu trước khi gọi VNPAY. Nếu timeout hoặc API khởi động lại, chỉ QueryDR để đối soát, không tự gửi hoàn lần hai. Query trả thành công cho giao dịch thanh toán gốc (type 01) không được hiểu là hoàn thành công. Giao dịch hoàn toàn phần (type 02) phải có mã phản hồi và trạng thái đều 00.
+- Khách xem tiến độ ở chi tiết đơn; nhân viên xem tại Đơn hàng. Chỉ khoản hoàn đã bị từ chối (`FAILED`) có nút gửi lại. Route gửi lại yêu cầu quyền nhân viên: `POST /payments/vnpay/refunds/:id/retry`. Khoản chưa rõ kết quả tiếp tục chờ đối soát.
+- Khi đổi máy/tunnel, cập nhật Return URL trong `.env` và IPN trên VNPAY cùng về API đang chạy. Không commit `.env` hoặc thông tin merchant. Chạy lại `docker compose up --build -d`; API áp dụng migration mới khi khởi động.
+
+Kiểm thử bổ sung có tại `backend/test/order-expiry-refund.database-test.ts`: quá hạn, khởi động lại, callback trễ/lặp, hủy đồng thời, hoàn kho/điểm một lần, thiếu kho và rollback, hàng đợi hoàn tiền qua nhiều kết nối. Các phản hồi hoàn tiền trong bộ test được giả lập qua adapter; để xác nhận Sandbox thực tế cần chạy giao dịch hoàn với merchant đang hoạt động và lưu kết quả VNPAY.
+
+Tham chiếu trạng thái API: [VNPAY QueryDR và Refund](https://sandbox.vnpayment.vn/apis/docs/truy-van-hoan-tien/querydr%26refund.html).

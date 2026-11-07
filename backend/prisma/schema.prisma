@@ -130,6 +130,13 @@ model LoyaltyTransaction {
   @@index([userId])
 }
 
+enum RefundStatus {
+  QUEUED
+  PENDING
+  FAILED
+  SUCCEEDED
+}
+
 model Payment {
   id                        Int           @id @default(autoincrement())
   userId                    Int
@@ -146,6 +153,14 @@ model Payment {
   providerTransactionStatus String?
   providerPayDate           String?
   providerBankCode          String?
+  refundStatus RefundStatus?
+  refundRequestId String? @unique
+  refundSubmittedAt DateTime?
+  refundCompletedAt DateTime?
+  refundCheckedAt DateTime?
+  refundResponseCode String?
+  refundTransactionStatus String?
+  refundLastError String?
   refundRequestedAt         DateTime?
   expiresAt                 DateTime?
   createdAt                 DateTime      @default(now())
@@ -155,6 +170,7 @@ model Payment {
 
   @@unique([userId, idempotencyKey])
   @@index([orderId])
+  @@index([refundStatus, refundCheckedAt])
 }
 
 model InventoryMovement {

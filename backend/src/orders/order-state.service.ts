@@ -158,7 +158,7 @@ export class OrderStateService {
             status: OrderStatus.PAID,
             refundRequestedAt: null,
           },
-          data: { refundRequestedAt: new Date() },
+          data: { refundRequestedAt: new Date(), refundStatus: 'QUEUED' },
         });
       }
     }

@@ -2,6 +2,7 @@
 
 import { formatToppingLabels } from "@/utils/toppings";
 import { useEffect, useState, type FormEvent } from "react";
+import RefundNotice from "@/components/RefundNotice";
 import Link from "next/link";
 
 import IngredientsPanel from "@/components/staff/IngredientsPanel";
@@ -528,6 +529,10 @@ export default function StaffPage() {
                         ))}
                       </div>
 
+                      <RefundNotice
+                        payments={order.payments}
+                        staffToken={token ?? undefined}
+                      />
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <p className="font-bold">
                           {order.total.toLocaleString("vi-VN")} đ

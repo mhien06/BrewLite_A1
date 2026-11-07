@@ -2,9 +2,14 @@
 
 import { formatToppingLabels } from "@/utils/toppings";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import RefundNotice from "@/components/RefundNotice";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { cancelOrderApi, getOrderByIdApi, OrdersServiceError } from "@/services/orders.service";
+import {
+  cancelOrderApi,
+  getOrderByIdApi,
+  OrdersServiceError,
+} from "@/services/orders.service";
 import { useCartStore } from "@/stores/cart.store";
 import { useAuthStore } from "@/stores/auth.store";
 import {
@@ -127,7 +132,9 @@ function OrderConfirmationContent() {
       clearCancelledCheckout(order.id);
       setOrder(await getOrderByIdApi(token, order.id));
     } catch (error) {
-      setRetryError(error instanceof Error ? error.message : "Không thể hủy đơn.");
+      setRetryError(
+        error instanceof Error ? error.message : "Không thể hủy đơn.",
+      );
     } finally {
       setCancelling(false);
     }
@@ -300,6 +307,31 @@ function OrderConfirmationContent() {
       ignore = true;
     };
   }, [isInvalidId, isAuthenticated, token, orderId, logout]);
+
+  useEffect(() => {
+    if (!token || !order) return;
+    const waiting =
+      order.status === "PENDING" ||
+      order.status === "PAYMENT_FAILED" ||
+      order.payments?.some(
+        (payment) =>
+          payment.refundStatus === "QUEUED" ||
+          payment.refundStatus === "PENDING",
+      );
+    if (!waiting) return;
+    const timer = setInterval(() => {
+      void getOrderByIdApi(token, order.id)
+        .then((updated) => {
+          setOrder(updated);
+          if (updated.status === "CANCELLED")
+            clearCancelledCheckout(updated.id);
+        })
+        .catch(() => {
+          /* Giữ dữ liệu hiện tại khi mạng tạm mất. */
+        });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [token, order]);
 
   if (isAuthLoading) {
     return (
@@ -547,6 +579,19 @@ function OrderConfirmationContent() {
           </div>
         </div>
 
+        {order.cancellationReason && (
+          <p className="mt-5 text-center text-sm text-stone-600">
+            {order.cancellationReason}
+          </p>
+        )}
+        <RefundNotice payments={order.payments} />
+        {(order.status === "PENDING" || order.status === "PAYMENT_FAILED") &&
+          order.payments?.[0]?.expiresAt && (
+            <p className="mt-4 text-center text-sm text-stone-600">
+              Thời hạn thanh toán: {formatDate(order.payments[0].expiresAt)}.
+              Đơn sẽ tự hủy nếu quá hạn.
+            </p>
+          )}
         <div className="mt-10 flex flex-wrap justify-center gap-4 border-t border-amber-900/10 pt-6">
           {order.status === "PAYMENT_FAILED" &&
             order.paymentMethod === "VNPAY" && (
@@ -574,7 +619,8 @@ function OrderConfirmationContent() {
                 </button>
               </div>
             )}
-          {(order.status === "PENDING" || order.status === "PAYMENT_FAILED") && (
+          {(order.status === "PENDING" ||
+            order.status === "PAYMENT_FAILED") && (
             <button
               type="button"
               disabled={cancelling || retrying}

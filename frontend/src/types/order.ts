@@ -1,3 +1,4 @@
+import type { RefundSummary } from "@/components/RefundNotice";
 import type { PaymentMethod } from "@/types/checkout";
 
 export type OrderStatus =
@@ -27,6 +28,9 @@ export interface OrderItem {
 }
 
 export interface Order {
+  cancellationReason?: string | null;
+  cancellationSource?: string | null;
+  payments?: RefundSummary[];
   id: number;
   userId: number;
   status: OrderStatus;
