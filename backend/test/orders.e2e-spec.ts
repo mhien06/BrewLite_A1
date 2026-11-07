@@ -1,3 +1,4 @@
+import { PaymentMaintenanceService } from '../src/payments/payment-maintenance.service.js';
 import './setup-jwt-secret.js';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -87,6 +88,9 @@ describe('Orders API (e2e) - T09A', () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
+      // Các bài HTTP dùng Prisma mock; tiến trình nền được kiểm tra riêng với PostgreSQL.
+      .overrideProvider(PaymentMaintenanceService)
+      .useValue({})
       .overrideProvider(PrismaService)
       .useValue(mockPrisma)
       .compile();

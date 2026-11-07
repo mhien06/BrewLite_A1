@@ -32,6 +32,7 @@ export interface RefundVnpayTransactionInput {
   createdBy: string;
   ipAddress: string;
   transactionType?: '02' | '03';
+  requestId?: string;
 }
 
 @Injectable()
@@ -99,7 +100,7 @@ export class VnpayTransactionApiService {
     const config = getVnpayConfig();
 
     const params: VnpayParams = {
-      vnp_RequestId: this.createRequestId(),
+      vnp_RequestId: input.requestId ?? this.createRequestId(),
       vnp_Version: '2.1.0',
       vnp_Command: 'refund',
       vnp_TmnCode: config.tmnCode,

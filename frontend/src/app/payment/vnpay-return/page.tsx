@@ -10,6 +10,7 @@ import { useCheckoutStore } from "@/stores/checkout.store";
 import type { OrderStatus } from "@/types/order";
 import {
   clearVnpayCheckoutSession,
+  clearCancelledCheckout,
   loadVnpayCheckoutSession,
 } from "@/utils/vnpay-session";
 
@@ -131,8 +132,8 @@ function VnpayReturnContent() {
         }
 
         if (order.status === "PAYMENT_FAILED" || order.status === "CANCELLED") {
-          if (matchingSession)
-            useCheckoutStore.getState().clearPaymentAttempt();
+          if (order.status === "CANCELLED") clearCancelledCheckout(orderId);
+          else if (matchingSession) useCheckoutStore.getState().clearPaymentAttempt();
 
           setReturnState("failed");
           setMessage(

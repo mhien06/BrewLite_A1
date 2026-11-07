@@ -212,6 +212,54 @@ describe('VnpayIpnService', () => {
     });
   });
 
+  it.each([
+    {
+      code: '24',
+      providerStatus: '02',
+      paymentStatus: OrderStatus.PAYMENT_FAILED,
+    },
+    { code: '00', providerStatus: '00', paymentStatus: OrderStatus.PAID },
+  ])(
+    'records callback $code for a cancelled order once',
+    async ({ code, providerStatus, paymentStatus }) => {
+      transaction.order.findUnique.mockResolvedValue({
+        id: 10,
+        userId: 7,
+        total: 172_800,
+        status: OrderStatus.CANCELLED,
+      });
+      const payment = { id: 5, userId: 7, orderId: 10, amount: 172_800 };
+      transaction.payment.findUnique
+        .mockResolvedValueOnce({ ...payment, status: OrderStatus.PENDING })
+        .mockResolvedValueOnce({ ...payment, status: OrderStatus.PENDING })
+        .mockResolvedValue({ ...payment, status: paymentStatus });
+
+      const query = signedQuery({
+        vnp_ResponseCode: code,
+        vnp_TransactionStatus: providerStatus,
+      });
+
+      expect((await service.handle(query)).RspCode).toBe('00');
+      expect((await service.handle(query)).RspCode).toBe('02');
+      expect(transaction.payment.update).toHaveBeenCalledExactlyOnceWith({
+        where: { id: 5 },
+        data: {
+          status: paymentStatus,
+          paidAt: code === '00' ? expect.any(Date) : null,
+          ...(code === '00' ? { refundRequestedAt: expect.any(Date), refundStatus: 'QUEUED' } : {}),
+          providerTransactionNo: '14567890',
+          providerResponseCode: code,
+          providerTransactionStatus: providerStatus,
+          providerPayDate: '20261104135000',
+          providerBankCode: 'NCB',
+        },
+      });
+      expect(orderState.transition).not.toHaveBeenCalled();
+      expect(inventory.deductForPaidOrder).not.toHaveBeenCalled();
+      expect(loyalty.awardPointsForPaidOrder).not.toHaveBeenCalled();
+    },
+  );
+
   it('returns 02 for a duplicate callback without applying side effects', async () => {
     transaction.payment.findUnique.mockResolvedValue({
       id: 5,

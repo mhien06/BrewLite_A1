@@ -1,3 +1,4 @@
+import { useCheckoutStore } from "@/stores/checkout.store";
 import type { CartItem } from "@/types/cart";
 
 const VNPAY_SESSION_KEY = "brewlite_vnpay_checkout";
@@ -100,4 +101,11 @@ export function vnpayStatusPath(orderId: number, txnRef: string): string {
     txnRef,
   });
   return `/payment/vnpay-return?${query}`;
+}
+
+export function clearCancelledCheckout(orderId: number) {
+  const checkout = useCheckoutStore.getState();
+  if (checkout.pendingOrder?.orderId === orderId) checkout.clearPendingOrder();
+  if (checkout.paymentAttempt?.orderId === orderId) checkout.clearPaymentAttempt();
+  if (loadVnpayCheckoutSession()?.orderId === orderId) clearVnpayCheckoutSession();
 }

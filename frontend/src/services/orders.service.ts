@@ -37,11 +37,12 @@ async function getApi<T>(
   path: string,
   token: string,
   defaultMessage: string,
+  method = 'GET',
 ): Promise<T> {
   const endpoint = `${API_BASE_URL.replace(/\/$/, '')}${path}`;
 
   const response = await fetch(endpoint, {
-    method: 'GET',
+    method,
     headers: {
       Authorization: `Bearer ${token}`,
       Accept: 'application/json',
@@ -73,5 +74,14 @@ export function getOrderByIdApi(
     `/orders/${orderId}`,
     token,
     'Không thể tải thông tin đơn hàng.',
+  );
+}
+
+export function cancelOrderApi(token: string, orderId: number): Promise<unknown> {
+  return getApi(
+    `/orders/${orderId}/cancel`,
+    token,
+    'Không thể hủy đơn hàng.',
+    'POST',
   );
 }

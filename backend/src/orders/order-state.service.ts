@@ -107,10 +107,19 @@ export class OrderStateService {
     tx?: Prisma.TransactionClient,
     extraData: Omit<Prisma.OrderUpdateManyMutationInput, 'status'> = {},
     actorId?: number,
+    customerId?: number,
   ): Promise<Prisma.OrderGetPayload<object>> {
     if (!tx && typeof this.prisma.$transaction === 'function') {
       return this.prisma.$transaction(
-        (transaction) => this.transition(orderId, to, transaction, extraData, actorId),
+        (transaction) =>
+          this.transition(
+            orderId,
+            to,
+            transaction,
+            extraData,
+            actorId,
+            customerId,
+          ),
         { timeout: 20000 },
       );
     }
@@ -123,16 +132,35 @@ export class OrderStateService {
       where: { id: orderId },
     });
 
-    if (!order) {
+    if (!order || (customerId !== undefined && order.userId !== customerId)) {
       throw new NotFoundException('Không tìm thấy đơn hàng.');
     }
 
     // Gửi lại yêu cầu hủy chỉ trả trạng thái cũ, không hoàn lần nữa.
     if (order.status === OrderStatus.CANCELLED && to === OrderStatus.CANCELLED)
       return order;
+    if (
+      customerId !== undefined &&
+      order.status !== OrderStatus.PENDING &&
+      order.status !== OrderStatus.PAYMENT_FAILED
+    ) {
+      throw new ConflictException('Bạn chỉ có thể hủy đơn chưa thanh toán.');
+    }
+
     this.assertTransition(order.status, to);
     if (to === OrderStatus.CANCELLED && order.status === OrderStatus.PAID) {
       await this.restorePaidOrder(db, order, actorId ?? order.userId);
+      if (order.paymentMethod === 'VNPAY') {
+        await db.payment.updateMany({
+          where: {
+            orderId,
+            method: 'VNPAY',
+            status: OrderStatus.PAID,
+            refundRequestedAt: null,
+          },
+          data: { refundRequestedAt: new Date(), refundStatus: 'QUEUED' },
+        });
+      }
     }
     const result = await db.order.updateMany({
       where: { id: orderId, status: order.status },

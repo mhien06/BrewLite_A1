@@ -88,8 +88,23 @@ export class StaffService {
     return this.prisma.order.findMany({
       take: 100,
       orderBy: { id: 'desc' },
-      where: { status: { in: ['PAID', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'] } },
+      where: {
+        status: {
+          in: ['PAID', 'PREPARING', 'READY', 'COMPLETED', 'CANCELLED'],
+        },
+      },
       include: {
+        payments: {
+          where: { refundRequestedAt: { not: null } },
+          orderBy: { id: 'desc' },
+          select: {
+            id: true,
+            amount: true,
+            refundStatus: true,
+            refundRequestedAt: true,
+            refundCompletedAt: true,
+          },
+        },
         user: { select: { name: true } },
         items: { include: { product: { select: { name: true } } } },
       },
@@ -97,7 +112,25 @@ export class StaffService {
   }
   updateStatus(id: number, dto: UpdateOrderStatusDto, actorId?: number) {
     // Nhận pha, giao khách hoặc hủy trước khi pha; không tự đánh dấu PAID.
-    return this.states.transition(id, dto.status, undefined, {}, actorId);
+    if (dto.status !== 'CANCELLED') {
+      return this.states.transition(id, dto.status, undefined, {}, actorId);
+    }
+    const reason = dto.reason?.trim();
+    if (!reason || reason.length < 3) {
+      throw new BadRequestException('Vui lòng nhập lý do hủy ít nhất 3 ký tự.');
+    }
+    return this.states.transition(
+      id,
+      dto.status,
+      undefined,
+      {
+        cancelledAt: new Date(),
+        cancellationSource: 'STAFF',
+        cancelledById: actorId,
+        cancellationReason: reason,
+      },
+      actorId,
+    );
   }
   loyalty() {
     return this.prisma.user.findMany({
@@ -111,7 +144,12 @@ export class StaffService {
         loyaltyTransactions: {
           take: 30,
           orderBy: { id: 'desc' },
-          select: { orderId: true, points: true, reversed: true, createdAt: true },
+          select: {
+            orderId: true,
+            points: true,
+            reversed: true,
+            createdAt: true,
+          },
         },
       },
     });

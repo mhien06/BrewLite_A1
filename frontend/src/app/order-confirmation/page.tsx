@@ -2,9 +2,14 @@
 
 import { formatToppingLabels } from "@/utils/toppings";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import RefundNotice from "@/components/RefundNotice";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { getOrderByIdApi, OrdersServiceError } from "@/services/orders.service";
+import {
+  cancelOrderApi,
+  getOrderByIdApi,
+  OrdersServiceError,
+} from "@/services/orders.service";
 import { useCartStore } from "@/stores/cart.store";
 import { useAuthStore } from "@/stores/auth.store";
 import {
@@ -13,6 +18,7 @@ import {
 } from "@/services/checkout.service";
 import {
   clearVnpayCheckoutSession,
+  clearCancelledCheckout,
   openVnpayTab,
   vnpayStatusPath,
   loadVnpayCheckoutSession,
@@ -113,6 +119,27 @@ function OrderConfirmationContent() {
   const [retryMethod, setRetryMethod] = useState<PaymentMethod>("VNPAY");
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState("");
+  const [cancelling, setCancelling] = useState(false);
+
+  async function cancelOrder() {
+    if (!token || !order || cancelling || retrying) return;
+    if (!window.confirm("Bạn muốn hủy đơn này?")) return;
+
+    setCancelling(true);
+    setRetryError("");
+    try {
+      await cancelOrderApi(token, order.id);
+      clearCancelledCheckout(order.id);
+      setOrder(await getOrderByIdApi(token, order.id));
+    } catch (error) {
+      setRetryError(
+        error instanceof Error ? error.message : "Không thể hủy đơn.",
+      );
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   const retryAttempt = useRef<{
     orderId: number;
     method: PaymentMethod;
@@ -280,6 +307,31 @@ function OrderConfirmationContent() {
       ignore = true;
     };
   }, [isInvalidId, isAuthenticated, token, orderId, logout]);
+
+  useEffect(() => {
+    if (!token || !order) return;
+    const waiting =
+      order.status === "PENDING" ||
+      order.status === "PAYMENT_FAILED" ||
+      order.payments?.some(
+        (payment) =>
+          payment.refundStatus === "QUEUED" ||
+          payment.refundStatus === "PENDING",
+      );
+    if (!waiting) return;
+    const timer = setInterval(() => {
+      void getOrderByIdApi(token, order.id)
+        .then((updated) => {
+          setOrder(updated);
+          if (updated.status === "CANCELLED")
+            clearCancelledCheckout(updated.id);
+        })
+        .catch(() => {
+          /* Giữ dữ liệu hiện tại khi mạng tạm mất. */
+        });
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [token, order]);
 
   if (isAuthLoading) {
     return (
@@ -527,6 +579,19 @@ function OrderConfirmationContent() {
           </div>
         </div>
 
+        {order.cancellationReason && (
+          <p className="mt-5 text-center text-sm text-stone-600">
+            {order.cancellationReason}
+          </p>
+        )}
+        <RefundNotice payments={order.payments} />
+        {(order.status === "PENDING" || order.status === "PAYMENT_FAILED") &&
+          order.payments?.[0]?.expiresAt && (
+            <p className="mt-4 text-center text-sm text-stone-600">
+              Thời hạn thanh toán: {formatDate(order.payments[0].expiresAt)}.
+              Đơn sẽ tự hủy nếu quá hạn.
+            </p>
+          )}
         <div className="mt-10 flex flex-wrap justify-center gap-4 border-t border-amber-900/10 pt-6">
           {order.status === "PAYMENT_FAILED" &&
             order.paymentMethod === "VNPAY" && (
@@ -535,7 +600,7 @@ function OrderConfirmationContent() {
                   Phương thức
                   <select
                     value={retryMethod}
-                    disabled={retrying}
+                    disabled={retrying || cancelling}
                     onChange={(event) =>
                       setRetryMethod(event.target.value as PaymentMethod)
                     }
@@ -547,13 +612,24 @@ function OrderConfirmationContent() {
                 <button
                   type="button"
                   onClick={() => void retryPayment()}
-                  disabled={retrying}
+                  disabled={retrying || cancelling}
                   className="rounded-full bg-[#f6a14a] px-6 py-3 text-sm font-extrabold text-[#40241b] disabled:opacity-60"
                 >
                   {retrying ? "Đang xử lý…" : `Thanh toán lại đơn #${order.id}`}
                 </button>
               </div>
             )}
+          {(order.status === "PENDING" ||
+            order.status === "PAYMENT_FAILED") && (
+            <button
+              type="button"
+              disabled={cancelling || retrying}
+              onClick={() => void cancelOrder()}
+              className="rounded-full border border-red-300 px-6 py-3 text-sm font-bold text-red-700 disabled:opacity-60"
+            >
+              {cancelling ? "Đang hủy…" : "Hủy đơn"}
+            </button>
+          )}
           {retryError && (
             <p role="alert" className="w-full text-center text-sm text-red-700">
               {retryError}

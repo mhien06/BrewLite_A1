@@ -1,3 +1,4 @@
+import { paymentDeadline } from '../order-expiry.service.js';
 import {
   BadRequestException,
   ConflictException,
@@ -55,6 +56,20 @@ export class VnpayService {
     });
 
     if (savedPayment) {
+      const order = await this.prisma.order.findFirst({
+        where: { id: dto.orderId, userId },
+        select: { status: true },
+      });
+      if (
+        !order ||
+        !(
+          [OrderStatus.PENDING, OrderStatus.PAYMENT_FAILED] as OrderStatus[]
+        ).includes(order.status)
+      ) {
+        throw new ConflictException(
+          'Đơn không còn cho phép thanh toán. Vui lòng xem chi tiết đơn.',
+        );
+      }
       return this.buildReplayResponse(savedPayment, dto, rawIpAddress, config);
     }
 
@@ -83,6 +98,24 @@ export class VnpayService {
         });
 
         if (savedInsideTransaction) {
+          const existingOrder = await transaction.order.findFirst({
+            where: { id: dto.orderId, userId },
+            select: { status: true },
+          });
+          if (
+            !existingOrder ||
+            !(
+              [OrderStatus.PENDING, OrderStatus.PAYMENT_FAILED] as OrderStatus[]
+            ).includes(existingOrder.status)
+          ) {
+            throw new ConflictException('Đơn không còn cho phép thanh toán.');
+          }
+          this.buildReplayResponse(
+            savedInsideTransaction,
+            dto,
+            rawIpAddress,
+            config,
+          );
           return savedInsideTransaction;
         }
 
@@ -95,6 +128,7 @@ export class VnpayService {
             id: true,
             status: true,
             total: true,
+            createdAt: true,
           },
         });
 
@@ -124,6 +158,22 @@ export class VnpayService {
           },
           select: { id: true },
         });
+
+        const latestPayment = await transaction.payment.findFirst({
+          where: { orderId: order.id },
+          orderBy: { id: 'desc' },
+        });
+        if (
+          order.createdAt &&
+          paymentDeadline(
+            order.createdAt,
+            latestPayment?.expiresAt,
+          ).getTime() <= createdAt.getTime()
+        ) {
+          throw new ConflictException(
+            'Đơn đã hết thời hạn thanh toán. Vui lòng đặt đơn mới.',
+          );
+        }
 
         if (activePayment) {
           throw new ConflictException(
