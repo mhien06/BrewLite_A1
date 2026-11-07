@@ -1,3 +1,4 @@
+import { OrderStateService } from '../src/orders/order-state.service.js';
 import {
   type ExecutionContext,
   type INestApplication,
@@ -115,6 +116,7 @@ describe('Database ID validation (HTTP regression)', () => {
         StaffController,
       ],
       providers: [
+        { provide: OrderStateService, useValue: { transition: vi.fn() } },
         { provide: ProductsService, useValue: products },
         { provide: OrdersService, useValue: orders },
         { provide: PaymentsService, useValue: payments },

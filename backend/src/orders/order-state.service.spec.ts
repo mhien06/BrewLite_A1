@@ -66,6 +66,42 @@ describe('OrderStateService', () => {
     },
   );
 
+  it('hides orders owned by another customer, even after cancellation', async () => {
+    prisma.order.findUnique.mockResolvedValue({
+      id: 8,
+      userId: 7,
+      status: OrderStatus.CANCELLED,
+    });
+
+    await expect(
+      service.transition(8, OrderStatus.CANCELLED, undefined, {}, 9, 9),
+    ).rejects.toThrow(NotFoundException);
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('blocks customers from cancelling a paid order', async () => {
+    prisma.order.findUnique.mockResolvedValue({
+      id: 8,
+      userId: 7,
+      status: OrderStatus.PAID,
+    });
+
+    await expect(
+      service.transition(8, OrderStatus.CANCELLED, undefined, {}, 7, 7),
+    ).rejects.toThrow(ConflictException);
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
+  it('returns the original cancellation on a repeated customer request', async () => {
+    const order = { id: 8, userId: 7, status: OrderStatus.CANCELLED };
+    prisma.order.findUnique.mockResolvedValue(order);
+
+    await expect(
+      service.transition(8, OrderStatus.CANCELLED, undefined, {}, 7, 7),
+    ).resolves.toEqual(order);
+    expect(prisma.order.updateMany).not.toHaveBeenCalled();
+  });
+
   it('updates only if the previously read status is still current', async () => {
     prisma.order.findUnique.mockResolvedValueOnce({
       id: 8,

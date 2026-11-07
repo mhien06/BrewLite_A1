@@ -7,12 +7,37 @@ import {
 } from '../auth/decorators/current-user.decorator.js';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard.js';
 import { CreateOrderDto } from './dto/create-order.dto.js';
+import { OrderStateService } from './order-state.service.js';
 import { OrdersService } from './orders.service.js';
 
 @Controller('orders')
 @UseGuards(JwtAuthGuard)
 export class OrdersController {
-  constructor(private readonly ordersService: OrdersService) {}
+  constructor(
+    private readonly ordersService: OrdersService,
+    private readonly orderState: OrderStateService,
+  ) {}
+
+  @Post(':id/cancel')
+  @UseGuards(CustomerGuard)
+  cancel(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseDatabaseIdPipe) id: number,
+  ) {
+    return this.orderState.transition(
+      id,
+      'CANCELLED',
+      undefined,
+      {
+        cancelledAt: new Date(),
+        cancellationSource: 'CUSTOMER',
+        cancelledById: user.id,
+        cancellationReason: 'Khách hủy đơn chưa thanh toán.',
+      },
+      user.id,
+      user.id,
+    );
+  }
 
   @Post()
   @UseGuards(CustomerGuard)
