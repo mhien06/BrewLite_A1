@@ -9,7 +9,12 @@ describe('OrderStateService', () => {
     order: {
       findUnique: vi.fn(),
       updateMany: vi.fn(),
+      update: vi.fn(),
     },
+    ingredient: { update: vi.fn() },
+    inventoryMovement: { create: vi.fn() },
+    loyaltyTransaction: { findUnique: vi.fn() },
+    payment: { updateMany: vi.fn() },
   };
   let service: OrderStateService;
 
@@ -79,11 +84,37 @@ describe('OrderStateService', () => {
     expect(prisma.order.updateMany).not.toHaveBeenCalled();
   });
 
-  it('blocks customers from cancelling a paid order', async () => {
-    prisma.order.findUnique.mockResolvedValue({
+  it('allows customers to cancel a paid order before the shop confirms', async () => {
+    const paid = {
       id: 8,
       userId: 7,
       status: OrderStatus.PAID,
+      inventoryDeducted: true,
+      inventorySnapshot: [{ ingredientId: 1, amount: 10 }],
+      paymentMethod: 'WALLET',
+    };
+    const cancelled = { ...paid, status: OrderStatus.CANCELLED };
+    prisma.order.findUnique
+      .mockResolvedValueOnce(paid)
+      .mockResolvedValueOnce(cancelled);
+    prisma.ingredient.update.mockResolvedValue({ stock: 20 });
+    prisma.loyaltyTransaction.findUnique.mockResolvedValue(null);
+    prisma.order.updateMany.mockResolvedValue({ count: 1 });
+
+    await expect(
+      service.transition(8, OrderStatus.CANCELLED, undefined, {}, 7, 7),
+    ).resolves.toEqual(cancelled);
+    expect(prisma.order.updateMany).toHaveBeenCalledWith({
+      where: { id: 8, status: OrderStatus.PAID },
+      data: { status: OrderStatus.CANCELLED },
+    });
+  });
+
+  it('blocks customers from cancelling after the shop starts preparing', async () => {
+    prisma.order.findUnique.mockResolvedValue({
+      id: 8,
+      userId: 7,
+      status: OrderStatus.PREPARING,
     });
 
     await expect(

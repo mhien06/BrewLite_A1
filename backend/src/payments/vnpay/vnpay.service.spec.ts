@@ -1,4 +1,7 @@
-import { BadRequestException, ConflictException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
 import { OrderStatus, PaymentMethod } from '../../generated/prisma/client.js';
 import { OrderStateService } from '../../orders/order-state.service.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
@@ -196,6 +199,28 @@ describe('VnpayService - create payment URL', () => {
     ).rejects.toBeInstanceOf(ConflictException);
 
     expect(transaction.payment.create).not.toHaveBeenCalled();
+  });
+
+  it('creates a fresh sandbox transaction while an earlier one is still pending', async () => {
+    transaction.payment.findFirst.mockResolvedValue({
+      id: 8,
+      expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    });
+
+    const result = await service.createPaymentUrl(
+      7,
+      { orderId: 10, locale: 'vn' },
+      'retry-key-2',
+      '127.0.0.1',
+    );
+
+    expect(transaction.payment.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        idempotencyKey: 'retry-key-2',
+        providerTxnRef: expect.stringMatching(/^BL[0-9A-F]+$/),
+      }),
+    });
+    expect(result.txnRef).toMatch(/^BL[0-9A-F]+$/);
   });
 
   it('returns a failed order to pending before retrying', async () => {

@@ -4,6 +4,8 @@ import { useState } from "react";
 export interface RefundSummary {
   id: number;
   amount: number;
+  method?: "WALLET" | "CARD" | "VNPAY";
+  status?: "PENDING" | "PAID" | "PAYMENT_FAILED";
   refundStatus: "QUEUED" | "PENDING" | "FAILED" | "SUCCEEDED" | null;
   expiresAt?: string | null;
   refundCompletedAt?: string | null;

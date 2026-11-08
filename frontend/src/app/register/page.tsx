@@ -1,12 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/stores/auth.store';
+import { loginHref } from '@/utils/login-redirect';
 
-export default function RegisterPage() {
+function RegisterForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const register = useAuthStore((state) => state.register);
   const isLoading = useAuthStore((state) => state.isLoading);
   const storeError = useAuthStore((state) => state.error);
@@ -67,7 +69,7 @@ export default function RegisterPage() {
 
     const success = await register(normalizedName, email.trim(), password);
     if (success) {
-      router.replace('/login');
+      router.replace(loginHref(searchParams.get('next')));
     }
   };
 
@@ -348,7 +350,7 @@ export default function RegisterPage() {
         <div className="mt-6 text-center text-sm text-[#9a7c6b]">
           Đã có tài khoản?{' '}
           <Link
-            href="/login"
+            href={loginHref(searchParams.get('next'))}
             className="font-bold text-[#7a3b22] hover:underline"
           >
             Đăng nhập
@@ -365,5 +367,19 @@ export default function RegisterPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense
+      fallback={
+        <main className="mx-auto w-full max-w-md px-4 py-16 text-center">
+          <p className="font-semibold text-[#9a7c6b]">Đang mở đăng ký...</p>
+        </main>
+      }
+    >
+      <RegisterForm />
+    </Suspense>
   );
 }

@@ -231,13 +231,21 @@ function VnpayReturnContent() {
         )}
 
         {returnState === "pending" && (
-          <button
-            type="button"
-            onClick={() => setRefreshKey((value) => value + 1)}
-            className="mt-6 rounded-full bg-[#f6a14a] px-7 py-3 text-sm font-bold text-[#40241b]"
-          >
-            Kiểm tra lại
-          </button>
+          <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+            <button
+              type="button"
+              onClick={() => setRefreshKey((value) => value + 1)}
+              className="rounded-full bg-[#f6a14a] px-7 py-3 text-sm font-bold text-[#40241b] transition hover:bg-[#f29435]"
+            >
+              Kiểm tra lại
+            </button>
+            <Link
+              href="/orders"
+              className="rounded-full border border-[#ead8c7] bg-white px-7 py-3 text-sm font-bold text-[#40241b] transition hover:bg-[#fffaf5]"
+            >
+              Xem lịch sử đơn hàng
+            </Link>
+          </div>
         )}
 
         {returnState === "error" && (

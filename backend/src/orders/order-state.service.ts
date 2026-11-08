@@ -20,6 +20,12 @@ const VALID_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
   [OrderStatus.CANCELLED]: [],
 };
 
+const CUSTOMER_CANCELLABLE: readonly OrderStatus[] = [
+  OrderStatus.PENDING,
+  OrderStatus.PAYMENT_FAILED,
+  OrderStatus.PAID,
+];
+
 @Injectable()
 export class OrderStateService {
   constructor(private readonly prisma: PrismaService) {}
@@ -141,10 +147,11 @@ export class OrderStateService {
       return order;
     if (
       customerId !== undefined &&
-      order.status !== OrderStatus.PENDING &&
-      order.status !== OrderStatus.PAYMENT_FAILED
+      !CUSTOMER_CANCELLABLE.includes(order.status)
     ) {
-      throw new ConflictException('Bạn chỉ có thể hủy đơn chưa thanh toán.');
+      throw new ConflictException(
+        'Bạn chỉ có thể hủy đơn khi chưa thanh toán hoặc khi quán chưa xác nhận.',
+      );
     }
 
     this.assertTransition(order.status, to);

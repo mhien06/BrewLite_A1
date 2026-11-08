@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { getMyOrdersApi, OrdersServiceError } from '@/services/orders.service';
 import { useAuthStore } from '@/stores/auth.store';
 import type { Order, OrderStatus } from '@/types/order';
+import { loginHref } from '@/utils/login-redirect';
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat('vi-VN', {
@@ -28,7 +29,7 @@ const getStatusBadge = (status: OrderStatus) => {
   switch (status) {
     case 'PAID':
       return {
-        label: 'Đã thanh toán',
+        label: 'Chờ quán xác nhận',
         className: 'bg-emerald-50 text-emerald-700 border-emerald-200',
       };
     case 'PENDING':
@@ -156,7 +157,7 @@ export default function OrderHistoryPage() {
             Bạn cần đăng nhập tài khoản để xem lịch sử và quản lý các đơn hàng đã đặt.
           </p>
           <Link
-            href="/login"
+            href={loginHref('/orders')}
             className="mt-6 inline-flex rounded-full bg-[#f6a14a] px-7 py-3 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435]"
           >
             Đăng nhập ngay

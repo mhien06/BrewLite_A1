@@ -27,6 +27,7 @@ import {
 } from "@/stores/checkout.store";
 import { selectCheckoutItems, useCartStore } from "@/stores/cart.store";
 import type { PaymentMethod, PaymentResponse } from "@/types/checkout";
+import { loginHref } from "@/utils/login-redirect";
 
 function calculatePreviewDiscount(rawCode: string, subtotal: number): number {
   const code = rawCode.trim().replace(/\s+/g, "").toUpperCase();
@@ -81,9 +82,7 @@ export default function CheckoutPage() {
       ? session
       : null;
   });
-  const [method, setMethod] = useState<PaymentMethod>(
-    "VNPAY",
-  );
+  const [method, setMethod] = useState<PaymentMethod>("WALLET");
   const [promotionCode, setPromotionCode] = useState(
     retrySession?.promotionCode ?? "",
   );
@@ -314,7 +313,7 @@ export default function CheckoutPage() {
             Bạn cần đăng nhập trước khi thanh toán.
           </p>
           <Link
-            href="/login"
+            href={loginHref("/checkout")}
             className="mt-6 inline-flex rounded-full bg-[#f6a14a] px-7 py-3 text-sm font-extrabold text-[#40241b]"
           >
             Đăng nhập

@@ -13,6 +13,7 @@ import type { CartItem } from "@/types/cart";
 import Link from "next/link";
 import { useAuthStore } from "@/stores/auth.store";
 import { selectCheckoutItems, useCartStore } from "@/stores/cart.store";
+import { loginHref } from "@/utils/login-redirect";
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat("vi-VN", {
@@ -360,7 +361,7 @@ export default function CartPage() {
                   Đăng nhập để liên kết đơn hàng và tích lũy điểm thưởng.
                 </p>
                 <Link
-                  href="/login"
+                  href={loginHref("/cart")}
                   className="mt-3 flex w-full items-center justify-center rounded-full bg-[#f6a14a] px-4 py-2 text-center font-bold text-[#40241b] transition hover:bg-[#f29435]"
                 >
                   Đăng nhập ngay
@@ -386,7 +387,7 @@ export default function CartPage() {
               </Link>
             ) : (
               <Link
-                href="/login"
+                href={loginHref("/checkout")}
                 className={`mt-5 flex w-full items-center justify-center rounded-full px-5 py-3.5 text-sm font-extrabold ${checkoutAllowed ? "bg-[#f6a14a] text-[#40241b] hover:bg-[#f29435]" : "cursor-not-allowed bg-stone-200 text-stone-500"}`}
               >
                 Đăng nhập để thanh toán

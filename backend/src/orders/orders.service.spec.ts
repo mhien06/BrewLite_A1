@@ -1,6 +1,7 @@
 import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { PrismaService } from '../prisma/prisma.service.js';
+import type { PromotionsService } from '../promotions/promotions.service.js';
 import { OrdersService } from './orders.service.js';
 
 describe('OrdersService - History and Detail (T09A)', () => {
@@ -16,7 +17,10 @@ describe('OrdersService - History and Detail (T09A)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    service = new OrdersService(prisma as unknown as PrismaService);
+    service = new OrdersService(
+      prisma as unknown as PrismaService,
+      {} as unknown as PromotionsService,
+    );
   });
 
   describe('findMyOrders', () => {

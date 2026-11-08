@@ -300,6 +300,22 @@ describe('T10B với PostgreSQL thật', () => {
       (await db.order.findUniqueOrThrow({ where: { id: order.id } })).status,
     ).toBe('CANCELLED');
   });
+  it('khách hủy PAID khi quán chưa xác nhận', async () => {
+    const order = await createOrder();
+    await pay(order.id, 'customer-cancel-paid');
+    await new OrderStateService(db).transition(
+      order.id,
+      'CANCELLED',
+      undefined,
+      { cancellationSource: 'CUSTOMER' },
+      userId,
+      userId,
+    );
+    expect(
+      (await db.order.findUniqueOrThrow({ where: { id: order.id } })).status,
+    ).toBe('CANCELLED');
+    expect(await stock()).toBe(100);
+  });
   it('hai kết nối cùng hủy chỉ hoàn một lần', async () => {
     const order = await createOrder();
     await pay(order.id, 'cancel-concurrent');

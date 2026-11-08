@@ -38,7 +38,7 @@ const tabs = [
 
 const statusLabels: Record<string, string> = {
   CANCELLED: "Đã hủy",
-  PAID: "Chờ pha chế",
+  PAID: "Chờ xác nhận",
   PREPARING: "Đang pha",
   READY: "Chờ nhận",
   COMPLETED: "Hoàn tất",
