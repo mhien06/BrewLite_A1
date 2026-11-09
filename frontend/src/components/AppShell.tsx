@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import Header from "./Header";
 import StaffHeader from "./StaffHeader";
 import { useAuthStore } from "@/stores/auth.store";
+import { useCartStore } from "@/stores/cart.store";
 
 // Chọn giao diện theo tài khoản và đường dẫn. API vẫn kiểm tra quyền riêng.
 export default function AppShell({ children }: { children: React.ReactNode }) {
@@ -16,6 +17,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const staffAccount = user?.role === "STAFF";
 
   useEffect(() => {
+    void useCartStore.persist.rehydrate();
     void initialize();
   }, [initialize]);
   useEffect(() => {

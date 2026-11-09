@@ -32,7 +32,7 @@ export class OrdersController {
         cancelledAt: new Date(),
         cancellationSource: 'CUSTOMER',
         cancelledById: user.id,
-        cancellationReason: 'Khách hủy đơn chưa thanh toán.',
+        cancellationReason: 'Khách hủy đơn.',
       },
       user.id,
       user.id,

@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AuthUser } from '../auth/decorators/current-user.decorator.js';
+import type { OrderStateService } from './order-state.service.js';
 import { OrdersController } from './orders.controller.js';
 import type { OrdersService } from './orders.service.js';
 
@@ -10,7 +11,10 @@ describe('OrdersController (T09A)', () => {
     findOne: vi.fn(),
   };
 
-  const controller = new OrdersController(mockService as unknown as OrdersService);
+  const controller = new OrdersController(
+    mockService as unknown as OrdersService,
+    { transition: vi.fn() } as unknown as OrderStateService,
+  );
   const mockUser: AuthUser = { id: 42, email: 'user@example.com' };
 
   it('delegates findMyOrders to OrdersService with user.id', async () => {

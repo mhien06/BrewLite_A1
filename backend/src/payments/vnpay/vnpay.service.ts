@@ -149,16 +149,6 @@ export class VnpayService {
           );
         }
 
-        const activePayment = await transaction.payment.findFirst({
-          where: {
-            orderId: order.id,
-            method: PaymentMethod.VNPAY,
-            status: OrderStatus.PENDING,
-            expiresAt: { gt: createdAt },
-          },
-          select: { id: true },
-        });
-
         const latestPayment = await transaction.payment.findFirst({
           where: { orderId: order.id },
           orderBy: { id: 'desc' },
@@ -175,12 +165,8 @@ export class VnpayService {
           );
         }
 
-        if (activePayment) {
-          throw new ConflictException(
-            'Đơn hàng đang có một giao dịch VNPAY chưa hết hạn.',
-          );
-        }
-
+        // VNPAY khóa txnRef khi khách đã vào bước nhập thẻ, nên mỗi lần thử
+        // lại phải tạo giao dịch mới; IPN chỉ chốt đơn một lần nên không trừ trùng.
         if (order.status === OrderStatus.PAYMENT_FAILED) {
           await this.orderState.transition(
             order.id,

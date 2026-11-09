@@ -18,6 +18,12 @@ const formatPrice = (price: number) =>
     currency: "VND",
   }).format(price);
 
+const METHODS: Array<{ value: PaymentMethod; label: string }> = [
+  { value: "WALLET", label: "Ví điện tử" },
+  { value: "CARD", label: "Thẻ ngân hàng" },
+  { value: "VNPAY", label: "VNPAY Sandbox" },
+];
+
 export default function PaymentMethodPanel({
   method,
   subtotal,
@@ -33,11 +39,10 @@ export default function PaymentMethodPanel({
       <h2 className="text-2xl font-extrabold text-[#40241b]">
         Phương thức thanh toán
       </h2>
+      <p className="mt-1 text-sm text-[#9a7c6b]">Không dùng tiền mặt.</p>
 
       <div className="mt-4 space-y-3">
-        {[
-          { value: "VNPAY", label: "VNPAY Sandbox" },
-        ].map((option) => (
+        {METHODS.map((option) => (
           <label
             key={option.value}
             className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-5 py-4 text-sm font-bold text-[#492214] ${
@@ -52,7 +57,7 @@ export default function PaymentMethodPanel({
               value={option.value}
               checked={method === option.value}
               disabled={isSubmitting}
-              onChange={() => onMethodChange(option.value as PaymentMethod)}
+              onChange={() => onMethodChange(option.value)}
               className="accent-[#4a2115]"
             />
             {option.label}
@@ -111,6 +116,17 @@ export default function PaymentMethodPanel({
             ? `Thanh toán qua VNPAY · ${formatPrice(total)}`
             : `Thanh toán · ${formatPrice(total)}`}
       </button>
+
+      {method !== "VNPAY" && (
+        <button
+          type="button"
+          disabled={isSubmitting}
+          onClick={() => onSubmit(false)}
+          className="mt-3 w-full rounded-full border border-[#ead8c7] bg-white px-5 py-3 text-sm font-bold text-[#492214] transition hover:border-[#492214] disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          Mô phỏng thanh toán lỗi
+        </button>
+      )}
     </aside>
   );
 }

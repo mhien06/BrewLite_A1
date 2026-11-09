@@ -19,15 +19,28 @@ export const useAuthStore = create<AuthState>((set) => ({
   user: null,
   token: null,
   isAuthenticated: false,
-  isLoading: false,
+  isLoading: true,
   error: null,
 
   initialize: async () => {
     const revision = ++sessionRevision;
     const storage = getStorage();
-    if (!storage) return;
+    if (!storage) {
+      if (revision !== sessionRevision) return;
+      set({ isLoading: false });
+      return;
+    }
     const token = storage.getItem(TOKEN_KEY);
-    if (!token) return;
+    if (!token) {
+      if (revision !== sessionRevision) return;
+      set({
+        isLoading: false,
+        token: null,
+        user: null,
+        isAuthenticated: false,
+      });
+      return;
+    }
 
     set({ isLoading: true, token, isAuthenticated: true });
     try {

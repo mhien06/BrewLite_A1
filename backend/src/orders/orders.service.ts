@@ -142,6 +142,8 @@ export class OrdersService {
           select: {
             id: true,
             amount: true,
+            method: true,
+            status: true,
             expiresAt: true,
           },
         },
@@ -190,6 +192,8 @@ export class OrdersService {
           select: {
             id: true,
             amount: true,
+            method: true,
+            status: true,
             expiresAt: true,
           },
         },

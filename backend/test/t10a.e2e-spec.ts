@@ -41,7 +41,7 @@ describe('Backend T10A (e2e)', () => {
   let mockOrder = {
     id: 100,
     userId: mockUser.id,
-    status: OrderStatus.PENDING,
+    status: OrderStatus.PENDING as OrderStatus,
     paymentMethod: null as PaymentMethod | null,
     paidAt: null as Date | null,
     subtotal: 58_000,

@@ -251,7 +251,7 @@ Trên Docker runtime của bản sửa, HTTP smoke test đạt 35/35 và Chrome 
 
 Performance audit trước bản sửa trên main `ddb3013`: 300 request trên 10 endpoint, concurrency 1, max response time 72,74 ms, tất cả dưới 500 ms. Đây là kết quả local với sample data, chưa phải load test hay xác nhận mọi browser.
 
-Kết quả Docker clean build và runtime sau bản sửa được ghi tại [verification report](docs/verification-2026-11-03.md). UI test và technical verification không thay thế Sprint Review/nghiệm thu; minh chứng Scrum và nghiệm thu cuối được hoàn thiện riêng.
+Kết quả Docker clean build và runtime sau bản sửa đã được ghi nhận trong đợt kiểm tra ngày 03/11/2026. UI test và technical verification không thay thế Sprint Review/nghiệm thu; minh chứng Scrum và nghiệm thu cuối được hoàn thiện riêng.
 
 ### Kết quả lịch sử trên main ngày 02/11/2026
 

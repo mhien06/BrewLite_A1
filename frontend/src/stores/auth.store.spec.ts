@@ -59,6 +59,19 @@ describe('useAuthStore', () => {
     expect(state.token).toBeNull();
   });
 
+  it('initialize không có token thì tắt trạng thái đang tải', async () => {
+    useAuthStore.setState({ isLoading: true, isAuthenticated: false });
+
+    await useAuthStore.getState().initialize();
+
+    expect(useAuthStore.getState()).toMatchObject({
+      isLoading: false,
+      isAuthenticated: false,
+      token: null,
+      user: null,
+    });
+  });
+
   it('đăng nhập thành công và lưu token vào store cùng localStorage', async () => {
     const mockResponse = {
       accessToken: 'valid-jwt-token',

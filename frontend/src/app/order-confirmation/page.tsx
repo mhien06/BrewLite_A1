@@ -25,6 +25,7 @@ import {
 } from "@/utils/vnpay-session";
 import type { PaymentMethod } from "@/types/checkout";
 import type { Order, OrderStatus } from "@/types/order";
+import { loginHref } from "@/utils/login-redirect";
 
 const formatPrice = (price: number) =>
   new Intl.NumberFormat("vi-VN", {
@@ -60,9 +61,9 @@ const getStatusConfig = (status: OrderStatus) => {
         iconColor: "text-emerald-600",
         title: "Thanh toán thành công",
         subtitle:
-          "Cảm ơn bạn đã đặt đồ uống tại BrewLite! Đơn hàng đang được barista chuẩn bị.",
+          "Quán chưa xác nhận đơn. Bạn vẫn có thể hủy trước khi barista nhận pha.",
         badgeClass: "bg-emerald-50 text-emerald-700 border-emerald-200",
-        badgeLabel: "PAID (Đã thanh toán)",
+        badgeLabel: "PAID (Chờ quán xác nhận)",
       };
     case "PENDING":
       return {
@@ -96,6 +97,23 @@ const getStatusConfig = (status: OrderStatus) => {
   }
 };
 
+const resolveDefaultRetryMethod = (order: Order | null): PaymentMethod => {
+  if (
+    order?.paymentMethod === "WALLET" ||
+    order?.paymentMethod === "CARD" ||
+    order?.paymentMethod === "VNPAY"
+  ) {
+    return order.paymentMethod;
+  }
+  const hasPendingVnpay = order?.payments?.some(
+    (payment) =>
+      payment.method === "VNPAY" &&
+      payment.status === "PENDING" &&
+      Boolean(payment.expiresAt),
+  );
+  return hasPendingVnpay ? "VNPAY" : "WALLET";
+};
+
 function OrderConfirmationContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -115,14 +133,30 @@ function OrderConfirmationContent() {
   const [isLoading, setIsLoading] = useState(!isInvalidId);
   const [error, setError] = useState<string | null>(null);
 
-  const [retryMethod, setRetryMethod] = useState<PaymentMethod>("VNPAY");
+  const [methodOverride, setMethodOverride] = useState<{
+    orderId: number;
+    method: PaymentMethod;
+  } | null>(null);
   const [retrying, setRetrying] = useState(false);
   const [retryError, setRetryError] = useState("");
   const [cancelling, setCancelling] = useState(false);
 
+  const retryMethod =
+    methodOverride && methodOverride.orderId === order?.id
+      ? methodOverride.method
+      : resolveDefaultRetryMethod(order);
+
   async function cancelOrder() {
     if (!token || !order || cancelling || retrying) return;
-    if (!window.confirm("Bạn muốn hủy đơn này?")) return;
+    const waitingConfirm = order.status === "PAID";
+    if (
+      !window.confirm(
+        waitingConfirm
+          ? "Quán chưa xác nhận đơn này. Bạn muốn hủy?"
+          : "Bạn muốn hủy đơn này?",
+      )
+    )
+      return;
 
     setCancelling(true);
     setRetryError("");
@@ -139,11 +173,6 @@ function OrderConfirmationContent() {
     }
   }
 
-  const retryAttempt = useRef<{
-    orderId: number;
-    method: PaymentMethod;
-    key: string;
-  } | null>(null);
   const retryInFlight = useRef(false);
 
   async function retryPayment() {
@@ -152,8 +181,7 @@ function OrderConfirmationContent() {
       !token ||
       !user ||
       retryInFlight.current ||
-      order.status !== "PAYMENT_FAILED" ||
-      order.paymentMethod !== "VNPAY"
+      (order.status !== "PAYMENT_FAILED" && order.status !== "PENDING")
     )
       return;
 
@@ -162,17 +190,7 @@ function OrderConfirmationContent() {
     retryInFlight.current = true;
     setRetrying(true);
     setRetryError("");
-    if (
-      retryAttempt.current?.orderId !== order.id ||
-      retryAttempt.current.method !== retryMethod
-    ) {
-      retryAttempt.current = {
-        orderId: order.id,
-        method: retryMethod,
-        key: crypto.randomUUID(),
-      };
-    }
-    const key = retryAttempt.current.key;
+    const key = crypto.randomUUID();
 
     try {
       if (retryMethod !== "VNPAY") {
@@ -383,7 +401,7 @@ function OrderConfirmationContent() {
             Bạn cần đăng nhập để xác nhận và xem chi tiết đơn hàng #{orderId}.
           </p>
           <Link
-            href="/login"
+            href={loginHref(`/order-confirmation?orderId=${orderId}`)}
             className="mt-6 inline-flex rounded-full bg-[#f6a14a] px-7 py-3 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435]"
           >
             Đăng nhập ngay
@@ -584,61 +602,77 @@ function OrderConfirmationContent() {
               Đơn sẽ tự hủy nếu quá hạn.
             </p>
           )}
-        <div className="mt-10 flex flex-wrap justify-center gap-4 border-t border-amber-900/10 pt-6">
-          {order.status === "PAYMENT_FAILED" &&
-            order.paymentMethod === "VNPAY" && (
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <label className="flex items-center gap-2 text-sm font-bold">
-                  Phương thức
-                  <select
-                    value={retryMethod}
-                    disabled={retrying || cancelling}
-                    onChange={(event) =>
-                      setRetryMethod(event.target.value as PaymentMethod)
-                    }
-                    className="rounded-lg border border-[#ead8c7] bg-white px-3 py-2"
-                  >
-                    <option value="VNPAY">VNPAY Sandbox</option>
-                  </select>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => void retryPayment()}
+        <div className="mt-10 border-t border-amber-900/10 pt-6">
+          {(order.status === "PAYMENT_FAILED" || order.status === "PENDING") && (
+            <div className="mx-auto flex max-w-xl flex-col gap-3 rounded-2xl border border-[#ead8c7] bg-[#fffaf5] p-5 sm:flex-row sm:items-center">
+              <label className="flex items-center gap-2 text-sm font-bold text-[#7a5a4b] sm:flex-1">
+                <span className="whitespace-nowrap">Phương thức</span>
+                <select
+                  value={retryMethod}
                   disabled={retrying || cancelling}
-                  className="rounded-full bg-[#f6a14a] px-6 py-3 text-sm font-extrabold text-[#40241b] disabled:opacity-60"
+                  onChange={(event) =>
+                    setMethodOverride({
+                      orderId: order.id,
+                      method: event.target.value as PaymentMethod,
+                    })
+                  }
+                  className="w-full rounded-full border border-[#ead8c7] bg-white px-4 py-3 text-sm font-semibold text-[#40241b] outline-none focus:border-[#f6a14a] disabled:opacity-60"
                 >
-                  {retrying ? "Đang xử lý…" : `Thanh toán lại đơn #${order.id}`}
-                </button>
-              </div>
-            )}
-          {(order.status === "PENDING" ||
-            order.status === "PAYMENT_FAILED") && (
-            <button
-              type="button"
-              disabled={cancelling || retrying}
-              onClick={() => void cancelOrder()}
-              className="rounded-full border border-red-300 px-6 py-3 text-sm font-bold text-red-700 disabled:opacity-60"
-            >
-              {cancelling ? "Đang hủy…" : "Hủy đơn"}
-            </button>
+                  <option value="WALLET">Ví điện tử</option>
+                  <option value="CARD">Thẻ ngân hàng</option>
+                  <option value="VNPAY">VNPAY Sandbox</option>
+                </select>
+              </label>
+              <button
+                type="button"
+                onClick={() => void retryPayment()}
+                disabled={retrying || cancelling}
+                className="rounded-full bg-[#f6a14a] px-6 py-3 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435] disabled:opacity-60 sm:flex-1"
+              >
+                {retrying
+                  ? "Đang xử lý…"
+                  : order.status === "PENDING"
+                    ? `Thanh toán đơn #${order.id}`
+                    : `Thanh toán lại đơn #${order.id}`}
+              </button>
+            </div>
           )}
           {retryError && (
-            <p role="alert" className="w-full text-center text-sm text-red-700">
+            <p
+              role="alert"
+              className="mt-4 text-center text-sm font-semibold text-red-700"
+            >
               {retryError}
             </p>
           )}
-          <Link
-            href="/orders"
-            className="inline-flex min-w-44 items-center justify-center rounded-full bg-[#f6a14a] px-6 py-3 text-sm font-extrabold text-[#40241b] transition hover:bg-[#f29435]"
-          >
-            Xem lịch sử đơn
-          </Link>
-          <Link
-            href="/"
-            className="inline-flex min-w-44 items-center justify-center rounded-full border border-[#ead8c7] bg-white px-6 py-3 text-sm font-bold text-[#492214] transition hover:bg-[#fffaf5]"
-          >
-            Chọn thêm món khác
-          </Link>
+          <div className="mx-auto mt-5 grid max-w-xl gap-3 sm:grid-cols-2">
+            <Link
+              href="/orders"
+              className="inline-flex items-center justify-center rounded-full border border-[#ead8c7] bg-white px-6 py-3 text-sm font-extrabold text-[#40241b] transition hover:bg-[#fffaf5]"
+            >
+              Xem lịch sử đơn hàng
+            </Link>
+            <Link
+              href="/"
+              className="inline-flex items-center justify-center rounded-full border border-[#ead8c7] bg-white px-6 py-3 text-sm font-extrabold text-[#40241b] transition hover:bg-[#fffaf5]"
+            >
+              Chọn thêm món khác
+            </Link>
+          </div>
+          {(order.status === "PENDING" ||
+            order.status === "PAYMENT_FAILED" ||
+            order.status === "PAID") && (
+            <div className="mt-4 text-center">
+              <button
+                type="button"
+                disabled={cancelling || retrying}
+                onClick={() => void cancelOrder()}
+                className="rounded-full px-5 py-2 text-sm font-bold text-red-600 transition hover:bg-red-50 disabled:opacity-60"
+              >
+                {cancelling ? "Đang hủy…" : "Hủy đơn"}
+              </button>
+            </div>
+          )}
         </div>
       </section>
     </main>

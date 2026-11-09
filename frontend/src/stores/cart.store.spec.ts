@@ -1,10 +1,38 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   selectTotalPrice,
   selectTotalQuantity,
   useCartStore,
 } from './cart.store';
 import type { AddCartItemInput } from '@/types/cart';
+
+// Phải tồn tại trước khi cart.store được import để zustand persist gắn storage.
+vi.hoisted(() => {
+  let store: Record<string, string> = {};
+  const storageMock = {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => {
+      store[key] = value.toString();
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
+  };
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: storageMock,
+    writable: true,
+    configurable: true,
+  });
+  // Zustand persist mặc định đọc window.localStorage.
+  Object.defineProperty(globalThis, 'window', {
+    value: globalThis,
+    writable: true,
+    configurable: true,
+  });
+});
 
 const baseItem: AddCartItemInput = {
   productId: 1,
@@ -22,7 +50,8 @@ const baseItem: AddCartItemInput = {
 
 describe('cart store', () => {
   beforeEach(() => {
-    useCartStore.setState({ items: [] });
+    localStorage.clear();
+    useCartStore.setState({ items: [], excludedKeys: [] });
   });
 
   it('merges items with the same product options', () => {
@@ -96,5 +125,19 @@ describe('cart store', () => {
     useCartStore.getState().updateQuantity(item.key, 99);
 
     expect(useCartStore.getState().items[0].quantity).toBe(3);
+  });
+
+  it('restores cart items from localStorage', async () => {
+    useCartStore.getState().addItem(baseItem);
+    const persisted = localStorage.getItem('brewlite_cart');
+    expect(persisted).toBeTruthy();
+
+    useCartStore.setState({ items: [], excludedKeys: [] });
+    // setState cũng ghi persist nên phải khôi phục snapshot như phiên tải trang mới.
+    localStorage.setItem('brewlite_cart', persisted!);
+    await useCartStore.persist.rehydrate();
+
+    expect(useCartStore.getState().items).toHaveLength(1);
+    expect(useCartStore.getState().items[0].productId).toBe(1);
   });
 });

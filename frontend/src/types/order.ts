@@ -3,6 +3,8 @@ import type { PaymentMethod } from "@/types/checkout";
 export interface OrderPayment {
   id: number;
   amount: number;
+  method?: "WALLET" | "CARD" | "VNPAY";
+  status?: "PENDING" | "PAID" | "PAYMENT_FAILED";
   expiresAt?: string | null;
 }
 
