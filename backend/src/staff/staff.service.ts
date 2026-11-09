@@ -94,17 +94,6 @@ export class StaffService {
         },
       },
       include: {
-        payments: {
-          where: { refundRequestedAt: { not: null } },
-          orderBy: { id: 'desc' },
-          select: {
-            id: true,
-            amount: true,
-            refundStatus: true,
-            refundRequestedAt: true,
-            refundCompletedAt: true,
-          },
-        },
         user: { select: { name: true } },
         items: { include: { product: { select: { name: true } } } },
       },

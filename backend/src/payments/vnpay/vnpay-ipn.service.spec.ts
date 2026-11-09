@@ -246,7 +246,6 @@ describe('VnpayIpnService', () => {
         data: {
           status: paymentStatus,
           paidAt: code === '00' ? expect.any(Date) : null,
-          ...(code === '00' ? { refundRequestedAt: expect.any(Date), refundStatus: 'QUEUED' } : {}),
           providerTransactionNo: '14567890',
           providerResponseCode: code,
           providerTransactionStatus: providerStatus,

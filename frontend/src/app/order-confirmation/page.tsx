@@ -2,7 +2,6 @@
 
 import { formatToppingLabels } from "@/utils/toppings";
 import { Suspense, useCallback, useEffect, useRef, useState } from "react";
-import RefundNotice from "@/components/RefundNotice";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
@@ -311,13 +310,7 @@ function OrderConfirmationContent() {
   useEffect(() => {
     if (!token || !order) return;
     const waiting =
-      order.status === "PENDING" ||
-      order.status === "PAYMENT_FAILED" ||
-      order.payments?.some(
-        (payment) =>
-          payment.refundStatus === "QUEUED" ||
-          payment.refundStatus === "PENDING",
-      );
+      order.status === "PENDING" || order.status === "PAYMENT_FAILED";
     if (!waiting) return;
     const timer = setInterval(() => {
       void getOrderByIdApi(token, order.id)
@@ -584,7 +577,6 @@ function OrderConfirmationContent() {
             {order.cancellationReason}
           </p>
         )}
-        <RefundNotice payments={order.payments} />
         {(order.status === "PENDING" || order.status === "PAYMENT_FAILED") &&
           order.payments?.[0]?.expiresAt && (
             <p className="mt-4 text-center text-sm text-stone-600">

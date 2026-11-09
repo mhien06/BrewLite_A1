@@ -1,5 +1,10 @@
-import type { RefundSummary } from "@/components/RefundNotice";
 import type { PaymentMethod } from "@/types/checkout";
+
+export interface OrderPayment {
+  id: number;
+  amount: number;
+  expiresAt?: string | null;
+}
 
 export type OrderStatus =
   | "PENDING"
@@ -30,7 +35,7 @@ export interface OrderItem {
 export interface Order {
   cancellationReason?: string | null;
   cancellationSource?: string | null;
-  payments?: RefundSummary[];
+  payments?: OrderPayment[];
   id: number;
   userId: number;
   status: OrderStatus;
