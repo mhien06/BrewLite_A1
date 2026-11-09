@@ -1,4 +1,3 @@
-import type { RefundSummary } from "@/components/RefundNotice";
 export type Ingredient = {
   id: number;
   name: string;
@@ -25,7 +24,6 @@ export type Topping = {
   ingredient: Ingredient;
 };
 export type Order = {
-  payments?: RefundSummary[];
   id: number;
   status: string;
   total: number;

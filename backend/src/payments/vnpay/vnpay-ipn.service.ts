@@ -138,7 +138,7 @@ export class VnpayIpnService {
           },
         );
       }
-      await this.recordPaymentForRefund(transaction, payment.id, params);
+      await this.recordReceivedPayment(transaction, payment.id, params);
       return this.response('00', 'Confirm Success');
     }
 
@@ -179,8 +179,8 @@ export class VnpayIpnService {
     }
 
     if (currentStatus !== OrderStatus.PENDING) {
-      // Đơn hủy hoặc đã được trả bằng giao dịch khác: lưu khoản tiền đến trễ để hoàn.
-      await this.recordPaymentForRefund(transaction, payment.id, params);
+      // Đơn hủy hoặc đã được trả bằng giao dịch khác: lưu khoản tiền đến trễ để đối soát.
+      await this.recordReceivedPayment(transaction, payment.id, params);
       return this.response('00', 'Confirm Success');
     }
 
@@ -208,10 +208,10 @@ export class VnpayIpnService {
           cancellationSource: 'SYSTEM',
           cancelledById: null,
           cancellationReason:
-            'Đã nhận thanh toán nhưng nguyên liệu không còn đủ. Yêu cầu hoàn tiền.',
+            'Đã nhận thanh toán nhưng nguyên liệu không còn đủ. Cần đối soát thủ công.',
         },
       );
-      await this.recordPaymentForRefund(transaction, payment.id, params);
+      await this.recordReceivedPayment(transaction, payment.id, params);
       return this.response('00', 'Confirm Success');
     }
     if (hasSavepoint)
@@ -286,7 +286,7 @@ export class VnpayIpnService {
     return this.response('00', 'Confirm Success');
   }
 
-  private async recordPaymentForRefund(
+  private async recordReceivedPayment(
     tx: Prisma.TransactionClient,
     id: number,
     params: VnpayParams,
@@ -297,8 +297,6 @@ export class VnpayIpnService {
       data: {
         status: OrderStatus.PAID,
         paidAt: now,
-        refundRequestedAt: now,
-        refundStatus: 'QUEUED',
         ...this.providerResult(params),
       },
     });

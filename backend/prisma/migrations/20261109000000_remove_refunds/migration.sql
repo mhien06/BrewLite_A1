@@ -1,0 +1,13 @@
+DROP INDEX "Payment_refundStatus_refundCheckedAt_idx";
+DROP INDEX "Payment_refundRequestId_key";
+ALTER TABLE "Payment"
+  DROP COLUMN "refundStatus",
+  DROP COLUMN "refundRequestId",
+  DROP COLUMN "refundSubmittedAt",
+  DROP COLUMN "refundCompletedAt",
+  DROP COLUMN "refundCheckedAt",
+  DROP COLUMN "refundResponseCode",
+  DROP COLUMN "refundTransactionStatus",
+  DROP COLUMN "refundLastError",
+  DROP COLUMN "refundRequestedAt";
+DROP TYPE "RefundStatus";
