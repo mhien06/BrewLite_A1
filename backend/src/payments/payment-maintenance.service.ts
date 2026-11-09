@@ -5,7 +5,6 @@ import {
   OnModuleDestroy,
 } from '@nestjs/common';
 import { OrderExpiryService } from './order-expiry.service.js';
-import { VnpayRefundService } from './vnpay/vnpay-refund.service.js';
 
 @Injectable()
 export class PaymentMaintenanceService
@@ -14,10 +13,7 @@ export class PaymentMaintenanceService
   private timer?: ReturnType<typeof setInterval>;
   private running = false;
   private readonly logger = new Logger(PaymentMaintenanceService.name);
-  constructor(
-    private readonly expiry: OrderExpiryService,
-    private readonly refunds: VnpayRefundService,
-  ) {}
+  constructor(private readonly expiry: OrderExpiryService) {}
   onApplicationBootstrap() {
     // Đọc lại database ngay khi khởi động, kể cả đơn hết hạn lúc server tắt.
     void this.run();
@@ -31,20 +27,11 @@ export class PaymentMaintenanceService
     if (this.running) return;
     this.running = true;
     try {
-      try {
-        await this.expiry.expireDueOrders();
-      } catch {
-        this.logger.error(
-          'Chưa xử lý được đơn quá hạn; sẽ thử lại ở lượt tiếp theo.',
-        );
-      }
-      try {
-        await this.refunds.processRefunds();
-      } catch {
-        this.logger.error(
-          'Chưa xử lý được danh sách hoàn tiền; sẽ thử lại ở lượt tiếp theo.',
-        );
-      }
+      await this.expiry.expireDueOrders();
+    } catch {
+      this.logger.error(
+        'Chưa xử lý được đơn quá hạn; sẽ thử lại ở lượt tiếp theo.',
+      );
     } finally {
       this.running = false;
     }

@@ -14,23 +14,16 @@ import { PrismaService } from '../src/prisma/prisma.service.js';
 import { OrderStateService } from '../src/orders/order-state.service.js';
 import { OrderExpiryService } from '../src/payments/order-expiry.service.js';
 import { VnpayIpnService } from '../src/payments/vnpay/vnpay-ipn.service.js';
-import { VnpayRefundService } from '../src/payments/vnpay/vnpay-refund.service.js';
-import { VnpayTransactionApiService } from '../src/payments/vnpay/vnpay-transaction-api.service.js';
 import { InventoryService } from '../src/inventory/inventory.service.js';
 import { LoyaltyService } from '../src/loyalty/loyalty.service.js';
 import { signVnpayParams } from '../src/payments/vnpay/vnpay-signature.js';
 
-describe('Expiry, late IPN and refunds on PostgreSQL', () => {
+describe('Expiry and late IPN on PostgreSQL', () => {
   const db = new PrismaService();
   const db2 = new PrismaService();
   const states = new OrderStateService(db);
   const inventory = new InventoryService(db);
   const ipn = new VnpayIpnService(db, states, inventory, new LoyaltyService());
-  const gateway = { refundTransaction: vi.fn(), queryTransaction: vi.fn() };
-  const refunds = new VnpayRefundService(
-    db,
-    gateway as unknown as VnpayTransactionApiService,
-  );
   let userId: number;
   let productId: number;
   let ingredientId: number;
@@ -39,11 +32,6 @@ describe('Expiry, late IPN and refunds on PostgreSQL', () => {
   let txnRef: string;
   const future = () => new Date(Date.now() + 15 * 60_000);
   const past = () => new Date(Date.now() - 20 * 60_000);
-  const result = (status = '00', type = '02', code = '00') => ({
-    vnp_ResponseCode: code,
-    vnp_TransactionStatus: status,
-    vnp_TransactionType: type,
-  });
   function query(success = true) {
     const values = {
       vnp_TmnCode: 'TESTCODE',
@@ -58,17 +46,6 @@ describe('Expiry, late IPN and refunds on PostgreSQL', () => {
       ...values,
       vnp_SecureHash: signVnpayParams(values, 'test-secret'),
     };
-  }
-  async function queueRefund() {
-    await db.payment.update({
-      where: { id: paymentId },
-      data: {
-        status: 'PAID',
-        paidAt: new Date(),
-        refundRequestedAt: new Date(),
-        refundStatus: 'QUEUED',
-      },
-    });
   }
   const payment = () =>
     db.payment.findUniqueOrThrow({ where: { id: paymentId } });
@@ -138,8 +115,6 @@ describe('Expiry, late IPN and refunds on PostgreSQL', () => {
         },
       })
     ).id;
-    gateway.refundTransaction.mockResolvedValue(result());
-    gateway.queryTransaction.mockResolvedValue(result());
   });
   afterEach(async () => {
     vi.restoreAllMocks();
@@ -254,7 +229,7 @@ describe('Expiry, late IPN and refunds on PostgreSQL', () => {
     expect((await order()).status).toBe('PAID');
     expect(await stock()).toBe(80);
   });
-  it('records late success after expiry as a refund, not a served order', async () => {
+  it('records late success after expiry without serving the order', async () => {
     await db.payment.update({
       where: { id: paymentId },
       data: { expiresAt: past() },
@@ -263,7 +238,7 @@ describe('Expiry, late IPN and refunds on PostgreSQL', () => {
     expect((await order()).status).toBe('CANCELLED');
     expect(await payment()).toMatchObject({
       status: 'PAID',
-      refundStatus: 'QUEUED',
+      providerTransactionNo: '123456',
     });
     expect(await stock()).toBe(100);
     expect((await ipn.handle(query())).RspCode).toBe('02');
@@ -296,10 +271,9 @@ describe('Expiry, late IPN and refunds on PostgreSQL', () => {
     expect(await payment()).toMatchObject({
       status: 'PAYMENT_FAILED',
       providerResponseCode: '24',
-      refundStatus: null,
     });
   });
-  it('success after customer cancellation queues one refund under concurrent callbacks', async () => {
+  it('success after customer cancellation records received payment once', async () => {
     await states.transition(
       orderId,
       'CANCELLED',
@@ -313,7 +287,10 @@ describe('Expiry, late IPN and refunds on PostgreSQL', () => {
       ipn.handle(query()),
     ]);
     expect(responses.map((r) => r.RspCode).sort()).toEqual(['00', '02']);
-    expect((await payment()).refundStatus).toBe('QUEUED');
+    expect(await payment()).toMatchObject({
+      status: 'PAID',
+      providerTransactionNo: '123456',
+    });
     expect(await stock()).toBe(100);
   });
   it('paid cancellation and callback cannot deadlock or restore twice', async () => {
@@ -328,7 +305,7 @@ describe('Expiry, late IPN and refunds on PostgreSQL', () => {
       (await db.user.findUniqueOrThrow({ where: { id: userId } }))
         .loyaltyPoints,
     ).toBe(0);
-    expect((await payment()).refundStatus).toBe('QUEUED');
+    expect((await payment()).status).toBe('PAID');
     expect(await db.inventoryMovement.count({ where: { ingredientId } })).toBe(
       1,
     );
@@ -338,19 +315,19 @@ describe('Expiry, late IPN and refunds on PostgreSQL', () => {
     await states.transition(orderId, 'PREPARING');
     await expect(states.transition(orderId, 'CANCELLED')).rejects.toThrow();
     expect(await stock()).toBe(80);
-    expect((await payment()).refundStatus).toBeNull();
+    expect((await payment()).status).toBe('PAID');
   });
-  it('verified payment without stock is recorded and queued for refund', async () => {
+  it('verified payment without stock is recorded for reconciliation', async () => {
     await db.ingredient.update({
       where: { id: ingredientId },
       data: { stock: 0 },
     });
     expect((await ipn.handle(query())).RspCode).toBe('00');
     expect((await order()).status).toBe('CANCELLED');
-    expect((await payment()).refundStatus).toBe('QUEUED');
+    expect(await payment()).toMatchObject({ status: 'PAID' });
     expect(await stock()).toBe(0);
   });
-  it('rolls back partial stock deduction before recording refund', async () => {
+  it('rolls back partial stock deduction before recording payment', async () => {
     vi.spyOn(inventory, 'deductForPaidOrder').mockImplementation(async (tx) => {
       await tx.ingredient.update({
         where: { id: ingredientId },
@@ -360,61 +337,6 @@ describe('Expiry, late IPN and refunds on PostgreSQL', () => {
     });
     expect((await ipn.handle(query())).RspCode).toBe('00');
     expect(await stock()).toBe(100);
-    expect((await payment()).refundStatus).toBe('QUEUED');
-  });
-  it('two workers send a queued refund only once', async () => {
-    await queueRefund();
-    const second = new VnpayRefundService(
-      db2,
-      gateway as unknown as VnpayTransactionApiService,
-    );
-    await Promise.all([refunds.processRefunds(), second.processRefunds()]);
-    expect(gateway.refundTransaction).toHaveBeenCalledTimes(1);
-    expect(await payment()).toMatchObject({
-      refundStatus: 'SUCCEEDED',
-      refundCompletedAt: expect.any(Date),
-    });
-  });
-  it('ambiguous timeout survives restart and queries instead of resending refund', async () => {
-    await queueRefund();
-    gateway.refundTransaction.mockRejectedValue(new Error('timeout'));
-    const now = new Date();
-    await refunds.processRefunds(now);
-    expect((await payment()).refundStatus).toBe('PENDING');
-    const restarted = new VnpayRefundService(
-      db,
-      gateway as unknown as VnpayTransactionApiService,
-    );
-    await restarted.processRefunds(new Date(now.getTime() + 61_000));
-    expect(gateway.refundTransaction).toHaveBeenCalledTimes(1);
-    expect(gateway.queryTransaction).toHaveBeenCalledTimes(1);
-    expect((await payment()).refundStatus).toBe('SUCCEEDED');
-  });
-  it('successful original payment query does not count as refund success', async () => {
-    await queueRefund();
-    gateway.refundTransaction.mockResolvedValue(result('05'));
-    const now = new Date();
-    await refunds.processRefunds(now);
-    gateway.queryTransaction.mockResolvedValue(result('00', '01'));
-    await refunds.processRefunds(new Date(now.getTime() + 61_000));
-    expect(await payment()).toMatchObject({
-      refundStatus: 'PENDING',
-      refundCompletedAt: null,
-    });
-    await expect(refunds.retryRejectedRefund(paymentId)).rejects.toThrow();
-  });
-  it('explicitly rejected refund can be retried but cannot be claimed twice', async () => {
-    await queueRefund();
-    gateway.refundTransaction.mockResolvedValue(result('09'));
-    await refunds.processRefunds();
-    expect((await payment()).refundStatus).toBe('FAILED');
-    const retries = await Promise.allSettled([
-      refunds.retryRejectedRefund(paymentId),
-      refunds.retryRejectedRefund(paymentId),
-    ]);
-    expect(retries.filter((r) => r.status === 'fulfilled')).toHaveLength(1);
-    gateway.refundTransaction.mockResolvedValue(result());
-    await refunds.processRefunds();
-    expect((await payment()).refundStatus).toBe('SUCCEEDED');
+    expect(await payment()).toMatchObject({ status: 'PAID' });
   });
 });

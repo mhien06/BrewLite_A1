@@ -157,17 +157,6 @@ export class OrderStateService {
     this.assertTransition(order.status, to);
     if (to === OrderStatus.CANCELLED && order.status === OrderStatus.PAID) {
       await this.restorePaidOrder(db, order, actorId ?? order.userId);
-      if (order.paymentMethod === 'VNPAY') {
-        await db.payment.updateMany({
-          where: {
-            orderId,
-            method: 'VNPAY',
-            status: OrderStatus.PAID,
-            refundRequestedAt: null,
-          },
-          data: { refundRequestedAt: new Date(), refundStatus: 'QUEUED' },
-        });
-      }
     }
     const result = await db.order.updateMany({
       where: { id: orderId, status: order.status },
