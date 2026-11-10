@@ -92,7 +92,45 @@ Backend Docker build hiện fetch/install log của npm và thử lại `npm ci`
 | Đăng nhập | http://localhost:3000/login |
 | Trang nhân viên | http://localhost:3000/staff |
 | API sản phẩm | http://localhost:3001/products |
+| Swagger UI | http://localhost:3001/api-docs |
+| OpenAPI JSON | http://localhost:3001/api-docs-json |
 | PostgreSQL | localhost:5432 |
+
+### Tài liệu và kiểm thử API bằng Swagger
+
+Swagger UI đã được tích hợp vào backend để xem và gửi request thử trực tiếp tới các API. Các bước dưới đây áp dụng cho mọi thành viên trong nhóm sau khi clone project trên máy mới:
+
+1. Cài Docker Desktop, khởi động Docker Engine và hoàn thành phần **Lần đầu trên máy mới** ở trên. Mỗi thành viên cần tự tạo file `.env` từ `.env.example` và đặt `JWT_SECRET` riêng trên máy của mình; không chia sẻ hoặc commit file `.env`.
+2. Khởi động các service tại thư mục gốc:
+
+   ```powershell
+   docker compose up --build -d
+   docker compose ps
+   ```
+
+   Chờ PostgreSQL và API có trạng thái `healthy`. Lần đầu tiên, seed dữ liệu demo để tạo sản phẩm, nguyên liệu và tài khoản:
+
+   ```powershell
+   docker compose exec api npm run prisma:seed
+   ```
+
+   Những lần chạy sau chỉ cần `docker compose up -d`; không cần seed lại.
+
+3. Mở [http://localhost:3001/api-docs](http://localhost:3001/api-docs). Chọn endpoint, bấm **Try it out**, nhập dữ liệu nếu cần rồi bấm **Execute**. Thử `GET /products` trước; kết quả `200` cùng danh sách món xác nhận API và database đang hoạt động.
+4. Để thử API cần đăng nhập, mở `POST /auth/login`, bấm **Try it out** và dùng tài khoản demo `customer@gmail.com` / `password123` nếu tài khoản đó chưa đổi mật khẩu. Request mẫu:
+
+   ```json
+   {
+     "email": "customer@gmail.com",
+     "password": "password123"
+   }
+   ```
+
+   Sao chép giá trị `accessToken` trong phản hồi. Bấm **Authorize** ở đầu trang, dán token vào ô Bearer rồi xác nhận. Swagger tự thêm tiền tố `Bearer`; chỉ dán token, không cần gõ thêm tiền tố. Sau đó thử `GET /auth/me` hoặc `GET /orders/me`.
+
+5. Route `/staff/*` cần token của tài khoản có role `STAFF`. Có thể cấp role cho tài khoản đã đăng ký bằng lệnh ở mục [Sử dụng trang nhân viên](#5-sử-dụng-trang-nhân-viên-mở-rộng), rồi đăng nhập lại để lấy token mới.
+
+Mã phản hồi thường gặp: `200`/`201` là request thành công; `400` là dữ liệu đầu vào không hợp lệ; `401` là thiếu/sai token hoặc thông tin đăng nhập; `403` là tài khoản không có quyền. Nếu gặp `500`, xem log API bằng `docker compose logs --tail 100 api`. Nếu cổng `3001` đang được backend chạy trực tiếp chiếm giữ, dừng tiến trình đó trước khi chạy toàn bộ Compose; không chạy hai backend cùng cổng.
 
 Seed tạo món, nguyên liệu/công thức mẫu, khuyến mãi và tài khoản khách `customer@gmail.com` / `password123` nếu tài khoản chưa tồn tại. Đây là tài khoản demo. Seed không xóa database và không đặt lại mật khẩu tài khoản đã có; seed có cập nhật các cấu hình mẫu như khuyến mãi.
 
