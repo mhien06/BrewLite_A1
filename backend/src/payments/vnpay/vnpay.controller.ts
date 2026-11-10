@@ -22,8 +22,10 @@ import { CreateVnpayPaymentDto } from './create-vnpay-payment.dto.js';
 import { VnpayService } from './vnpay.service.js';
 import { VnpayIpnService } from './vnpay-ipn.service.js';
 import { VnpayReturnService } from './vnpay-return.service.js';
+import { ApiBearerAuth, ApiBody, ApiOperation, ApiQuery, ApiTags } from '@nestjs/swagger';
 
 @Controller('payments/vnpay')
+@ApiTags('Payments')
 export class VnpayController {
   constructor(
     private readonly vnpayService: VnpayService,
@@ -34,6 +36,9 @@ export class VnpayController {
   @Post('create-url')
   @UseGuards(JwtAuthGuard, CustomerGuard)
   @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth('access-token')
+  @ApiOperation({ summary: 'Create a VNPay checkout URL' })
+  @ApiBody({ type: CreateVnpayPaymentDto })
   createPaymentUrl(
     @CurrentUser() user: AuthUser,
     @Body() dto: CreateVnpayPaymentDto,
@@ -50,11 +55,14 @@ export class VnpayController {
 
   @Get('ipn')
   @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'VNPay server-to-server payment notification' })
+  @ApiQuery({ name: 'vnp_*', required: false, description: 'VNPay notification query fields' })
   handleIpn(@Query() query: Record<string, unknown>) {
     return this.vnpayIpnService.handle(query);
   }
 
   @Get('return')
+  @ApiOperation({ summary: 'Handle the VNPay browser return and redirect to the frontend' })
   async handleReturn(
     @Query() query: Record<string, unknown>,
     @Res() response: Response,

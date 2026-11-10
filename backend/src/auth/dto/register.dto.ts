@@ -6,8 +6,10 @@ import {
   Matches,
   MinLength,
 } from 'class-validator';
+import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterDto {
+  @ApiProperty({ example: 'NGUYEN VAN A', description: 'Uppercase letters and spaces' })
   @IsString({ message: 'Tên người dùng phải là chuỗi ký tự.' })
   @IsNotEmpty({ message: 'Tên người dùng không được để trống.' })
   @Matches(/^\p{Lu}+(?:\s+\p{Lu}+)*$/u, {
@@ -26,5 +28,6 @@ export class RegisterDto {
   @IsString({ message: 'Mật khẩu phải là chuỗi ký tự.' })
   @MinLength(6, { message: 'Mật khẩu phải có ít nhất 6 ký tự.' })
   @IsByteLength(0, 72, { message: 'Mật khẩu không được vượt quá 72 byte.' })
+  @ApiProperty({ minLength: 6, maxLength: 72, format: 'password' })
   password!: string;
 }
