@@ -23,7 +23,20 @@ export type Topping = {
   amount: number;
   ingredient: Ingredient;
 };
+export type RefundStatus = "PENDING" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "NEEDS_REVIEW";
+export type OrderPayment = {
+  id: number;
+  amount: number;
+  method: "WALLET" | "CARD" | "VNPAY";
+  refundAmount: number | null;
+  refundStatus: RefundStatus | null;
+  refundRequestedAt: string | null;
+  refundCompletedAt: string | null;
+  refundReason: string | null;
+  refundLastError: string | null;
+};
 export type Order = {
+  payments?: OrderPayment[];
   id: number;
   status: string;
   total: number;
