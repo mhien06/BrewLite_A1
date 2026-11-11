@@ -165,6 +165,25 @@ describe('VnpayRefundService', () => {
     });
   });
 
+  it('treats VNPay duplicate-processing response 94 as reconciliation, not rejection', async () => {
+    gateway.refundTransaction.mockResolvedValue({
+      vnp_Command: 'refund',
+      vnp_TransactionType: '02',
+      vnp_ResponseCode: '94',
+      vnp_TransactionStatus: '05',
+    });
+    await service.processRefunds(new Date('2026-11-11T04:00:00.000Z'));
+
+    expect(tx.refund.updateMany).toHaveBeenLastCalledWith({
+      where: { id: 30, status: 'PROCESSING', checkedAt: expect.any(Date) },
+      data: expect.objectContaining({ status: 'NEEDS_REVIEW' }),
+    });
+    expect(tx.refundAttempt.update).toHaveBeenLastCalledWith({
+      where: { id: 501 },
+      data: expect.objectContaining({ status: 'AMBIGUOUS', responseCode: '94' }),
+    });
+  });
+
   it('marks explicit VNPay rejection as failed and allows staff-only retry without deleting history', async () => {
     gateway.refundTransaction.mockResolvedValue({
       vnp_Command: 'refund',
