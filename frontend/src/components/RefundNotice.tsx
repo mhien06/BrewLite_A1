@@ -75,6 +75,7 @@ export default function RefundNotice({
                     </p>
                     <p className="mt-1 text-xs text-stone-500">
                       {new Date(attempt.startedAt).toLocaleString("vi-VN")} · Request ID: {attempt.requestId}
+                      {attempt.initiatedBy ? ` · Người thực hiện: ${attempt.initiatedBy.name}` : " · Hệ thống tự động"}
                     </p>
                     {attempt.responseCode && (
                       <p className="mt-1">VNPay: {attempt.responseCode}
