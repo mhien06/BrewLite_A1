@@ -22,6 +22,7 @@ export interface QueryVnpayTransactionInput {
   transactionNo?: string | null;
   ipAddress: string;
   expectedAmount: number;
+  requestId?: string;
 }
 
 export interface RefundVnpayTransactionInput {
@@ -51,7 +52,7 @@ export class VnpayTransactionApiService {
     const config = getVnpayConfig();
 
     const params: VnpayParams = {
-      vnp_RequestId: this.createRequestId(),
+      vnp_RequestId: input.requestId ?? this.createRequestId(),
       vnp_Version: '2.1.0',
       vnp_Command: 'querydr',
       vnp_TmnCode: config.tmnCode,
