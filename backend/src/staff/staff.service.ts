@@ -117,6 +117,7 @@ export class StaffService {
                 errorMessage: true,
                 startedAt: true,
                 completedAt: true,
+                initiatedBy: { select: { name: true } },
               },
             },
           },
