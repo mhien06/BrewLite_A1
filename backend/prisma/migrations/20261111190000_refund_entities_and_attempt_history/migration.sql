@@ -67,8 +67,7 @@ SELECT
   p."createdAt",
   CURRENT_TIMESTAMP
 FROM "Payment" p
-WHERE p."refundStatus" IS NOT NULL OR p."refundRequestedAt" IS NOT NULL
-ON CONFLICT ("paymentId") DO NOTHING;
+WHERE p."refundStatus" IS NOT NULL OR p."refundRequestedAt" IS NOT NULL;
 
 -- Preserve the latest known provider interaction as a historical attempt.
 -- No signed payload/hash secret is copied into the audit table.
@@ -106,8 +105,7 @@ SELECT
   COALESCE(p."refundCompletedAt", p."refundCheckedAt")
 FROM "Payment" p
 JOIN "Refund" r ON r."paymentId" = p."id"
-WHERE p."refundRequestId" IS NOT NULL OR p."refundSubmittedAt" IS NOT NULL
-ON CONFLICT ("requestId") DO NOTHING;
+WHERE p."refundRequestId" IS NOT NULL OR p."refundSubmittedAt" IS NOT NULL;
 
 CREATE UNIQUE INDEX "Refund_paymentId_key" ON "Refund"("paymentId");
 CREATE INDEX "Refund_status_checkedAt_idx" ON "Refund"("status", "checkedAt");
