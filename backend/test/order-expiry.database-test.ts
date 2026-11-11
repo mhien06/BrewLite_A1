@@ -119,6 +119,7 @@ describe('Expiry and late IPN on PostgreSQL', () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await db.inventoryMovement.deleteMany({ where: { ingredientId } });
+    await db.refund.deleteMany({ where: { paymentId } });
     await db.payment.deleteMany({ where: { userId } });
     await db.loyaltyTransaction.deleteMany({ where: { userId } });
     await db.order.deleteMany({ where: { userId } });
