@@ -52,6 +52,7 @@ export type OrderRefund = {
     errorMessage: string | null;
     startedAt: string;
     completedAt: string | null;
+    initiatedBy: { name: string } | null;
   }[];
 };
 export type Order = {
