@@ -18,11 +18,27 @@ permissions:
 jobs:
   backend:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: brewlite_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d brewlite_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: backend
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/brewlite_test?schema=public
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/brewlite_test?schema=public
       JWT_SECRET: ci-only-not-a-real-secret
       VNPAY_TMN_CODE: TESTCODE
       VNPAY_HASH_SECRET: ci-only-vnpay-secret
@@ -36,12 +52,16 @@ jobs:
           cache-dependency-path: backend/package-lock.json
       - run: npm ci
       - run: npm run prisma:generate
+      - run: npm run prisma:deploy
       - run: npm test
+      - run: npm run test:e2e
+      - run: npm run test:database
       - run: npm run lint
       - run: npm run build
 
   frontend:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     defaults:
       run:
         working-directory: frontend
