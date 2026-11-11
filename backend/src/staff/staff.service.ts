@@ -94,6 +94,21 @@ export class StaffService {
         },
       },
       include: {
+        payments: {
+          where: { refundRequestedAt: { not: null } },
+          orderBy: { id: 'desc' },
+          select: {
+            id: true,
+            amount: true,
+            method: true,
+            refundAmount: true,
+            refundStatus: true,
+            refundRequestedAt: true,
+            refundCompletedAt: true,
+            refundReason: true,
+            refundLastError: true,
+          },
+        },
         user: { select: { name: true } },
         items: { include: { product: { select: { name: true } } } },
       },
