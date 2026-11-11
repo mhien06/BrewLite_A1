@@ -73,3 +73,9 @@ No live Refund API request is made as part of GitHub source editing. After deplo
 4. The BrewLite payment row showing `SUCCEEDED`.
 
 If the merchant returns `99` or denies Refund permission, leave the payment in `NEEDS_REVIEW`, attach the masked response and merchant-support confirmation to the PR, and do not claim that a real Sandbox refund succeeded.
+
+## VNPay transaction date
+
+Refund and QueryDR requests must send `vnp_TransactionDate` equal to the original payment request's `vnp_CreateDate` (GMT+7), not the customer's `vnp_PayDate`. BrewLite builds the original payment URL from `Payment.createdAt`, so the refund worker reuses that persisted timestamp. Do not substitute `providerPayDate`, which is the time the customer completed payment.
+
+Reference: [VNPay QueryDR and Refund API](https://sandbox.vnpayment.vn/apis/docs/truy-van-hoan-tien/querydr%26refund.html).
