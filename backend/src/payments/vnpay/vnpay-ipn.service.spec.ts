@@ -259,6 +259,46 @@ describe('VnpayIpnService', () => {
     },
   );
 
+  it('queues a refund when VNPay confirms payment after the order was cancelled', async () => {
+    const latePayment = {
+      id: 5,
+      userId: 7,
+      orderId: 10,
+      amount: 172_800,
+      method: PaymentMethod.VNPAY,
+      status: OrderStatus.PENDING,
+      refundStatus: null,
+      refundRequestedAt: null,
+      refundAmount: null,
+      refundReason: null,
+    };
+    transaction.payment.findUnique.mockResolvedValue(latePayment);
+    transaction.order.findUnique.mockResolvedValue({
+      id: 10,
+      userId: 7,
+      total: 172_800,
+      status: OrderStatus.CANCELLED,
+    });
+
+    await expect(service.handle(signedQuery())).resolves.toEqual({
+      RspCode: '00',
+      Message: 'Confirm Success',
+    });
+
+    expect(transaction.payment.update).toHaveBeenCalledWith({
+      where: { id: 5 },
+      data: expect.objectContaining({
+        status: OrderStatus.PAID,
+        refundStatus: 'PENDING',
+        refundAmount: 172_800,
+        refundRequestedAt: expect.any(Date),
+        refundReason: 'VNPay xác nhận thanh toán sau khi đơn hàng đã bị hủy.',
+      }),
+    });
+    expect(inventory.deductForPaidOrder).not.toHaveBeenCalled();
+    expect(loyalty.awardPointsForPaidOrder).not.toHaveBeenCalled();
+  });
+
   it('returns 02 for a duplicate callback without applying side effects', async () => {
     transaction.payment.findUnique.mockResolvedValue({
       id: 5,
