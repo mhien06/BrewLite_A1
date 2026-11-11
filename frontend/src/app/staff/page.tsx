@@ -530,7 +530,7 @@ export default function StaffPage() {
                       </div>
 
                       <RefundNotice
-                        payments={order.payments}
+                        refunds={order.refunds}
                         staffToken={token ?? undefined}
                       />
                       <div className="flex flex-wrap items-center justify-between gap-3">
