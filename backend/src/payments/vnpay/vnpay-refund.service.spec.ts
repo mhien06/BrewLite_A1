@@ -217,6 +217,14 @@ describe('VnpayRefundService', () => {
     });
   });
 
+  it('does not allow a retry unless the Refund is explicitly FAILED', async () => {
+    prisma.refund.findFirst.mockResolvedValue(null);
+    await expect(service.retryRejectedRefund(30)).rejects.toThrow(
+      'Chỉ có thể gửi lại yêu cầu đã bị VNPay từ chối rõ ràng.',
+    );
+    expect(prisma.refund.updateMany).not.toHaveBeenCalled();
+  });
+
   it('does not call VNPay when another worker already claimed the refund', async () => {
     prisma.refund.updateMany.mockResolvedValue({ count: 0 });
     await service.processRefunds(new Date('2026-11-11T04:00:00.000Z'));
