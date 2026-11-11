@@ -12,12 +12,13 @@ import { PrismaService } from '../src/prisma/prisma.service.js';
 import { VnpayRefundService } from '../src/payments/vnpay/vnpay-refund.service.js';
 import { VnpayTransactionApiService } from '../src/payments/vnpay/vnpay-transaction-api.service.js';
 
-describe('VNPay refund queue on PostgreSQL', () => {
+describe('VNPay refund queue and audit history on PostgreSQL', () => {
   const db = new PrismaService();
   const db2 = new PrismaService();
   let userId: number;
   let orderId: number;
   let paymentId: number;
+  let refundId: number;
   let txnRef: string;
 
   const successfulRefund = {
@@ -48,8 +49,11 @@ describe('VNPay refund queue on PostgreSQL', () => {
     );
   }
 
-  async function payment() {
-    return db.payment.findUniqueOrThrow({ where: { id: paymentId } });
+  async function refund() {
+    return db.refund.findUniqueOrThrow({
+      where: { id: refundId },
+      include: { attempts: { orderBy: { attemptNumber: 'asc' } } },
+    });
   }
 
   beforeAll(async () => {
@@ -88,16 +92,25 @@ describe('VNPay refund queue on PostgreSQL', () => {
           providerTxnRef: txnRef,
           providerTransactionNo: '123456',
           providerPayDate: '20261111100000',
-          refundStatus: 'PENDING',
-          refundRequestedAt: new Date(),
-          refundAmount: 30000,
-          refundReason: 'Integration test',
+        },
+      })
+    ).id;
+    refundId = (
+      await db.refund.create({
+        data: {
+          paymentId,
+          orderId,
+          amount: 30000,
+          reason: 'Integration test',
+          status: 'PENDING',
+          requestedAt: new Date(),
         },
       })
     ).id;
   });
 
   afterEach(async () => {
+    await db.refund.deleteMany({ where: { id: refundId } });
     await db.payment.deleteMany({ where: { userId } });
     await db.order.deleteMany({ where: { userId } });
     await db.user.delete({ where: { id: userId } });
@@ -108,7 +121,7 @@ describe('VNPay refund queue on PostgreSQL', () => {
     await db2.$disconnect();
   });
 
-  it('allows only one worker to submit a full refund for a payment', async () => {
+  it('allows only one worker to submit and records a complete attempt', async () => {
     const firstGateway = gateway();
     const secondGateway = gateway();
 
@@ -121,28 +134,32 @@ describe('VNPay refund queue on PostgreSQL', () => {
       firstGateway.refundTransaction.mock.calls.length +
         secondGateway.refundTransaction.mock.calls.length,
     ).toBe(1);
-    expect(await payment()).toMatchObject({
-      refundStatus: 'SUCCEEDED',
-      refundAmount: 30000,
-      refundResponseId: 'refund-response-integration',
-      refundResponseCode: '00',
-      refundResponseMessage: 'Refund successful',
-      refundTransactionNo: '987654321',
-      refundPayDate: '20261111110000',
-      refundTransactionStatus: '00',
+    const result = await refund();
+    expect(result).toMatchObject({
+      status: 'SUCCEEDED',
+      amount: 30000,
+      completedAt: expect.any(Date),
+      attempts: [
+        {
+          attemptNumber: 1,
+          type: 'REFUND',
+          status: 'CONFIRMED',
+          responseId: 'refund-response-integration',
+          responseCode: '00',
+          responseMessage: 'Refund successful',
+          responseTransactionNo: '987654321',
+          responsePayDate: '20261111110000',
+          responseTransactionStatus: '00',
+        },
+      ],
     });
-    expect((await payment()).refundCompletedAt).toBeInstanceOf(Date);
   });
 
-  it('does not mistake a successful QueryDR of the original payment for a refund', async () => {
+  it('does not mistake QueryDR success of the original payment for a refund', async () => {
     const checkedAt = new Date(Date.now() - 120000);
-    await db.payment.update({
-      where: { id: paymentId },
-      data: {
-        refundStatus: 'NEEDS_REVIEW',
-        refundRequestId: `request-${txnRef}`,
-        refundCheckedAt: checkedAt,
-      },
+    await db.refund.update({
+      where: { id: refundId },
+      data: { status: 'NEEDS_REVIEW', requestId: 'previous-refund-request', checkedAt },
     });
 
     const adapter = gateway();
@@ -157,11 +174,33 @@ describe('VNPay refund queue on PostgreSQL', () => {
 
     expect(adapter.refundTransaction).not.toHaveBeenCalled();
     expect(adapter.queryTransaction).toHaveBeenCalledTimes(1);
-    expect(await payment()).toMatchObject({
-      refundStatus: 'NEEDS_REVIEW',
-      refundResponseCode: '00',
-      refundTransactionStatus: '00',
+    const result = await refund();
+    expect(result.status).toBe('NEEDS_REVIEW');
+    expect(result.completedAt).toBeNull();
+    expect(result.attempts).toHaveLength(1);
+    expect(result.attempts[0]).toMatchObject({
+      type: 'QUERY',
+      status: 'AMBIGUOUS',
+      responseCode: '00',
+      responseTransactionStatus: '00',
     });
-    expect((await payment()).refundCompletedAt).toBeNull();
+  });
+
+  it('preserves the first rejected attempt when staff queues a retry', async () => {
+    const adapter = gateway();
+    adapter.refundTransaction.mockResolvedValue({
+      vnp_Command: 'refund',
+      vnp_TransactionType: '02',
+      vnp_ResponseCode: '91',
+      vnp_TransactionStatus: '09',
+    });
+    await service(db, adapter).processRefunds();
+    expect((await refund()).status).toBe('FAILED');
+
+    await service(db, adapter).retryRejectedRefund(refundId);
+    const queued = await refund();
+    expect(queued.status).toBe('PENDING');
+    expect(queued.attempts).toHaveLength(1);
+    expect(queued.attempts[0].status).toBe('REJECTED');
   });
 });
