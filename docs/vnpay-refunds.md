@@ -53,7 +53,7 @@ The Sandbox merchant must be explicitly enabled for the Refund API. A payment in
 
 ## Staff operations
 
-The staff order page shows the Refund record, current state, amount, reason, completion timestamp, and the ten most recent Refund/QueryDR attempts with response metadata.
+The staff order page shows the Refund record, current state, amount, reason, completion timestamp, and the ten most recent Refund/QueryDR attempts with response metadata and the user/system that initiated each attempt.
 Only a refund in `FAILED` can be submitted again through the staff retry endpoint. `NEEDS_REVIEW` is intentionally not retryable from the UI: reconcile it with VNPay/merchant support first to avoid a duplicate refund.
 
 ## Validation
