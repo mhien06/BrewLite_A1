@@ -104,7 +104,11 @@ export class VnpayRefundService {
         refundCheckedAt: null,
         refundSubmittedAt: null,
         refundCompletedAt: null,
+        refundResponseId: null,
         refundResponseCode: null,
+        refundResponseMessage: null,
+        refundTransactionNo: null,
+        refundPayDate: null,
         refundTransactionStatus: null,
         refundLastError: null,
       },
@@ -142,7 +146,11 @@ export class VnpayRefundService {
             ? 'FAILED'
             : 'NEEDS_REVIEW',
         refundCompletedAt: isConfirmedRefund || queryConfirmsRefund ? now : null,
+        refundResponseId: result.vnp_ResponseId ?? null,
         refundResponseCode: result.vnp_ResponseCode ?? null,
+        refundResponseMessage: result.vnp_Message ?? null,
+        refundTransactionNo: result.vnp_TransactionNo ?? null,
+        refundPayDate: result.vnp_PayDate ?? null,
         refundTransactionStatus: result.vnp_TransactionStatus ?? null,
         refundLastError: isConfirmedRefund || queryConfirmsRefund
           ? null
