@@ -29,7 +29,7 @@ An ambiguous timeout or response code `99` is not automatically retried because 
 Migration:
 `backend/prisma/migrations/20261111000000_restore_vnpay_refunds/migration.sql`
 
-The Payment row remains the unique source transaction. Refund metadata includes request ID, requested amount, reason, requesting user, request/submit/check/complete timestamps, VNPay response values, and last error. A unique request ID and a single refund state per payment prevent duplicate full-refund requests for the same paid transaction. The migration is additive and does not reset the database.
+The Payment row remains the unique source transaction. Refund metadata includes request ID, requested amount, reason, requesting user, request/submit/check/complete timestamps, VNPay response ID/code/message, refund transaction number/date/status, and last error. A unique request ID and a single refund state per payment prevent duplicate full-refund requests for the same paid transaction. The migration is additive and does not reset the database.
 
 Apply through the project's normal Prisma migration deployment process after reviewing and backing up the target database.
 
