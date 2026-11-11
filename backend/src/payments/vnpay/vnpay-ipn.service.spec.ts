@@ -16,6 +16,9 @@ describe('VnpayIpnService', () => {
     order: {
       findUnique: vi.fn(),
     },
+    refund: {
+      upsert: vi.fn(),
+    },
   };
 
   const prisma = {
@@ -267,10 +270,6 @@ describe('VnpayIpnService', () => {
       amount: 172_800,
       method: PaymentMethod.VNPAY,
       status: OrderStatus.PENDING,
-      refundStatus: null,
-      refundRequestedAt: null,
-      refundAmount: null,
-      refundReason: null,
     };
     transaction.payment.findUnique.mockResolvedValue(latePayment);
     transaction.order.findUnique.mockResolvedValue({
@@ -289,11 +288,20 @@ describe('VnpayIpnService', () => {
       where: { id: 5 },
       data: expect.objectContaining({
         status: OrderStatus.PAID,
-        refundStatus: 'PENDING',
-        refundAmount: 172_800,
-        refundRequestedAt: expect.any(Date),
-        refundReason: 'VNPay xác nhận thanh toán sau khi đơn hàng đã bị hủy.',
+        providerTransactionNo: '14567890',
       }),
+    });
+    expect(transaction.refund.upsert).toHaveBeenCalledWith({
+      where: { paymentId: 5 },
+      create: {
+        paymentId: 5,
+        orderId: 10,
+        amount: 172_800,
+        reason: 'VNPay xác nhận thanh toán sau khi đơn hàng đã bị hủy.',
+        status: 'PENDING',
+        requestedAt: expect.any(Date),
+      },
+      update: {},
     });
     expect(inventory.deductForPaidOrder).not.toHaveBeenCalled();
     expect(loyalty.awardPointsForPaidOrder).not.toHaveBeenCalled();
