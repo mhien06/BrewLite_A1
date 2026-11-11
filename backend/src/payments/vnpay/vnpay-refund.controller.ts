@@ -14,7 +14,7 @@ export class VnpayRefundController {
 
   @Post(':id/retry')
   @ApiOperation({ summary: 'Retry a refund explicitly rejected by VNPay' })
-  @ApiParam({ name: 'id', type: Number })
+  @ApiParam({ name: 'id', type: Number, description: 'Refund record ID' })
   retry(@Param('id', ParseDatabaseIdPipe) id: number) {
     return this.refunds.retryRejectedRefund(id);
   }
