@@ -138,7 +138,12 @@ export class VnpayIpnService {
           },
         );
       }
-      await this.recordReceivedPayment(transaction, payment.id, params);
+      await this.recordReceivedPayment(
+        transaction,
+        payment.id,
+        params,
+        'Thanh toán VNPay đến sau thời hạn thanh toán của đơn hàng.',
+      );
       return this.response('00', 'Confirm Success');
     }
 
@@ -180,7 +185,12 @@ export class VnpayIpnService {
 
     if (currentStatus !== OrderStatus.PENDING) {
       // Đơn hủy hoặc đã được trả bằng giao dịch khác: lưu khoản tiền đến trễ để đối soát.
-      await this.recordReceivedPayment(transaction, payment.id, params);
+      await this.recordReceivedPayment(
+        transaction,
+        payment.id,
+        params,
+        'Đã nhận thanh toán VNPay nhưng nguyên liệu không còn đủ để thực hiện đơn.',
+      );
       return this.response('00', 'Confirm Success');
     }
 
@@ -290,14 +300,25 @@ export class VnpayIpnService {
     tx: Prisma.TransactionClient,
     id: number,
     params: VnpayParams,
+    refundReason?: string,
   ) {
     const now = new Date();
+    const payment = await tx.payment.findUnique({ where: { id } });
+    if (!payment) return;
     await tx.payment.update({
       where: { id },
       data: {
         status: OrderStatus.PAID,
         paidAt: now,
         ...this.providerResult(params),
+        ...(refundReason && payment.method === PaymentMethod.VNPAY
+          ? {
+              refundStatus: payment.refundStatus ?? 'PENDING',
+              refundRequestedAt: payment.refundRequestedAt ?? now,
+              refundAmount: payment.refundAmount ?? payment.amount,
+              refundReason: payment.refundReason ?? refundReason,
+            }
+          : {}),
       },
     });
   }
