@@ -200,7 +200,19 @@ describe('VNPay refund queue and audit history on PostgreSQL', () => {
     await service(db, adapter).retryRejectedRefund(refundId, userId);
     const queued = await refund();
     expect(queued.status).toBe('PENDING');
+    expect(queued.retryRequestedById).toBe(userId);
     expect(queued.attempts).toHaveLength(1);
     expect(queued.attempts[0].status).toBe('REJECTED');
+
+    adapter.refundTransaction.mockResolvedValue(successfulRefund);
+    await service(db, adapter).processRefunds();
+    const completed = await refund();
+    expect(completed.status).toBe('SUCCEEDED');
+    expect(completed.attempts).toHaveLength(2);
+    expect(completed.attempts[1]).toMatchObject({
+      attemptNumber: 2,
+      status: 'CONFIRMED',
+      initiatedById: userId,
+    });
   });
 });
