@@ -135,6 +135,7 @@ describe('OrderStateService', () => {
       id: 55,
       orderId: 8,
       amount: 125000,
+      providerTxnRef: 'BL-8',
     });
     prisma.refund.findUnique.mockResolvedValue(null);
 
