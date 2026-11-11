@@ -53,6 +53,7 @@ jobs:
       - run: npm ci
       - run: npm run prisma:generate
       - run: npm run prisma:deploy
+      - run: npm run prisma:seed
       - run: npm test
       - run: npm run test:e2e
       - run: npm run test:database
