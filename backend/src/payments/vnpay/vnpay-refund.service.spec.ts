@@ -123,6 +123,31 @@ describe('VnpayRefundService', () => {
     });
   });
 
+  it('records a network timeout as ambiguous and does not blindly resend', async () => {
+    gateway.refundTransaction.mockRejectedValue(new Error('timeout'));
+    await service.processRefunds(new Date('2026-11-11T04:00:00.000Z'));
+
+    expect(tx.refundAttempt.updateMany).toHaveBeenCalledWith({
+      where: { id: 501, status: 'STARTED' },
+      data: {
+        status: 'AMBIGUOUS',
+        errorMessage: 'timeout',
+        completedAt: expect.any(Date),
+      },
+    });
+    expect(tx.refund.updateMany).toHaveBeenLastCalledWith({
+      where: {
+        id: 30,
+        status: { in: ['PENDING', 'PROCESSING', 'NEEDS_REVIEW'] },
+      },
+      data: expect.objectContaining({
+        status: 'NEEDS_REVIEW',
+        lastError: 'timeout',
+      }),
+    });
+    expect(gateway.queryTransaction).not.toHaveBeenCalled();
+  });
+
   it('moves ambiguous results to review, records the query attempt, and never resends Refund automatically', async () => {
     gateway.refundTransaction.mockResolvedValue({
       vnp_Command: 'refund',
