@@ -248,6 +248,7 @@ describe('Expiry and late IPN on PostgreSQL', () => {
     });
     expect(await stock()).toBe(100);
     expect((await ipn.handle(query())).RspCode).toBe('02');
+    expect(await db.refund.count({ where: { paymentId } })).toBe(1);
   });
   it('customer cannot cancel another customer order', async () => {
     await expect(
@@ -319,6 +320,7 @@ describe('Expiry and late IPN on PostgreSQL', () => {
     expect(await db.inventoryMovement.count({ where: { ingredientId } })).toBe(
       1,
     );
+    expect(await db.refund.count({ where: { paymentId } })).toBe(1);
   });
   it('cannot cancel once preparation has started', async () => {
     await ipn.handle(query());
