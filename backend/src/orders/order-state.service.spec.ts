@@ -84,14 +84,16 @@ describe('OrderStateService', () => {
     expect(prisma.order.updateMany).not.toHaveBeenCalled();
   });
 
-  it('allows customers to cancel a paid order before the shop confirms', async () => {
+  it.each(['WALLET', 'CARD'])(
+    'allows customers to cancel a paid simulated %s order without VNPay refund',
+    async (paymentMethod) => {
     const paid = {
       id: 8,
       userId: 7,
       status: OrderStatus.PAID,
       inventoryDeducted: true,
       inventorySnapshot: [{ ingredientId: 1, amount: 10 }],
-      paymentMethod: 'WALLET',
+      paymentMethod,
     };
     const cancelled = { ...paid, status: OrderStatus.CANCELLED };
     prisma.order.findUnique
@@ -108,6 +110,7 @@ describe('OrderStateService', () => {
       where: { id: 8, status: OrderStatus.PAID },
       data: { status: OrderStatus.CANCELLED },
     });
+    expect(prisma.payment.updateMany).not.toHaveBeenCalled();
   });
 
   it('queues one full refund when staff cancels a paid VNPay order', async () => {
