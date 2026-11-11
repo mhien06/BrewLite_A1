@@ -23,7 +23,7 @@ model User {
   createdAt           DateTime             @default(now())
   orders              Order[]
   payments            Payment[]
-  requestedRefunds    Payment[]            @relation("RefundRequestedBy")
+  requestedRefunds    Refund[]             @relation("RefundRequestedBy")
   loyaltyTransactions LoyaltyTransaction[]
 }
 
