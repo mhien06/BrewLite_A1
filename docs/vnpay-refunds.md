@@ -22,6 +22,7 @@ Wallet and simulated-card payments are not sent to VNPay.
 
 An HTTP success or an accepted request is not sufficient to set `SUCCEEDED`.
 A QueryDR result describing only the original payment (transaction type `01`) is not proof of a refund.
+VNPay response code `94` means a duplicate refund request is already being processed, so it is reconciled rather than retried. Transaction status `05`/`06` remains in review while VNPay processes the refund; status `09` is an explicit refund rejection and can become `FAILED`.
 An ambiguous timeout or response code `99` is not automatically retried because VNPay may already have processed the refund.
 
 ## Database and audit history
@@ -84,3 +85,6 @@ If the merchant returns `99` or denies Refund permission, leave the payment in `
 Refund and QueryDR requests must send `vnp_TransactionDate` equal to the original payment request's `vnp_CreateDate` (GMT+7), not the customer's `vnp_PayDate`. BrewLite builds the original payment URL from `Payment.createdAt`, so the refund worker reuses that persisted timestamp. Do not substitute `providerPayDate`, which is the time the customer completed payment.
 
 Reference: [VNPay QueryDR and Refund API](https://sandbox.vnpayment.vn/apis/docs/truy-van-hoan-tien/querydr%26refund.html).
+
+
+VNPay's official [QueryDR and Refund API specification](https://sandbox.vnpayment.vn/apis/docs/truy-van-hoan-tien/querydr%26refund.html) defines response code 94 as an already-submitted refund being processed, transaction status 05/06 as refund processing/forwarded to the bank, and status 09 as a rejected refund. The worker treats these states separately to avoid duplicate refunds.
