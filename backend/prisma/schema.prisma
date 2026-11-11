@@ -24,6 +24,8 @@ model User {
   orders              Order[]
   payments            Payment[]
   requestedRefunds    Refund[]             @relation("RefundRequestedBy")
+  retryRequestedRefunds Refund[]            @relation("RefundRetryRequestedBy")
+  refundAttempts      RefundAttempt[]       @relation("RefundAttemptInitiatedBy")
   loyaltyTransactions LoyaltyTransaction[]
 }
 
@@ -194,11 +196,13 @@ model Refund {
   checkedAt    DateTime?
   lastError    String?
   requestedById Int?
+  retryRequestedById Int?
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
   payment      Payment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
   order        Order        @relation(fields: [orderId], references: [id], onDelete: Restrict)
   requestedBy  User?        @relation("RefundRequestedBy", fields: [requestedById], references: [id], onDelete: SetNull)
+  retryRequestedBy User?    @relation("RefundRetryRequestedBy", fields: [retryRequestedById], references: [id], onDelete: SetNull)
   attempts     RefundAttempt[]
 
   @@index([status, checkedAt])
@@ -223,6 +227,8 @@ model RefundAttempt {
   responseTransactionNo      String?
   responsePayDate            String?
   responseTransactionStatus  String?
+  initiatedById              Int?
+  initiatedBy                User?               @relation("RefundAttemptInitiatedBy", fields: [initiatedById], references: [id], onDelete: SetNull)
   errorMessage               String?
   startedAt                  DateTime            @default(now())
   completedAt                DateTime?
