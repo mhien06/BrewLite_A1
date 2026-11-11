@@ -15,6 +15,7 @@ CREATE TABLE "Refund" (
   "checkedAt" TIMESTAMP(3),
   "lastError" TEXT,
   "requestedById" INTEGER,
+  "retryRequestedById" INTEGER,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL,
   CONSTRAINT "Refund_pkey" PRIMARY KEY ("id")
@@ -38,6 +39,7 @@ CREATE TABLE "RefundAttempt" (
   "responseTransactionNo" TEXT,
   "responsePayDate" TEXT,
   "responseTransactionStatus" TEXT,
+  "initiatedById" INTEGER,
   "errorMessage" TEXT,
   "startedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "completedAt" TIMESTAMP(3),
@@ -76,7 +78,7 @@ INSERT INTO "RefundAttempt" (
   "transactionRef", "transactionNo", "transactionDate", "amount",
   "transactionType", "responseId", "responseCode", "responseMessage",
   "responseTransactionNo", "responsePayDate", "responseTransactionStatus",
-  "errorMessage", "startedAt", "completedAt"
+  "initiatedById", "errorMessage", "startedAt", "completedAt"
 )
 SELECT
   r."id",
@@ -100,6 +102,7 @@ SELECT
   p."refundTransactionNo",
   p."refundPayDate",
   p."refundTransactionStatus",
+  p."refundRequestedById",
   p."refundLastError",
   COALESCE(p."refundSubmittedAt", p."refundRequestedAt", p."createdAt"),
   COALESCE(p."refundCompletedAt", p."refundCheckedAt")
@@ -120,11 +123,15 @@ ALTER TABLE "Refund"
   ADD CONSTRAINT "Refund_orderId_fkey"
   FOREIGN KEY ("orderId") REFERENCES "Order"("id") ON DELETE RESTRICT ON UPDATE CASCADE,
   ADD CONSTRAINT "Refund_requestedById_fkey"
-  FOREIGN KEY ("requestedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+  FOREIGN KEY ("requestedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE,
+  ADD CONSTRAINT "Refund_retryRequestedById_fkey"
+  FOREIGN KEY ("retryRequestedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 ALTER TABLE "RefundAttempt"
   ADD CONSTRAINT "RefundAttempt_refundId_fkey"
-  FOREIGN KEY ("refundId") REFERENCES "Refund"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+  FOREIGN KEY ("refundId") REFERENCES "Refund"("id") ON DELETE CASCADE ON UPDATE CASCADE,
+  ADD CONSTRAINT "RefundAttempt_initiatedById_fkey"
+  FOREIGN KEY ("initiatedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- Refund state is now owned by Refund/RefundAttempt, not Payment.
 DROP INDEX IF EXISTS "Payment_refundRequestId_key";
