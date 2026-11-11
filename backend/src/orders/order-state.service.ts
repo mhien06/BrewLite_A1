@@ -163,22 +163,29 @@ export class OrderStateService {
           extraData.cancellationReason.trim()
             ? extraData.cancellationReason.trim().slice(0, 500)
             : 'Đơn hàng VNPay đã thanh toán được hủy.';
-        await db.payment.updateMany({
-          where: {
-            orderId,
-            method: 'VNPAY',
-            status: OrderStatus.PAID,
-            refundStatus: null,
-            refundRequestedAt: null,
-          },
-          data: {
-            refundStatus: 'PENDING',
-            refundRequestedAt: new Date(),
-            refundAmount: order.total,
-            refundReason: reason,
-            refundRequestedById: actorId ?? null,
-          },
+        const payment = await db.payment.findFirst({
+          where: { orderId, method: 'VNPAY', status: OrderStatus.PAID },
+          orderBy: { id: 'desc' },
         });
+        if (payment) {
+          const existingRefund = await db.refund.findUnique({
+            where: { paymentId: payment.id },
+            select: { id: true },
+          });
+          if (!existingRefund) {
+            await db.refund.create({
+              data: {
+                paymentId: payment.id,
+                orderId,
+                amount: order.total,
+                reason,
+                status: 'PENDING',
+                requestedAt: new Date(),
+                requestedById: actorId ?? null,
+              },
+            });
+          }
+        }
       }
     }
     const result = await db.order.updateMany({
