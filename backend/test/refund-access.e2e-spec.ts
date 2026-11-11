@@ -70,7 +70,7 @@ describe('Refund retry permissions', () => {
     await request(app.getHttpServer())
       .post('/payments/vnpay/refunds/1/retry')
       .expect(201);
-    expect(retry).toHaveBeenCalledWith(1);
+    expect(retry).toHaveBeenCalledWith(1, 1);
   });
   it('rejects invalid IDs before sending a refund', async () => {
     findUser.mockResolvedValue({ role: 'STAFF' });
