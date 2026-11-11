@@ -318,16 +318,24 @@ export class VnpayIpnService {
         status: OrderStatus.PAID,
         paidAt: now,
         ...this.providerResult(params),
-        ...(refundReason && payment.method === PaymentMethod.VNPAY
-          ? {
-              refundStatus: payment.refundStatus ?? 'PENDING',
-              refundRequestedAt: payment.refundRequestedAt ?? now,
-              refundAmount: payment.refundAmount ?? payment.amount,
-              refundReason: payment.refundReason ?? refundReason,
-            }
-          : {}),
       },
     });
+    if (refundReason && payment.method === PaymentMethod.VNPAY) {
+      // The refund is a separate business record; Payment keeps only the
+      // original successful payment result and remains immutable for audit.
+      await tx.refund.upsert({
+        where: { paymentId: payment.id },
+        create: {
+          paymentId: payment.id,
+          orderId: payment.orderId,
+          amount: payment.amount,
+          reason: refundReason.slice(0, 500),
+          status: 'PENDING',
+          requestedAt: now,
+        },
+        update: {},
+      });
+    }
   }
 
   private providerResult(params: VnpayParams) {
