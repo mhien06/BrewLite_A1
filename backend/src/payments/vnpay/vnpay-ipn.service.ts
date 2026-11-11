@@ -189,7 +189,9 @@ export class VnpayIpnService {
         transaction,
         payment.id,
         params,
-        'Đã nhận thanh toán VNPay nhưng nguyên liệu không còn đủ để thực hiện đơn.',
+        currentStatus === OrderStatus.CANCELLED
+          ? 'VNPay xác nhận thanh toán sau khi đơn hàng đã bị hủy.'
+          : 'VNPay xác nhận khoản thanh toán trùng hoặc không còn gắn với đơn đang xử lý.',
       );
       return this.response('00', 'Confirm Success');
     }
