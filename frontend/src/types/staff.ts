@@ -34,6 +34,7 @@ export type OrderPayment = {
   refundCompletedAt: string | null;
   refundResponseCode: string | null;
   refundResponseMessage: string | null;
+  refundTransactionStatus: string | null;
   refundTransactionNo: string | null;
   refundPayDate: string | null;
   refundReason: string | null;
