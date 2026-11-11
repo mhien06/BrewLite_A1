@@ -32,6 +32,10 @@ export type OrderPayment = {
   refundStatus: RefundStatus | null;
   refundRequestedAt: string | null;
   refundCompletedAt: string | null;
+  refundResponseCode: string | null;
+  refundResponseMessage: string | null;
+  refundTransactionNo: string | null;
+  refundPayDate: string | null;
   refundReason: string | null;
   refundLastError: string | null;
 };
