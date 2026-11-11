@@ -130,8 +130,12 @@ export class VnpayRefundService {
       result.vnp_ResponseCode === '00' &&
       result.vnp_TransactionStatus === '00';
 
-    const explicitlyRejected = submitted &&
-      DEFINITIVE_REJECTIONS.has(result.vnp_ResponseCode ?? '');
+    const explicitlyRejected =
+      (submitted && DEFINITIVE_REJECTIONS.has(result.vnp_ResponseCode ?? '')) ||
+      (result.vnp_Command === 'refund' &&
+        result.vnp_TransactionType === '02' &&
+        result.vnp_ResponseCode === '00' &&
+        result.vnp_TransactionStatus === '09');
 
     const queryConfirmsRefund =
       !submitted &&
