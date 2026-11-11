@@ -5,6 +5,7 @@ import { useEffect, useState, type FormEvent } from "react";
 import Link from "next/link";
 
 import IngredientsPanel from "@/components/staff/IngredientsPanel";
+import RefundNotice from "@/components/RefundNotice";
 import { useAuthStore } from "@/stores/auth.store";
 import { loadStaffData, staffRequest } from "@/services/staff.service";
 
@@ -528,6 +529,10 @@ export default function StaffPage() {
                         ))}
                       </div>
 
+                      <RefundNotice
+                        payments={order.payments}
+                        staffToken={token ?? undefined}
+                      />
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <p className="font-bold">
                           {order.total.toLocaleString("vi-VN")} đ
