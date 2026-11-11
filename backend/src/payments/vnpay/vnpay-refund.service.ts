@@ -61,7 +61,11 @@ export class VnpayRefundService {
           status: 'PROCESSING',
           checkedAt: now,
           ...(type === 'REFUND'
-            ? { requestId, submittedAt: now }
+            ? {
+                requestId,
+                submittedAt: now,
+                retryRequestedById: null,
+              }
             : {}),
         },
       });
@@ -85,6 +89,10 @@ export class VnpayRefundService {
             transactionDate: payment.createdAt,
             amount: refund.amount,
             transactionType: type === 'REFUND' ? '02' : null,
+            initiatedById:
+              type === 'REFUND'
+                ? (refund.retryRequestedById ?? refund.requestedById)
+                : null,
             startedAt: now,
           },
           select: { id: true },
@@ -135,7 +143,7 @@ export class VnpayRefundService {
     }
   }
 
-  async retryRejectedRefund(id: number) {
+  async retryRejectedRefund(id: number, actorId: number) {
     const refund = await this.prisma.refund.findFirst({
       where: {
         id,
@@ -155,6 +163,7 @@ export class VnpayRefundService {
       data: {
         status: 'PENDING',
         requestId: null,
+        retryRequestedById: actorId,
         checkedAt: null,
         submittedAt: null,
         completedAt: null,
