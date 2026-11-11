@@ -58,7 +58,9 @@ export class VnpayRefundService {
         const common = {
           txnRef: payment.providerTxnRef,
           transactionNo: payment.providerTransactionNo,
-          transactionDate: this.toTransactionDate(payment.providerPayDate, payment.createdAt),
+          // VNPay requires the original vnp_CreateDate from the payment URL,
+          // not vnp_PayDate (the time the customer completed payment).
+          transactionDate: payment.createdAt,
           ipAddress: process.env.VNPAY_SERVER_IP || '127.0.0.1',
         };
         const result = previousStatus === 'PENDING'
@@ -109,18 +111,6 @@ export class VnpayRefundService {
     });
     if (!result.count) throw new ConflictException('Yêu cầu hoàn tiền vừa được thay đổi.');
     return { message: 'Đã đưa yêu cầu hoàn tiền bị từ chối vào hàng đợi gửi lại.' };
-  }
-
-  private toTransactionDate(raw: string | null, fallback: Date): Date {
-    if (!raw || !/^\\d{14}$/.test(raw)) return fallback;
-    const year = Number(raw.slice(0, 4));
-    const month = Number(raw.slice(4, 6));
-    const day = Number(raw.slice(6, 8));
-    const hour = Number(raw.slice(8, 10));
-    const minute = Number(raw.slice(10, 12));
-    const second = Number(raw.slice(12, 14));
-    // Convert VN local wall time to an instant; formatVnpayDate adds UTC+7 back.
-    return new Date(Date.UTC(year, month - 1, day, hour - 7, minute, second));
   }
 
   private async recordResult(id: number, result: VnpayParams, now: Date, submitted: boolean) {
