@@ -239,9 +239,11 @@ describe('Expiry and late IPN on PostgreSQL', () => {
     expect(await payment()).toMatchObject({
       status: 'PAID',
       providerTransactionNo: '123456',
-      refundStatus: 'PENDING',
-      refundAmount: 30000,
-      refundReason: 'Thanh toán VNPay đến sau thời hạn thanh toán của đơn hàng.',
+    });
+    expect(await db.refund.findUnique({ where: { paymentId } })).toMatchObject({
+      status: 'PENDING',
+      amount: 30000,
+      reason: 'Thanh toán VNPay đến sau thời hạn thanh toán của đơn hàng.',
     });
     expect(await stock()).toBe(100);
     expect((await ipn.handle(query())).RspCode).toBe('02');
@@ -308,10 +310,10 @@ describe('Expiry and late IPN on PostgreSQL', () => {
       (await db.user.findUniqueOrThrow({ where: { id: userId } }))
         .loyaltyPoints,
     ).toBe(0);
-    expect(await payment()).toMatchObject({
-      status: 'PAID',
-      refundStatus: 'PENDING',
-      refundAmount: 30000,
+    expect(await payment()).toMatchObject({ status: 'PAID' });
+    expect(await db.refund.findUnique({ where: { paymentId } })).toMatchObject({
+      status: 'PENDING',
+      amount: 30000,
     });
     expect(await db.inventoryMovement.count({ where: { ingredientId } })).toBe(
       1,
@@ -331,11 +333,11 @@ describe('Expiry and late IPN on PostgreSQL', () => {
     });
     expect((await ipn.handle(query())).RspCode).toBe('00');
     expect((await order()).status).toBe('CANCELLED');
-    expect(await payment()).toMatchObject({
-      status: 'PAID',
-      refundStatus: 'PENDING',
-      refundAmount: 30000,
-      refundReason: 'Đã nhận thanh toán VNPay nhưng nguyên liệu không còn đủ để thực hiện đơn.',
+    expect(await payment()).toMatchObject({ status: 'PAID' });
+    expect(await db.refund.findUnique({ where: { paymentId } })).toMatchObject({
+      status: 'PENDING',
+      amount: 30000,
+      reason: 'Đã nhận thanh toán VNPay nhưng nguyên liệu không còn đủ để thực hiện đơn.',
     });
     expect(await stock()).toBe(0);
   });
