@@ -299,6 +299,7 @@ describe('Expiry and late IPN on PostgreSQL', () => {
       providerTransactionNo: '123456',
     });
     expect(await stock()).toBe(100);
+    expect(await db.refund.count({ where: { paymentId } })).toBe(1);
   });
   it('paid cancellation and callback cannot deadlock or restore twice', async () => {
     await ipn.handle(query());
