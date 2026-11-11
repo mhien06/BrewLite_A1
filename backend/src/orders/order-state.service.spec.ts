@@ -14,7 +14,8 @@ describe('OrderStateService', () => {
     ingredient: { update: vi.fn() },
     inventoryMovement: { create: vi.fn() },
     loyaltyTransaction: { findUnique: vi.fn() },
-    payment: { updateMany: vi.fn() },
+    payment: { findFirst: vi.fn(), updateMany: vi.fn() },
+    refund: { findUnique: vi.fn(), create: vi.fn() },
   };
   let service: OrderStateService;
 
@@ -130,7 +131,12 @@ describe('OrderStateService', () => {
     prisma.ingredient.update.mockResolvedValue({ stock: 20 });
     prisma.loyaltyTransaction.findUnique.mockResolvedValue(null);
     prisma.order.updateMany.mockResolvedValue({ count: 1 });
-    prisma.payment.updateMany.mockResolvedValue({ count: 1 });
+    prisma.payment.findFirst.mockResolvedValue({
+      id: 55,
+      orderId: 8,
+      amount: 125000,
+    });
+    prisma.refund.findUnique.mockResolvedValue(null);
 
     await service.transition(
       8,
@@ -140,22 +146,18 @@ describe('OrderStateService', () => {
       99,
     );
 
-    expect(prisma.payment.updateMany).toHaveBeenCalledWith({
-      where: {
-        orderId: 8,
-        method: 'VNPAY',
-        status: OrderStatus.PAID,
-        refundStatus: null,
-        refundRequestedAt: null,
-      },
+    expect(prisma.refund.create).toHaveBeenCalledWith({
       data: {
-        refundStatus: 'PENDING',
-        refundRequestedAt: expect.any(Date),
-        refundAmount: 125000,
-        refundReason: 'Khách yêu cầu hủy',
-        refundRequestedById: 99,
+        paymentId: 55,
+        orderId: 8,
+        amount: 125000,
+        reason: 'Khách yêu cầu hủy',
+        status: 'PENDING',
+        requestedAt: expect.any(Date),
+        requestedById: 99,
       },
     });
+    expect(prisma.payment.updateMany).not.toHaveBeenCalled();
   });
 
   it('blocks customers from cancelling after the shop starts preparing', async () => {
