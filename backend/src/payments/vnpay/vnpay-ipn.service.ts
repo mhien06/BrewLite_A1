@@ -221,7 +221,12 @@ export class VnpayIpnService {
             'Đã nhận thanh toán nhưng nguyên liệu không còn đủ. Cần đối soát thủ công.',
         },
       );
-      await this.recordReceivedPayment(transaction, payment.id, params);
+      await this.recordReceivedPayment(
+        transaction,
+        payment.id,
+        params,
+        'Đã nhận thanh toán VNPay nhưng nguyên liệu không còn đủ để thực hiện đơn.',
+      );
       return this.response('00', 'Confirm Success');
     }
     if (hasSavepoint)
