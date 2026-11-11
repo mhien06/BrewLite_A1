@@ -161,7 +161,11 @@ model Payment {
   refundSubmittedAt         DateTime?
   refundCompletedAt         DateTime?
   refundCheckedAt           DateTime?
+  refundResponseId          String?
   refundResponseCode        String?
+  refundResponseMessage     String?
+  refundTransactionNo       String?
+  refundPayDate             String?
   refundTransactionStatus   String?
   refundLastError           String?
   refundAmount              Int?
