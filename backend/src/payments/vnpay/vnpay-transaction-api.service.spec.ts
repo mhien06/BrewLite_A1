@@ -85,6 +85,7 @@ describe('VnpayTransactionApiService - QueryDR', () => {
         transactionDate: new Date('2026-11-04T06:30:44.000Z'),
         transactionNo: '123456',
         ipAddress: '127.0.0.1',
+        requestId: 'query-attempt-0001',
       },
       new Date('2026-11-04T07:00:00.000Z'),
     );
@@ -101,7 +102,7 @@ describe('VnpayTransactionApiService - QueryDR', () => {
     expect(requestBody.vnp_TxnRef).toBe('BL123');
     expect(requestBody.vnp_TransactionDate).toBe('20261104133044');
     expect(requestBody.vnp_CreateDate).toBe('20261104140000');
-    expect(requestBody.vnp_RequestId).toMatch(/^[0-9a-f]{32}$/);
+    expect(requestBody.vnp_RequestId).toBe('query-attempt-0001');
     expect(requestBody.vnp_SecureHash).toBe(
       signVnpayQueryRequest(requestBody, 'test-secret'),
     );
