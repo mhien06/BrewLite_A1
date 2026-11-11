@@ -55,6 +55,15 @@ export default function RefundNotice({
             </div>
             <p className="mt-2">Số tiền: {(payment.refundAmount ?? payment.amount).toLocaleString("vi-VN")} đ</p>
             {payment.refundReason && <p className="mt-1 text-stone-600">Lý do: {payment.refundReason}</p>}
+            {payment.refundResponseCode && (
+              <p className="mt-2 text-stone-600">
+                Phản hồi VNPay: {payment.refundResponseCode}
+                {payment.refundTransactionStatus ? ` · trạng thái ${payment.refundTransactionStatus}` : ""}
+              </p>
+            )}
+            {payment.refundResponseMessage && <p className="mt-1 text-stone-600">Thông báo VNPay: {payment.refundResponseMessage}</p>}
+            {payment.refundTransactionNo && <p className="mt-1 text-stone-600">Mã giao dịch hoàn: {payment.refundTransactionNo}</p>}
+            {payment.refundPayDate && <p className="mt-1 text-stone-600">Thời điểm hoàn (VNPay): {payment.refundPayDate}</p>}
             {payment.refundCompletedAt && <p className="mt-1 text-green-800">Hoàn tất: {new Date(payment.refundCompletedAt).toLocaleString("vi-VN")}</p>}
             {payment.refundLastError && <p className="mt-2 text-red-800">{payment.refundLastError}</p>}
             {staffToken && status === "FAILED" && (
