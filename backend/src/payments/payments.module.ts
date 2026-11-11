@@ -1,5 +1,8 @@
 import { OrderExpiryService } from './order-expiry.service.js';
 import { PaymentMaintenanceService } from './payment-maintenance.service.js';
+import { VnpayRefundController } from './vnpay/vnpay-refund.controller.js';
+import { VnpayRefundService } from './vnpay/vnpay-refund.service.js';
+import { VnpayTransactionApiService } from './vnpay/vnpay-transaction-api.service.js';
 import { Module } from '@nestjs/common';
 import { InventoryModule } from '../inventory/inventory.module.js';
 import { LoyaltyModule } from '../loyalty/loyalty.module.js';
@@ -14,14 +17,17 @@ import { VnpayReturnService } from './vnpay/vnpay-return.service.js';
 
 @Module({
   imports: [PrismaModule, OrdersModule, LoyaltyModule, InventoryModule],
-  controllers: [PaymentsController, VnpayController],
+  controllers: [PaymentsController, VnpayController, VnpayRefundController],
   providers: [
     PaymentsService,
     OrderExpiryService,
     PaymentMaintenanceService,
+    VnpayRefundService,
+    VnpayTransactionApiService,
     VnpayService,
     VnpayIpnService,
     VnpayReturnService,
   ],
+  exports: [VnpayTransactionApiService],
 })
 export class PaymentsModule {}
