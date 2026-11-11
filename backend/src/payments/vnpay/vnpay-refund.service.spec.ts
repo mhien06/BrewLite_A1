@@ -223,7 +223,7 @@ describe('VnpayRefundService', () => {
 
   it('does not allow a retry unless the Refund is explicitly FAILED', async () => {
     prisma.refund.findFirst.mockResolvedValue(null);
-    await expect(service.retryRejectedRefund(30)).rejects.toThrow(
+    await expect(service.retryRejectedRefund(30, 99)).rejects.toThrow(
       'Chỉ có thể gửi lại yêu cầu đã bị VNPay từ chối rõ ràng.',
     );
     expect(prisma.refund.updateMany).not.toHaveBeenCalled();
