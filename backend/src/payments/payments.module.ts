@@ -5,6 +5,8 @@ import { VnpayRefundService } from './vnpay/vnpay-refund.service.js';
 import { VnpayTransactionApiService } from './vnpay/vnpay-transaction-api.service.js';
 import { Module } from '@nestjs/common';
 import { InventoryModule } from '../inventory/inventory.module.js';
+import { AuthModule } from '../auth/auth.module.js';
+import { StaffGuard } from '../staff/staff.guard.js';
 import { LoyaltyModule } from '../loyalty/loyalty.module.js';
 import { OrdersModule } from '../orders/orders.module.js';
 import { PrismaModule } from '../prisma/prisma.module.js';
@@ -16,7 +18,7 @@ import { VnpayIpnService } from './vnpay/vnpay-ipn.service.js';
 import { VnpayReturnService } from './vnpay/vnpay-return.service.js';
 
 @Module({
-  imports: [PrismaModule, OrdersModule, LoyaltyModule, InventoryModule],
+  imports: [PrismaModule, AuthModule, OrdersModule, LoyaltyModule, InventoryModule],
   controllers: [PaymentsController, VnpayController, VnpayRefundController],
   providers: [
     PaymentsService,
@@ -24,6 +26,7 @@ import { VnpayReturnService } from './vnpay/vnpay-return.service.js';
     PaymentMaintenanceService,
     VnpayRefundService,
     VnpayTransactionApiService,
+    StaffGuard,
     VnpayService,
     VnpayIpnService,
     VnpayReturnService,
