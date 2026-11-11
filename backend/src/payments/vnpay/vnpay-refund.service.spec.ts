@@ -21,6 +21,8 @@ describe('VnpayRefundService', () => {
     reason: 'Khách yêu cầu hủy',
     status: 'PENDING',
     requestId: null,
+    requestedById: 7,
+    retryRequestedById: null,
     checkedAt: null,
     payment,
   };
@@ -87,6 +89,7 @@ describe('VnpayRefundService', () => {
         transactionDate: payment.createdAt,
         amount: 120000,
         transactionType: '02',
+        initiatedById: 7,
         requestId: expect.stringMatching(/^[0-9a-f]{32}$/),
       }),
       select: { id: true },
@@ -203,12 +206,13 @@ describe('VnpayRefundService', () => {
     });
 
     prisma.refund.findFirst.mockResolvedValue({ id: 30 });
-    await service.retryRejectedRefund(30);
+    await service.retryRejectedRefund(30, 99);
     expect(prisma.refund.updateMany).toHaveBeenLastCalledWith({
       where: { id: 30, status: 'FAILED' },
       data: {
         status: 'PENDING',
         requestId: null,
+        retryRequestedById: 99,
         checkedAt: null,
         submittedAt: null,
         completedAt: null,
