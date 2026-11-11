@@ -94,24 +94,31 @@ export class StaffService {
         },
       },
       include: {
-        payments: {
-          where: { refundRequestedAt: { not: null } },
+        refunds: {
           orderBy: { id: 'desc' },
-          select: {
-            id: true,
-            amount: true,
-            method: true,
-            refundAmount: true,
-            refundStatus: true,
-            refundRequestedAt: true,
-            refundCompletedAt: true,
-            refundResponseCode: true,
-            refundResponseMessage: true,
-            refundTransactionStatus: true,
-            refundTransactionNo: true,
-            refundPayDate: true,
-            refundReason: true,
-            refundLastError: true,
+          include: {
+            payment: {
+              select: { id: true, amount: true, method: true },
+            },
+            attempts: {
+              orderBy: { attemptNumber: 'desc' },
+              take: 10,
+              select: {
+                id: true,
+                attemptNumber: true,
+                type: true,
+                status: true,
+                requestId: true,
+                responseCode: true,
+                responseMessage: true,
+                responseTransactionNo: true,
+                responsePayDate: true,
+                responseTransactionStatus: true,
+                errorMessage: true,
+                startedAt: true,
+                completedAt: true,
+              },
+            },
           },
         },
         user: { select: { name: true } },
