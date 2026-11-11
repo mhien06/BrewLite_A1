@@ -157,6 +157,29 @@ export class OrderStateService {
     this.assertTransition(order.status, to);
     if (to === OrderStatus.CANCELLED && order.status === OrderStatus.PAID) {
       await this.restorePaidOrder(db, order, actorId ?? order.userId);
+      if (order.paymentMethod === 'VNPAY') {
+        const reason =
+          typeof extraData.cancellationReason === 'string' &&
+          extraData.cancellationReason.trim()
+            ? extraData.cancellationReason.trim().slice(0, 500)
+            : 'Đơn hàng VNPay đã thanh toán được hủy.';
+        await db.payment.updateMany({
+          where: {
+            orderId,
+            method: 'VNPAY',
+            status: OrderStatus.PAID,
+            refundStatus: null,
+            refundRequestedAt: null,
+          },
+          data: {
+            refundStatus: 'PENDING',
+            refundRequestedAt: new Date(),
+            refundAmount: order.total,
+            refundReason: reason,
+            refundRequestedById: actorId ?? null,
+          },
+        });
+      }
     }
     const result = await db.order.updateMany({
       where: { id: orderId, status: order.status },
