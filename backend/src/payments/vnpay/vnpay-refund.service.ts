@@ -38,7 +38,7 @@ export class VnpayRefundService {
         !payment.providerTxnRef ||
         !Number.isSafeInteger(refund.amount) ||
         refund.amount <= 0 ||
-        refund.amount > payment.amount
+        refund.amount !== payment.amount
       ) {
         await this.markNeedsReview(
           refund.id,
