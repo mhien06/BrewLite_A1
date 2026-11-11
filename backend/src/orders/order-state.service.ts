@@ -167,24 +167,31 @@ export class OrderStateService {
           where: { orderId, method: 'VNPAY', status: OrderStatus.PAID },
           orderBy: { id: 'desc' },
         });
-        if (payment) {
-          const existingRefund = await db.refund.findUnique({
-            where: { paymentId: payment.id },
-            select: { id: true },
+        if (
+          !payment ||
+          !payment.providerTxnRef ||
+          payment.amount !== order.total
+        ) {
+          throw new ConflictException(
+            'Không tìm thấy giao dịch VNPay hợp lệ khớp với tổng tiền đơn hàng; không thể hủy tự động.',
+          );
+        }
+        const existingRefund = await db.refund.findUnique({
+          where: { paymentId: payment.id },
+          select: { id: true },
+        });
+        if (!existingRefund) {
+          await db.refund.create({
+            data: {
+              paymentId: payment.id,
+              orderId,
+              amount: payment.amount,
+              reason,
+              status: 'PENDING',
+              requestedAt: new Date(),
+              requestedById: actorId ?? null,
+            },
           });
-          if (!existingRefund) {
-            await db.refund.create({
-              data: {
-                paymentId: payment.id,
-                orderId,
-                amount: order.total,
-                reason,
-                status: 'PENDING',
-                requestedAt: new Date(),
-                requestedById: actorId ?? null,
-              },
-            });
-          }
         }
       }
     }
