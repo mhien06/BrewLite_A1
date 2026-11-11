@@ -107,6 +107,7 @@ export class StaffService {
             refundCompletedAt: true,
             refundResponseCode: true,
             refundResponseMessage: true,
+            refundTransactionStatus: true,
             refundTransactionNo: true,
             refundPayDate: true,
             refundReason: true,
