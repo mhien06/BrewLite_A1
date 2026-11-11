@@ -15,6 +15,7 @@ describe('VnpayRefundService', () => {
     amount: 120000,
     providerTxnRef: 'BL-12',
     providerTransactionNo: '123456',
+    providerPayDate: '20261111150000',
     createdAt: new Date('2026-11-11T03:00:00.000Z'),
   };
   const prisma = {
@@ -54,6 +55,7 @@ describe('VnpayRefundService', () => {
       expect.objectContaining({
         txnRef: 'BL-12',
         amount: 120000,
+        transactionDate: payment.createdAt,
         requestId: expect.stringMatching(/^[0-9a-f]{32}$/),
       }),
       expect.any(Date),
