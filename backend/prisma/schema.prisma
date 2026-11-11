@@ -23,6 +23,7 @@ model User {
   createdAt           DateTime             @default(now())
   orders              Order[]
   payments            Payment[]
+  requestedRefunds    Payment[]            @relation("RefundRequestedBy")
   loyaltyTransactions LoyaltyTransaction[]
 }
 
@@ -130,6 +131,14 @@ model LoyaltyTransaction {
   @@index([userId])
 }
 
+enum RefundStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
+  NEEDS_REVIEW
+}
+
 model Payment {
   id                        Int           @id @default(autoincrement())
   userId                    Int
@@ -146,14 +155,28 @@ model Payment {
   providerTransactionStatus String?
   providerPayDate           String?
   providerBankCode          String?
+  refundStatus              RefundStatus?
+  refundRequestId           String?       @unique
+  refundRequestedAt         DateTime?
+  refundSubmittedAt         DateTime?
+  refundCompletedAt         DateTime?
+  refundCheckedAt           DateTime?
+  refundResponseCode        String?
+  refundTransactionStatus   String?
+  refundLastError           String?
+  refundAmount              Int?
+  refundReason              String?
+  refundRequestedById       Int?
   expiresAt                 DateTime?
   createdAt                 DateTime      @default(now())
   updatedAt                 DateTime      @default(now()) @updatedAt
   user                      User          @relation(fields: [userId], references: [id], onDelete: Restrict)
   order                     Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  refundRequestedBy          User?         @relation("RefundRequestedBy", fields: [refundRequestedById], references: [id], onDelete: SetNull)
 
   @@unique([userId, idempotencyKey])
   @@index([orderId])
+  @@index([refundStatus, refundCheckedAt])
 }
 
 model InventoryMovement {
