@@ -1,0 +1,56 @@
+name: BrewLite validation
+
+on:
+  push:
+    branches:
+      - feature/khoa-vnpay-auto-refund
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/brewlite_test?schema=public
+      JWT_SECRET: ci-only-not-a-real-secret
+      VNPAY_TMN_CODE: TESTCODE
+      VNPAY_HASH_SECRET: ci-only-vnpay-secret
+      VNPAY_RETURN_URL: https://example.test/payments/vnpay/return
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run prisma:generate
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
+
+  frontend:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    env:
+      NEXT_PUBLIC_API_URL: http://localhost:3001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run lint
+      - run: npm run build
