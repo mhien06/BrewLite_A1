@@ -44,6 +44,10 @@ describe('VnpayRefundService', () => {
   it('marks a refund successful only after a signed refund success response', async () => {
     gateway.refundTransaction.mockResolvedValue({
       vnp_Command: 'refund',
+      vnp_ResponseId: 'refund-response-12',
+      vnp_Message: 'Refund successful',
+      vnp_TransactionNo: '987654321',
+      vnp_PayDate: '20261111110000',
       vnp_TransactionType: '02',
       vnp_ResponseCode: '00',
       vnp_TransactionStatus: '00',
@@ -66,6 +70,10 @@ describe('VnpayRefundService', () => {
         data: expect.objectContaining({
           refundStatus: 'SUCCEEDED',
           refundCompletedAt: expect.any(Date),
+          refundResponseId: 'refund-response-12',
+          refundResponseMessage: 'Refund successful',
+          refundTransactionNo: '987654321',
+          refundPayDate: '20261111110000',
         }),
       }),
     );
