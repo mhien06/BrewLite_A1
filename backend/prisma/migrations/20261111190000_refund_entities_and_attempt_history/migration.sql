@@ -150,4 +150,3 @@ ALTER TABLE "Payment"
   DROP COLUMN IF EXISTS "refundReason",
   DROP COLUMN IF EXISTS "refundRequestedById";
 
-DROP TYPE "RefundStatus" CASCADE;
