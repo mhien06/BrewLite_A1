@@ -22,6 +22,10 @@ describe('VNPay refund queue on PostgreSQL', () => {
 
   const successfulRefund = {
     vnp_Command: 'refund',
+    vnp_ResponseId: 'refund-response-integration',
+    vnp_Message: 'Refund successful',
+    vnp_TransactionNo: '987654321',
+    vnp_PayDate: '20261111110000',
     vnp_TransactionType: '02',
     vnp_ResponseCode: '00',
     vnp_TransactionStatus: '00',
@@ -120,7 +124,11 @@ describe('VNPay refund queue on PostgreSQL', () => {
     expect(await payment()).toMatchObject({
       refundStatus: 'SUCCEEDED',
       refundAmount: 30000,
+      refundResponseId: 'refund-response-integration',
       refundResponseCode: '00',
+      refundResponseMessage: 'Refund successful',
+      refundTransactionNo: '987654321',
+      refundPayDate: '20261111110000',
       refundTransactionStatus: '00',
     });
     expect((await payment()).refundCompletedAt).toBeInstanceOf(Date);
