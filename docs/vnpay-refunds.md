@@ -24,12 +24,17 @@ An HTTP success or an accepted request is not sufficient to set `SUCCEEDED`.
 A QueryDR result describing only the original payment (transaction type `01`) is not proof of a refund.
 An ambiguous timeout or response code `99` is not automatically retried because VNPay may already have processed the refund.
 
-## Database
+## Database and audit history
 
-Migration:
-`backend/prisma/migrations/20261111000000_restore_vnpay_refunds/migration.sql`
+Migrations:
+- `backend/prisma/migrations/20261111000000_restore_vnpay_refunds/migration.sql`
+- `backend/prisma/migrations/20261111190000_refund_entities_and_attempt_history/migration.sql`
 
-The Payment row remains the unique source transaction. Refund metadata includes request ID, requested amount, reason, requesting user, request/submit/check/complete timestamps, VNPay response ID/code/message, refund transaction number/date/status, and last error. A unique request ID and a single refund state per payment prevent duplicate full-refund requests for the same paid transaction. The migration is additive and does not reset the database.
+The original `Payment` remains the immutable record of the successful charge. A dedicated `Refund` row is linked 1:1 to its source `Payment` and to the `Order`. Its unique `paymentId` prevents more than one full-refund lifecycle for the same charge. It stores amount, reason, requester, current status, request ID and lifecycle timestamps.
+
+Every outbound Refund request and every QueryDR reconciliation is stored as a separate `RefundAttempt`. Each attempt has a monotonically increasing attempt number, unique request ID, type, state, original transaction reference/date, amount, sanitized VNPay response metadata and error details. The signed request payload and hash secret are never stored. A rejected retry creates a new attempt and never overwrites earlier evidence.
+
+The second migration backfills existing Payment-level refund metadata into `Refund` and a legacy attempt where possible, then removes the temporary refund columns from `Payment`. It is additive with respect to the new tables and does not reset or truncate the database.
 
 Apply through the project's normal Prisma migration deployment process after reviewing and backing up the target database.
 
@@ -47,7 +52,7 @@ The Sandbox merchant must be explicitly enabled for the Refund API. A payment in
 
 ## Staff operations
 
-The staff order page shows the refund state, amount, reason, completion timestamp, and last error.
+The staff order page shows the Refund record, current state, amount, reason, completion timestamp, and the ten most recent Refund/QueryDR attempts with response metadata.
 Only a refund in `FAILED` can be submitted again through the staff retry endpoint. `NEEDS_REVIEW` is intentionally not retryable from the UI: reconcile it with VNPay/merchant support first to avoid a duplicate refund.
 
 ## Validation
@@ -62,7 +67,7 @@ Automated tests cover:
 - A late successful VNPay callback for a cancelled order queues a refund.
 - The maintenance loop processes expiry and refund reconciliation.
 
-The CI workflow runs backend unit tests, lint and build, plus frontend tests, lint and build.
+The CI workflow runs Prisma migration deployment against PostgreSQL, backend unit/E2E/database integration tests, lint and build, plus frontend tests, lint and build.
 
 ## Sandbox evidence and remaining external check
 
@@ -70,7 +75,7 @@ No live Refund API request is made as part of GitHub source editing. After deplo
 1. The original VNPay transaction reference and transaction number (mask personal data).
 2. The outgoing Refund request metadata without the hash secret.
 3. VNPay's signed Refund response with transaction type `02`, response code `00`, and transaction status `00`.
-4. The BrewLite payment row showing `SUCCEEDED`.
+4. The BrewLite Refund record showing `SUCCEEDED` and its corresponding confirmed RefundAttempt.
 
 If the merchant returns `99` or denies Refund permission, leave the payment in `NEEDS_REVIEW`, attach the masked response and merchant-support confirmation to the PR, and do not claim that a real Sandbox refund succeeded.
 
