@@ -110,6 +110,51 @@ describe('OrderStateService', () => {
     });
   });
 
+  it('queues one full refund when staff cancels a paid VNPay order', async () => {
+    const paid = {
+      id: 8,
+      userId: 7,
+      status: OrderStatus.PAID,
+      paymentMethod: 'VNPAY',
+      total: 125000,
+      inventoryDeducted: true,
+      inventorySnapshot: [{ ingredientId: 1, amount: 10 }],
+    };
+    const cancelled = { ...paid, status: OrderStatus.CANCELLED };
+    prisma.order.findUnique
+      .mockResolvedValueOnce(paid)
+      .mockResolvedValueOnce(cancelled);
+    prisma.ingredient.update.mockResolvedValue({ stock: 20 });
+    prisma.loyaltyTransaction.findUnique.mockResolvedValue(null);
+    prisma.order.updateMany.mockResolvedValue({ count: 1 });
+    prisma.payment.updateMany.mockResolvedValue({ count: 1 });
+
+    await service.transition(
+      8,
+      OrderStatus.CANCELLED,
+      undefined,
+      { cancellationReason: 'Khách yêu cầu hủy' },
+      99,
+    );
+
+    expect(prisma.payment.updateMany).toHaveBeenCalledWith({
+      where: {
+        orderId: 8,
+        method: 'VNPAY',
+        status: OrderStatus.PAID,
+        refundStatus: null,
+        refundRequestedAt: null,
+      },
+      data: {
+        refundStatus: 'PENDING',
+        refundRequestedAt: expect.any(Date),
+        refundAmount: 125000,
+        refundReason: 'Khách yêu cầu hủy',
+        refundRequestedById: 99,
+      },
+    });
+  });
+
   it('blocks customers from cancelling after the shop starts preparing', async () => {
     prisma.order.findUnique.mockResolvedValue({
       id: 8,
