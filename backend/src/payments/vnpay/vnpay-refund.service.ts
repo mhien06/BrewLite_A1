@@ -1,11 +1,15 @@
-import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { randomBytes } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service.js';
-import { VnpayTransactionApiService } from './vnpay-transaction-api.service.js';
-import type { VnpayParams } from './vnpay-signature.js';
+import {
+  formatVnpayDate,
+  VnpayRefundClient,
+  type VnpayRefundOutcome,
+  type VnpayRefundResult,
+} from './vnpay-refund.client.js';
 
 const CHECK_INTERVAL_MS = 60_000;
-const DEFINITIVE_REJECTIONS = new Set(['02', '03', '91', '95', '97']);
+const MAX_AUTOMATIC_REFUND_SUBMISSIONS = 3;
 
 @Injectable()
 export class VnpayRefundService {
@@ -13,7 +17,7 @@ export class VnpayRefundService {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly gateway: VnpayTransactionApiService,
+    private readonly gateway: VnpayRefundClient,
   ) {}
 
   async processRefunds(now = new Date()): Promise<void> {
@@ -64,7 +68,6 @@ export class VnpayRefundService {
             ? {
                 requestId,
                 submittedAt: now,
-                retryRequestedById: null,
               }
             : {}),
         },
@@ -89,10 +92,7 @@ export class VnpayRefundService {
             transactionDate: payment.createdAt,
             amount: refund.amount,
             transactionType: type === 'REFUND' ? '02' : null,
-            initiatedById:
-              type === 'REFUND'
-                ? (refund.retryRequestedById ?? refund.requestedById)
-                : null,
+            initiatedById: null,
             startedAt: now,
           },
           select: { id: true },
@@ -101,36 +101,28 @@ export class VnpayRefundService {
 
         const common = {
           txnRef: payment.providerTxnRef,
-          transactionNo: payment.providerTransactionNo,
-          // VNPay expects the original vnp_CreateDate, not vnp_PayDate.
-          transactionDate: payment.createdAt,
+          transactionDate: formatVnpayDate(payment.createdAt),
           ipAddress: process.env.VNPAY_SERVER_IP || '127.0.0.1',
+          orderInfo: `Hoan tien don ${refund.orderId}`,
+          requestId,
+          now,
         };
         const result =
           type === 'REFUND'
-            ? await this.gateway.refundTransaction(
-                {
-                  ...common,
-                  amount: refund.amount,
-                  createdBy: 'BrewLite',
-                  requestId,
-                  transactionType: '02',
-                },
-                now,
-              )
-            : await this.gateway.queryTransaction(
-                {
-                  ...common,
-                  expectedAmount: payment.amount,
-                  requestId,
-                },
-                now,
-              );
+            ? await this.gateway.requestRefund({
+                ...common,
+                amount: refund.amount,
+                transactionNo: payment.providerTransactionNo,
+                createdBy: 'BrewLite',
+              })
+            : await this.gateway.queryTransaction({
+                ...common,
+                expectedAmount: payment.amount,
+              });
 
         await this.recordResult(refund.id, attempt.id, result, now, type === 'REFUND');
       } catch (error) {
-        // Timeout/network errors are ambiguous: VNPay may already have accepted
-        // the request. Preserve the attempt and never automatically send again.
+        // An external request may have succeeded despite a timeout or transport error.
         await this.markNeedsReview(
           refund.id,
           now,
@@ -143,98 +135,47 @@ export class VnpayRefundService {
     }
   }
 
-  async retryRejectedRefund(id: number, actorId: number) {
-    const refund = await this.prisma.refund.findFirst({
-      where: {
-        id,
-        status: 'FAILED',
-        payment: { method: 'VNPAY', status: 'PAID' },
-      },
-      select: { id: true },
-    });
-    if (!refund) {
-      throw new ConflictException(
-        'Chỉ có thể gửi lại yêu cầu đã bị VNPay từ chối rõ ràng.',
-      );
-    }
-
-    const result = await this.prisma.refund.updateMany({
-      where: { id, status: 'FAILED' },
-      data: {
-        status: 'PENDING',
-        requestId: null,
-        retryRequestedById: actorId,
-        checkedAt: null,
-        submittedAt: null,
-        completedAt: null,
-        lastError: null,
-      },
-    });
-    if (!result.count) {
-      throw new ConflictException('Yêu cầu hoàn tiền vừa được thay đổi.');
-    }
-    return {
-      message: 'Đã đưa yêu cầu hoàn tiền bị từ chối vào hàng đợi gửi lại.',
-    };
-  }
-
   private async recordResult(
     refundId: number,
     attemptId: number,
-    result: VnpayParams,
+    result: VnpayRefundResult,
     now: Date,
     submitted: boolean,
   ) {
-    const isConfirmedRefund =
-      result.vnp_Command === 'refund' &&
-      result.vnp_TransactionType === '02' &&
-      result.vnp_ResponseCode === '00' &&
-      result.vnp_TransactionStatus === '00';
-
-    const explicitlyRejected =
-      (submitted && DEFINITIVE_REJECTIONS.has(result.vnp_ResponseCode ?? '')) ||
-      result.vnp_TransactionType === '02' &&
-        result.vnp_ResponseCode === '00' &&
-        result.vnp_TransactionStatus === '09' &&
-        (submitted
-          ? result.vnp_Command === 'refund'
-          : result.vnp_Command === 'querydr');
-
-    const queryConfirmsRefund =
-      !submitted &&
-      result.vnp_Command === 'querydr' &&
-      result.vnp_TransactionType === '02' &&
-      result.vnp_TransactionStatus === '00' &&
-      result.vnp_ResponseCode === '00';
-
-    const confirmed = isConfirmedRefund || queryConfirmsRefund;
-    const status = confirmed
-      ? 'SUCCEEDED'
-      : explicitlyRejected
-        ? 'FAILED'
-        : 'NEEDS_REVIEW';
-    const attemptStatus = confirmed
-      ? 'CONFIRMED'
-      : explicitlyRejected
-        ? 'REJECTED'
-        : 'AMBIGUOUS';
-    const errorMessage = confirmed
-      ? null
-      : explicitlyRejected
-        ? 'VNPay từ chối yêu cầu hoàn tiền.'
-        : 'VNPay chưa cung cấp xác nhận hoàn tiền. Hệ thống không gửi lại tự động để tránh hoàn trùng.';
+    const confirmed = result.outcome === 'COMPLETED';
 
     await this.prisma.$transaction(async (tx) => {
+      const safeToRetry =
+        !submitted && result.outcome === 'NOT_STARTED';
+      const submissionCount = safeToRetry
+        ? await tx.refundAttempt.count({
+            where: { refundId, type: 'REFUND' },
+          })
+        : 0;
+      const retryAutomatically =
+        safeToRetry && submissionCount < MAX_AUTOMATIC_REFUND_SUBMISSIONS;
+      const status = this.refundStatus(
+        result.outcome,
+        retryAutomatically,
+        submitted,
+      );
+      const errorMessage = this.errorMessage(
+        result.outcome,
+        retryAutomatically,
+        submitted,
+        result.message,
+      );
+
       await tx.refundAttempt.update({
         where: { id: attemptId },
         data: {
-          status: attemptStatus,
-          responseId: result.vnp_ResponseId ?? null,
-          responseCode: result.vnp_ResponseCode ?? null,
-          responseMessage: result.vnp_Message ?? null,
-          responseTransactionNo: result.vnp_TransactionNo ?? null,
-          responsePayDate: result.vnp_PayDate ?? null,
-          responseTransactionStatus: result.vnp_TransactionStatus ?? null,
+          status: this.attemptStatus(result.outcome),
+          responseId: result.responseId || null,
+          responseCode: result.responseCode || null,
+          responseMessage: result.message || null,
+          responseTransactionNo: result.transactionNo || null,
+          responsePayDate: result.payDate || null,
+          responseTransactionStatus: result.transactionStatus || null,
           errorMessage,
           completedAt: now,
         },
@@ -248,6 +189,51 @@ export class VnpayRefundService {
         },
       });
     });
+  }
+
+  private refundStatus(
+    outcome: VnpayRefundOutcome,
+    retryAutomatically: boolean,
+    submitted: boolean,
+  ): 'PENDING' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'NEEDS_REVIEW' {
+    if (outcome === 'COMPLETED') return 'SUCCEEDED';
+    if (outcome === 'REJECTED') return submitted ? 'NEEDS_REVIEW' : 'FAILED';
+    if (outcome === 'ACCEPTED') return 'PROCESSING';
+    if (outcome === 'NOT_STARTED' && retryAutomatically) return 'PENDING';
+    return 'NEEDS_REVIEW';
+  }
+
+  private attemptStatus(
+    outcome: VnpayRefundOutcome,
+  ): 'CONFIRMED' | 'REJECTED' | 'AMBIGUOUS' {
+    if (outcome === 'REJECTED') return 'REJECTED';
+    if (outcome === 'UNKNOWN') return 'AMBIGUOUS';
+    return 'CONFIRMED';
+  }
+
+  private errorMessage(
+    outcome: VnpayRefundOutcome,
+    retryAutomatically: boolean,
+    submitted: boolean,
+    providerMessage: string,
+  ): string | null {
+    if (outcome === 'COMPLETED' || outcome === 'ACCEPTED') return null;
+    if (outcome === 'REJECTED') {
+      return (
+        providerMessage ||
+        (submitted
+          ? 'VNPay từ chối yêu cầu; hệ thống sẽ đối soát trước khi thử lại.'
+          : 'VNPay xác nhận từ chối yêu cầu hoàn tiền.')
+      );
+    }
+    if (outcome === 'NOT_STARTED' && retryAutomatically) return null;
+    if (outcome === 'NOT_STARTED') {
+      return 'Đã đạt giới hạn thử lại tự động; cần kiểm tra thủ công.';
+    }
+    return (
+      providerMessage ||
+      'Chưa xác định được kết quả hoàn tiền; hệ thống sẽ tiếp tục đối soát.'
+    );
   }
 
   private async markNeedsReview(

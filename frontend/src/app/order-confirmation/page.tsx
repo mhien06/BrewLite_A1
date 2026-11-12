@@ -24,7 +24,7 @@ import {
   saveVnpayCheckoutSession,
 } from "@/utils/vnpay-session";
 import type { PaymentMethod } from "@/types/checkout";
-import type { Order, OrderStatus } from "@/types/order";
+import type { Order, OrderStatus, RefundStatus } from "@/types/order";
 import { loginHref } from "@/utils/login-redirect";
 
 const formatPrice = (price: number) =>
@@ -42,6 +42,14 @@ const formatDate = (dateStr: string) => {
   } catch {
     return dateStr;
   }
+};
+
+const refundStatusLabels: Record<RefundStatus, string> = {
+  PENDING: "Hoàn tiền đang chờ xử lý",
+  PROCESSING: "VNPay đang xử lý hoàn tiền",
+  SUCCEEDED: "VNPay đã xác nhận hoàn tiền",
+  FAILED: "VNPay từ chối hoàn tiền",
+  NEEDS_REVIEW: "Đang đối soát với VNPay",
 };
 
 const TOPPING_LABELS: Record<string, string> = {
@@ -327,9 +335,22 @@ function OrderConfirmationContent() {
 
   useEffect(() => {
     if (!token || !order) return;
-    const waiting =
+    const waitingForPayment =
       order.status === "PENDING" || order.status === "PAYMENT_FAILED";
-    if (!waiting) return;
+    const waitingForRefund = order.refunds?.some(
+      (refund) =>
+        refund.status === "PENDING" ||
+        refund.status === "PROCESSING" ||
+        refund.status === "NEEDS_REVIEW",
+    );
+    const waitingForLateVnpay = order.payments?.some(
+      (payment) =>
+        order.status === "CANCELLED" &&
+        payment.method === "VNPAY" &&
+        payment.status === "PENDING",
+    );
+    if (!waitingForPayment && !waitingForRefund && !waitingForLateVnpay) return;
+    const pollIntervalMs = waitingForPayment ? 5_000 : 15_000;
     const timer = setInterval(() => {
       void getOrderByIdApi(token, order.id)
         .then((updated) => {
@@ -340,7 +361,7 @@ function OrderConfirmationContent() {
         .catch(() => {
           /* Giữ dữ liệu hiện tại khi mạng tạm mất. */
         });
-    }, 5000);
+    }, pollIntervalMs);
     return () => clearInterval(timer);
   }, [token, order]);
 
@@ -594,6 +615,55 @@ function OrderConfirmationContent() {
           <p className="mt-5 text-center text-sm text-stone-600">
             {order.cancellationReason}
           </p>
+        )}
+        {order.refunds && order.refunds.length > 0 && (
+          <section
+            className="mx-auto mt-6 max-w-2xl rounded-2xl border border-amber-200 bg-amber-50/70 p-5"
+            aria-live="polite"
+          >
+            <h2 className="font-extrabold text-[#40241b]">
+              Trạng thái hoàn tiền
+            </h2>
+            <ul className="mt-3 space-y-3">
+              {order.refunds.map((refund) => (
+                <li
+                  key={refund.id}
+                  className="border-t border-amber-900/10 pt-3 text-sm text-stone-700"
+                >
+                  <p className="font-semibold">
+                    {refundStatusLabels[refund.status]}
+                  </p>
+                  <p className="mt-1">
+                    Số tiền: {formatPrice(refund.amount)}
+                  </p>
+                  <p className="mt-1 text-xs text-stone-500">
+                    Yêu cầu lúc: {formatDate(refund.requestedAt)}
+                  </p>
+                  {refund.status === "PROCESSING" && (
+                    <p className="mt-2 text-xs text-stone-600">
+                      VNPay đã tiếp nhận yêu cầu; chưa có xác nhận hoàn tất.
+                    </p>
+                  )}
+                  {refund.status === "NEEDS_REVIEW" && (
+                    <p className="mt-2 text-xs text-amber-900">
+                      Chưa xác định được kết quả. Hệ thống đang tiếp tục đối
+                      soát; chưa ghi nhận hoàn tất.
+                    </p>
+                  )}
+                  {refund.status === "FAILED" && (
+                    <p className="mt-2 text-xs text-rose-800">
+                      VNPay chưa thực hiện hoàn tiền cho giao dịch này.
+                    </p>
+                  )}
+                  {refund.status === "SUCCEEDED" && refund.completedAt && (
+                    <p className="mt-2 text-xs text-emerald-800">
+                      Hoàn tất: {formatDate(refund.completedAt)}
+                    </p>
+                  )}
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
         {(order.status === "PENDING" || order.status === "PAYMENT_FAILED") &&
           order.payments?.[0]?.expiresAt && (

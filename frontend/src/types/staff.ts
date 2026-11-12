@@ -1,3 +1,5 @@
+import type { RefundStatus as OrderRefundStatus } from "@/types/order";
+
 export type Ingredient = {
   id: number;
   name: string;
@@ -23,12 +25,12 @@ export type Topping = {
   amount: number;
   ingredient: Ingredient;
 };
-export type RefundStatus = "PENDING" | "PROCESSING" | "SUCCEEDED" | "FAILED" | "NEEDS_REVIEW";
+export type { RefundStatus } from "@/types/order";
 export type RefundAttemptStatus = "STARTED" | "CONFIRMED" | "REJECTED" | "AMBIGUOUS" | "FAILED";
 export type OrderRefund = {
   id: number;
   amount: number;
-  status: RefundStatus;
+  status: OrderRefundStatus;
   requestedAt: string;
   completedAt: string | null;
   reason: string;

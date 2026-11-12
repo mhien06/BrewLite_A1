@@ -1,3 +1,4 @@
+import { ConflictException } from '@nestjs/common';
 import { OrderStatus, PaymentMethod } from '../../generated/prisma/client.js';
 import { InventoryService } from '../../inventory/inventory.service.js';
 import { LoyaltyService } from '../../loyalty/loyalty.service.js';
@@ -11,6 +12,7 @@ describe('VnpayIpnService', () => {
   const transaction = {
     payment: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
       update: vi.fn(),
     },
     order: {
@@ -77,6 +79,7 @@ describe('VnpayIpnService', () => {
       amount: 172_800,
       status: OrderStatus.PENDING,
     });
+    transaction.payment.findFirst.mockResolvedValue(null);
 
     transaction.order.findUnique.mockResolvedValue({
       id: 10,
@@ -262,7 +265,7 @@ describe('VnpayIpnService', () => {
     },
   );
 
-  it('queues a refund when VNPay confirms payment after the order was cancelled', async () => {
+  it('queues an automatic refund when payment arrives after the customer cancelled a pending order', async () => {
     const latePayment = {
       id: 5,
       userId: 7,
@@ -302,6 +305,143 @@ describe('VnpayIpnService', () => {
         status: 'PENDING',
         requestedAt: expect.any(Date),
       },
+      update: {},
+    });
+    expect(inventory.deductForPaidOrder).not.toHaveBeenCalled();
+    expect(loyalty.awardPointsForPaidOrder).not.toHaveBeenCalled();
+  });
+
+  it('queues a refund when an expired order is cancelled before a successful callback arrives', async () => {
+    const expiredPayment = {
+      id: 5,
+      userId: 7,
+      orderId: 10,
+      amount: 172_800,
+      method: PaymentMethod.VNPAY,
+      status: OrderStatus.PENDING,
+      expiresAt: new Date('2020-01-01T00:00:00.000Z'),
+    };
+    transaction.payment.findUnique.mockResolvedValue(expiredPayment);
+    transaction.order.findUnique.mockResolvedValue({
+      id: 10,
+      userId: 7,
+      total: 172_800,
+      status: OrderStatus.PENDING,
+    });
+    transaction.payment.findFirst.mockResolvedValue({ id: 5 });
+
+    await expect(service.handle(signedQuery())).resolves.toEqual({
+      RspCode: '00',
+      Message: 'Confirm Success',
+    });
+
+    expect(orderState.transition).toHaveBeenCalledWith(
+      10,
+      OrderStatus.CANCELLED,
+      transaction,
+      expect.objectContaining({ cancellationSource: 'SYSTEM' }),
+    );
+    expect(transaction.refund.upsert).toHaveBeenCalledWith({
+      where: { paymentId: 5 },
+      create: expect.objectContaining({
+        paymentId: 5,
+        amount: 172_800,
+        source: 'SYSTEM',
+        status: 'PENDING',
+      }),
+      update: {},
+    });
+    expect(inventory.deductForPaidOrder).not.toHaveBeenCalled();
+    expect(loyalty.awardPointsForPaidOrder).not.toHaveBeenCalled();
+  });
+
+  it('queues a refund when the successful payment cannot be fulfilled for lack of ingredients', async () => {
+    transaction.payment.findUnique.mockResolvedValue({
+      id: 5,
+      userId: 7,
+      orderId: 10,
+      amount: 172_800,
+      method: PaymentMethod.VNPAY,
+      status: OrderStatus.PENDING,
+    });
+    transaction.order.findUnique.mockResolvedValue({
+      id: 10,
+      userId: 7,
+      total: 172_800,
+      status: OrderStatus.PENDING,
+    });
+    inventory.deductForPaidOrder.mockRejectedValue(
+      new ConflictException('Không đủ nguyên liệu.'),
+    );
+
+    await expect(service.handle(signedQuery())).resolves.toEqual({
+      RspCode: '00',
+      Message: 'Confirm Success',
+    });
+
+    expect(orderState.transition).toHaveBeenCalledWith(
+      10,
+      OrderStatus.CANCELLED,
+      transaction,
+      expect.objectContaining({
+        cancellationSource: 'SYSTEM',
+        cancellationReason: expect.stringContaining('nguyên liệu'),
+      }),
+    );
+    expect(transaction.payment.update).toHaveBeenCalledWith({
+      where: { id: 5 },
+      data: expect.objectContaining({ status: OrderStatus.PAID }),
+    });
+    expect(transaction.refund.upsert).toHaveBeenCalledWith({
+      where: { paymentId: 5 },
+      create: expect.objectContaining({
+        source: 'SYSTEM',
+        status: 'PENDING',
+        reason: expect.stringContaining('nguyên liệu'),
+      }),
+      update: {},
+    });
+    expect(loyalty.awardPointsForPaidOrder).not.toHaveBeenCalled();
+  });
+
+  it('queues a full refund for a second distinct VNPay payment after the order is paid', async () => {
+    const extraPayment = {
+      id: 6,
+      userId: 7,
+      orderId: 10,
+      amount: 172_800,
+      method: PaymentMethod.VNPAY,
+      status: OrderStatus.PENDING,
+      providerTxnRef: 'BLSECOND123',
+    };
+    transaction.payment.findUnique.mockResolvedValue(extraPayment);
+    transaction.order.findUnique.mockResolvedValue({
+      id: 10,
+      userId: 7,
+      total: 172_800,
+      status: OrderStatus.PAID,
+    });
+
+    await expect(
+      service.handle(signedQuery({ vnp_TxnRef: 'BLSECOND123' })),
+    ).resolves.toEqual({
+      RspCode: '00',
+      Message: 'Confirm Success',
+    });
+
+    expect(transaction.payment.update).toHaveBeenCalledWith({
+      where: { id: 6 },
+      data: expect.objectContaining({ status: OrderStatus.PAID }),
+    });
+    expect(transaction.refund.upsert).toHaveBeenCalledWith({
+      where: { paymentId: 6 },
+      create: expect.objectContaining({
+        paymentId: 6,
+        amount: 172_800,
+        source: 'SYSTEM',
+        status: 'PENDING',
+        reason: expect.stringContaining('trùng'),
+      }),
       update: {},
     });
     expect(inventory.deductForPaidOrder).not.toHaveBeenCalled();

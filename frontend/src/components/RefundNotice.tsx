@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import type { OrderRefund, RefundStatus } from "@/types/staff";
 
 const labels: Record<RefundStatus, string> = {
@@ -18,34 +17,10 @@ const attemptLabels = {
 
 export default function RefundNotice({
   refunds = [],
-  staffToken,
 }: {
   refunds?: OrderRefund[];
-  staffToken?: string;
 }) {
-  const [busyId, setBusyId] = useState<number | null>(null);
-  const [message, setMessage] = useState("");
   if (!refunds.length) return null;
-
-  async function retry(refundId: number) {
-    if (!staffToken || busyId !== null) return;
-    setBusyId(refundId);
-    setMessage("");
-    try {
-      const api = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-      const response = await fetch(
-        `${api.replace(/\/$/, "")}/payments/vnpay/refunds/${refundId}/retry`,
-        { method: "POST", headers: { Authorization: `Bearer ${staffToken}` } },
-      );
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.message || "Không thể gửi lại yêu cầu.");
-      setMessage("Đã đưa yêu cầu vào hàng đợi. Tải lại dữ liệu sau ít phút.");
-    } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Không thể kết nối.");
-    } finally {
-      setBusyId(null);
-    }
-  }
 
   return (
     <div className="my-4 space-y-3" role="status" aria-live="polite">
@@ -91,15 +66,8 @@ export default function RefundNotice({
               </ol>
             </div>
           )}
-
-          {staffToken && refund.status === "FAILED" && (
-            <button type="button" disabled={busyId !== null} onClick={() => void retry(refund.id)} className="mt-3 rounded-full border border-amber-800 px-4 py-2 font-semibold disabled:opacity-50">
-              {busyId === refund.id ? "Đang gửi..." : "Gửi lại yêu cầu bị từ chối"}
-            </button>
-          )}
         </div>
       ))}
-      {message && <p className="text-sm text-stone-700">{message}</p>}
     </div>
   );
 }

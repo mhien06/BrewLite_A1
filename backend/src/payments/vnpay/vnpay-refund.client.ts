@@ -13,16 +13,18 @@ const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000;
  * - COMPLETED: VNPAY xác nhận giao dịch hoàn đã hoàn tất.
  * - REJECTED: VNPAY từ chối chắc chắn, không có tiền nào được hoàn.
  * - NOT_STARTED: (chỉ khi tra cứu) giao dịch gốc chưa có yêu cầu hoàn nào.
- * - UNKNOWN: không đủ cơ sở kết luận, phải đối soát/duyệt tay.
+ * - UNKNOWN: chưa đủ cơ sở kết luận; giữ trạng thái đối soát và tiếp tục QueryDR.
  */
 export type VnpayRefundOutcome =
   'ACCEPTED' | 'COMPLETED' | 'REJECTED' | 'NOT_STARTED' | 'UNKNOWN';
 
 export interface VnpayRefundResult {
   outcome: VnpayRefundOutcome;
+  responseId: string;
   responseCode: string;
   transactionStatus: string;
   transactionNo: string;
+  payDate: string;
   message: string;
 }
 
@@ -59,6 +61,7 @@ export interface VnpayRefundRequestInput {
 export interface VnpayQueryInput {
   requestId: string;
   txnRef: string;
+  expectedAmount: number;
   transactionDate: string;
   orderInfo: string;
   ipAddress: string;
@@ -147,8 +150,7 @@ export function classifyRefundResponse(
   if (responseCode === '00') {
     if (transactionStatus === '09') return 'REJECTED';
     if (transactionStatus === '00') return 'COMPLETED';
-    // 05/06 hoặc trạng thái khác: mới được tiếp nhận, chưa chắc đã hoàn xong.
-    return 'ACCEPTED';
+    if (['05', '06'].includes(transactionStatus)) return 'ACCEPTED';
   }
   // Từ chối chắc chắn: không tồn tại, sai số tiền, giao dịch gốc không thành
   // công, sai TmnCode/định dạng/chữ ký của yêu cầu.
@@ -164,14 +166,15 @@ export function classifyQueryResponse(
   transactionStatus: string,
   transactionType: string,
 ): VnpayRefundOutcome {
-  if (responseCode !== '00') {
-    return responseCode === '91' ? 'NOT_STARTED' : 'UNKNOWN';
+  if (responseCode !== '00') return 'UNKNOWN';
+  const isFullRefund = transactionType === FULL_REFUND_TYPE;
+  if (transactionStatus === '09' && isFullRefund) return 'REJECTED';
+  if (['05', '06'].includes(transactionStatus) && isFullRefund) {
+    return 'ACCEPTED';
   }
-  const isRefundTransaction = ['02', '03'].includes(transactionType);
-  if (transactionStatus === '09') return 'REJECTED';
-  if (['05', '06'].includes(transactionStatus)) return 'ACCEPTED';
   if (transactionStatus === '00') {
-    return isRefundTransaction ? 'COMPLETED' : 'NOT_STARTED';
+    if (isFullRefund) return 'COMPLETED';
+    return transactionType === '01' ? 'NOT_STARTED' : 'UNKNOWN';
   }
   return 'UNKNOWN';
 }
@@ -206,15 +209,19 @@ export class VnpayRefundClient {
     this.assertValidResponse(response, REFUND_RESPONSE_FIELDS, config, {
       txnRef: input.txnRef,
       command: 'refund',
+      amount: input.amount,
+      transactionType: FULL_REFUND_TYPE,
     });
 
     const responseCode = response.vnp_ResponseCode ?? '';
     const transactionStatus = response.vnp_TransactionStatus ?? '';
     return {
       outcome: classifyRefundResponse(responseCode, transactionStatus),
+      responseId: response.vnp_ResponseId ?? '',
       responseCode,
       transactionStatus,
       transactionNo: response.vnp_TransactionNo ?? '',
+      payDate: response.vnp_PayDate ?? '',
       message: response.vnp_Message ?? '',
     };
   }
@@ -241,6 +248,7 @@ export class VnpayRefundClient {
     this.assertValidResponse(response, QUERY_RESPONSE_FIELDS, config, {
       txnRef: input.txnRef,
       command: 'querydr',
+      amount: input.expectedAmount,
     });
 
     const responseCode = response.vnp_ResponseCode ?? '';
@@ -251,9 +259,11 @@ export class VnpayRefundClient {
         transactionStatus,
         response.vnp_TransactionType ?? '',
       ),
+      responseId: response.vnp_ResponseId ?? '',
       responseCode,
       transactionStatus,
       transactionNo: response.vnp_TransactionNo ?? '',
+      payDate: response.vnp_PayDate ?? '',
       message: response.vnp_Message ?? '',
     };
   }
@@ -320,7 +330,12 @@ export class VnpayRefundClient {
     response: VnpayJson,
     fields: readonly string[],
     config: VnpayConfig,
-    expected: { txnRef: string; command: string },
+    expected: {
+      txnRef: string;
+      command: string;
+      amount: number;
+      transactionType?: string;
+    },
   ): void {
     const validSignature = verifyVnpayDataSignature(
       joinFields(response, fields),
@@ -337,8 +352,11 @@ export class VnpayRefundClient {
 
     if (
       response.vnp_TmnCode !== config.tmnCode ||
-      (response.vnp_TxnRef && response.vnp_TxnRef !== expected.txnRef) ||
-      (response.vnp_Command && response.vnp_Command !== expected.command)
+      response.vnp_TxnRef !== expected.txnRef ||
+      response.vnp_Command !== expected.command ||
+      response.vnp_Amount !== String(expected.amount * 100) ||
+      (expected.transactionType !== undefined &&
+        response.vnp_TransactionType !== expected.transactionType)
     ) {
       throw new VnpayUncertainOutcomeError(
         'INVALID_RESPONSE',

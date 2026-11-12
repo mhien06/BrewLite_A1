@@ -17,13 +17,13 @@ Wallet and simulated-card payments are not sent to VNPay.
 | `PENDING` | Refund is queued and has not been sent yet. |
 | `PROCESSING` | A worker claimed the refund and is calling VNPay or checking its result. |
 | `SUCCEEDED` | A verified VNPay refund response confirms transaction type `02` and transaction status `00`. |
-| `FAILED` | VNPay explicitly rejected the request. Staff may retry this state. |
-| `NEEDS_REVIEW` | The outcome is ambiguous. The worker performs QueryDR reconciliation and never blindly resends the refund. |
+| `FAILED` | QueryDR confirms that VNPay rejected the refund. No staff retry endpoint is available. |
+| `NEEDS_REVIEW` | The outcome is ambiguous. The worker continues QueryDR reconciliation and never blindly resends the refund. |
 
 An HTTP success or an accepted request is not sufficient to set `SUCCEEDED`.
-A QueryDR result describing only the original payment (transaction type `01`) is not proof of a refund.
-VNPay response code `94` means a duplicate refund request is already being processed, so it is reconciled rather than retried. Transaction status `05`/`06` remains in review while VNPay processes the refund; status `09` is an explicit refund rejection and can become `FAILED`.
-An ambiguous timeout or response code `99` is not automatically retried because VNPay may already have processed the refund.
+A QueryDR result describing only the original payment (transaction type `01`) is not proof of a refund. It permits another submission only when QueryDR also confirms the original payment succeeded and confirms that no refund has started.
+VNPay response code `94` means a duplicate refund request is already being processed, so it is reconciled rather than immediately retried. Transaction status `05`/`06` remains in review while VNPay processes the refund; status `09` is an explicit refund rejection and can become `FAILED`.
+Timeouts, network errors, invalid signatures, and response code `99` are reconciled before any retry because VNPay may already have processed the refund. Automatic submissions are limited to three; after that, staff must resolve the case outside the application.
 
 ## Database and audit history
 
@@ -33,7 +33,7 @@ Migrations:
 
 The original `Payment` remains the immutable record of the successful charge. A dedicated `Refund` row is linked 1:1 to its source `Payment` and to the `Order`. Its unique `paymentId` prevents more than one full-refund lifecycle for the same charge. It stores amount, reason, requester, current status, request ID and lifecycle timestamps.
 
-Every outbound Refund request and every QueryDR reconciliation is stored as a separate `RefundAttempt`. Each attempt has a monotonically increasing attempt number, unique request ID, type, state, original transaction reference/date, amount, sanitized VNPay response metadata and error details. The signed request payload and hash secret are never stored. A rejected retry creates a new attempt and never overwrites earlier evidence.
+Every outbound Refund request and every QueryDR reconciliation is stored as a separate `RefundAttempt`. Each attempt has a monotonically increasing attempt number, unique request ID, type, state, original transaction reference/date, amount, sanitized VNPay response metadata and error details. The signed request payload and hash secret are never stored. A later automatic submission creates a new attempt and never overwrites earlier evidence.
 
 The second migration backfills existing Payment-level refund metadata into `Refund` and a legacy attempt where possible, then removes the temporary refund columns from `Payment`. It is additive with respect to the new tables and does not reset or truncate the database.
 
@@ -53,8 +53,8 @@ The Sandbox merchant must be explicitly enabled for the Refund API. A payment in
 
 ## Staff operations
 
-The staff order page shows the Refund record, current state, amount, reason, completion timestamp, and the ten most recent Refund/QueryDR attempts with response metadata and the user/system that initiated each attempt.
-Only a refund in `FAILED` can be submitted again through the staff retry endpoint. `NEEDS_REVIEW` is intentionally not retryable from the UI: reconcile it with VNPay/merchant support first to avoid a duplicate refund.
+The staff order page shows the Refund record, current state, amount, reason, completion timestamp, and the ten most recent Refund/QueryDR attempts with response metadata and the user/system that initiated each attempt. Staff can inspect the status but cannot trigger a refund retry from the application.
+The worker checks pending and review-needed refunds at least once per minute. It resubmits only after a valid QueryDR response confirms the original payment succeeded and no refund exists, and only while fewer than three Refund submissions have been made. Uncertain QueryDR results remain in reconciliation; they are never treated as permission to resend.
 
 ## Validation
 
@@ -62,7 +62,8 @@ Automated tests cover:
 - Full refund success requires a verified VNPay refund response.
 - Ambiguous response moves to `NEEDS_REVIEW`.
 - QueryDR of the original payment does not falsely mark a refund successful.
-- Explicit rejection becomes `FAILED` and the staff retry path creates a new request ID.
+- A confirmed QueryDR result showing no refund safely requeues an automatic submission and preserves prior attempt history.
+- Automatic refund submissions are capped, and uncertain QueryDR results do not trigger a retry.
 - A competing worker cannot claim the same request twice.
 - Paid VNPay order cancellation queues a refund in the same database transaction.
 - A late successful VNPay callback for a cancelled order queues a refund.

@@ -10,7 +10,7 @@ import {
 } from 'vitest';
 import { PrismaService } from '../src/prisma/prisma.service.js';
 import { VnpayRefundService } from '../src/payments/vnpay/vnpay-refund.service.js';
-import { VnpayTransactionApiService } from '../src/payments/vnpay/vnpay-transaction-api.service.js';
+import { VnpayRefundClient } from '../src/payments/vnpay/vnpay-refund.client.js';
 
 describe('VNPay refund queue and audit history on PostgreSQL', () => {
   const db = new PrismaService();
@@ -22,19 +22,18 @@ describe('VNPay refund queue and audit history on PostgreSQL', () => {
   let txnRef: string;
 
   const successfulRefund = {
-    vnp_Command: 'refund',
-    vnp_ResponseId: 'refund-response-integration',
-    vnp_Message: 'Refund successful',
-    vnp_TransactionNo: '987654321',
-    vnp_PayDate: '20261111110000',
-    vnp_TransactionType: '02',
-    vnp_ResponseCode: '00',
-    vnp_TransactionStatus: '00',
+    outcome: 'COMPLETED' as const,
+    responseId: 'refund-response-integration',
+    message: 'Refund successful',
+    transactionNo: '987654321',
+    payDate: '20261111110000',
+    responseCode: '00',
+    transactionStatus: '00',
   };
 
   function gateway() {
     return {
-      refundTransaction: vi.fn().mockResolvedValue(successfulRefund),
+      requestRefund: vi.fn().mockResolvedValue(successfulRefund),
       queryTransaction: vi.fn(),
     };
   }
@@ -45,7 +44,7 @@ describe('VNPay refund queue and audit history on PostgreSQL', () => {
   ) {
     return new VnpayRefundService(
       database,
-      adapter as unknown as VnpayTransactionApiService,
+      adapter as unknown as VnpayRefundClient,
     );
   }
 
@@ -102,6 +101,7 @@ describe('VNPay refund queue and audit history on PostgreSQL', () => {
           orderId,
           amount: 30000,
           reason: 'Integration test',
+          source: 'SYSTEM',
           status: 'PENDING',
           requestedAt: new Date(),
         },
@@ -131,8 +131,8 @@ describe('VNPay refund queue and audit history on PostgreSQL', () => {
     ]);
 
     expect(
-      firstGateway.refundTransaction.mock.calls.length +
-        secondGateway.refundTransaction.mock.calls.length,
+      firstGateway.requestRefund.mock.calls.length +
+        secondGateway.requestRefund.mock.calls.length,
     ).toBe(1);
     const result = await refund();
     expect(result).toMatchObject({
@@ -155,64 +155,103 @@ describe('VNPay refund queue and audit history on PostgreSQL', () => {
     });
   });
 
-  it('does not mistake QueryDR success of the original payment for a refund', async () => {
-    const checkedAt = new Date(Date.now() - 120000);
+  it('safely requeues after QueryDR confirms only the original payment succeeded', async () => {
+    const firstCheck = new Date();
+    const checkedAt = new Date(firstCheck.getTime() - 120000);
     await db.refund.update({
       where: { id: refundId },
-      data: { status: 'NEEDS_REVIEW', requestId: 'previous-refund-request', checkedAt },
+      data: {
+        status: 'NEEDS_REVIEW',
+        requestId: 'previous-refund-request',
+        checkedAt,
+      },
     });
 
     const adapter = gateway();
     adapter.queryTransaction.mockResolvedValue({
-      vnp_Command: 'querydr',
-      vnp_TransactionType: '01',
-      vnp_ResponseCode: '00',
-      vnp_TransactionStatus: '00',
+      outcome: 'NOT_STARTED',
+      responseId: 'query-response-integration',
+      responseCode: '00',
+      transactionStatus: '00',
+      transactionNo: '123456',
+      payDate: '20261111100000',
+      message: 'Original payment succeeded; no refund exists.',
     });
 
-    await service(db, adapter).processRefunds();
+    await service(db, adapter).processRefunds(firstCheck);
 
-    expect(adapter.refundTransaction).not.toHaveBeenCalled();
+    expect(adapter.requestRefund).not.toHaveBeenCalled();
     expect(adapter.queryTransaction).toHaveBeenCalledTimes(1);
-    const result = await refund();
-    expect(result.status).toBe('NEEDS_REVIEW');
-    expect(result.completedAt).toBeNull();
-    expect(result.attempts).toHaveLength(1);
-    expect(result.attempts[0]).toMatchObject({
+    const queued = await refund();
+    expect(queued.status).toBe('PENDING');
+    expect(queued.completedAt).toBeNull();
+    expect(queued.attempts).toHaveLength(1);
+    expect(queued.attempts[0]).toMatchObject({
       type: 'QUERY',
-      status: 'AMBIGUOUS',
+      status: 'CONFIRMED',
       responseCode: '00',
       responseTransactionStatus: '00',
     });
+
+    await service(db, adapter).processRefunds(
+      new Date(firstCheck.getTime() + 61_000),
+    );
+    expect(adapter.requestRefund).toHaveBeenCalledTimes(1);
+    expect((await refund()).status).toBe('SUCCEEDED');
   });
 
-  it('preserves the first rejected attempt when staff queues a retry', async () => {
+  it('preserves rejected history and retries automatically only after QueryDR confirms no refund', async () => {
     const adapter = gateway();
-    adapter.refundTransaction.mockResolvedValue({
-      vnp_Command: 'refund',
-      vnp_TransactionType: '02',
-      vnp_ResponseCode: '91',
-      vnp_TransactionStatus: '09',
+    adapter.requestRefund.mockResolvedValueOnce({
+      outcome: 'REJECTED',
+      responseId: 'rejected-response',
+      responseCode: '95',
+      transactionStatus: '09',
+      transactionNo: '123456',
+      payDate: '20261111100000',
+      message: 'Refund rejected',
     });
-    await service(db, adapter).processRefunds();
-    expect((await refund()).status).toBe('FAILED');
+    adapter.queryTransaction.mockResolvedValue({
+      outcome: 'NOT_STARTED',
+      responseId: 'query-response-integration',
+      responseCode: '00',
+      transactionStatus: '00',
+      transactionNo: '123456',
+      payDate: '20261111100000',
+      message: 'Original payment succeeded; no refund exists.',
+    });
+    const firstCheck = new Date();
 
-    await service(db, adapter).retryRejectedRefund(refundId, userId);
+    await service(db, adapter).processRefunds(firstCheck);
+    const rejected = await refund();
+    expect(rejected.status).toBe('NEEDS_REVIEW');
+    expect(rejected.attempts).toHaveLength(1);
+    expect(rejected.attempts[0].status).toBe('REJECTED');
+
+    await service(db, adapter).processRefunds(
+      new Date(firstCheck.getTime() + 61_000),
+    );
     const queued = await refund();
     expect(queued.status).toBe('PENDING');
-    expect(queued.retryRequestedById).toBe(userId);
-    expect(queued.attempts).toHaveLength(1);
-    expect(queued.attempts[0].status).toBe('REJECTED');
+    expect(queued.attempts).toHaveLength(2);
+    expect(queued.attempts[1]).toMatchObject({
+      type: 'QUERY',
+      status: 'CONFIRMED',
+    });
 
-    adapter.refundTransaction.mockResolvedValue(successfulRefund);
-    await service(db, adapter).processRefunds();
+    await service(db, adapter).processRefunds(
+      new Date(firstCheck.getTime() + 122_000),
+    );
     const completed = await refund();
     expect(completed.status).toBe('SUCCEEDED');
-    expect(completed.attempts).toHaveLength(2);
-    expect(completed.attempts[1]).toMatchObject({
-      attemptNumber: 2,
+    expect(completed.attempts).toHaveLength(3);
+    expect(completed.attempts[2]).toMatchObject({
+      attemptNumber: 3,
+      type: 'REFUND',
       status: 'CONFIRMED',
-      initiatedById: userId,
+      initiatedById: null,
     });
+    expect(adapter.queryTransaction).toHaveBeenCalledTimes(1);
+    expect(adapter.requestRefund).toHaveBeenCalledTimes(2);
   });
 });

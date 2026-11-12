@@ -24,6 +24,11 @@ const REFUND_RESPONSE_ORDER = [
   'vnp_TransactionStatus',
   'vnp_OrderInfo',
 ];
+const QUERY_RESPONSE_ORDER = [
+  ...REFUND_RESPONSE_ORDER,
+  'vnp_PromotionCode',
+  'vnp_PromotionAmount',
+];
 
 function signedResponse(
   overrides: Record<string, string> = {},
@@ -166,6 +171,24 @@ describe('VnpayRefundClient', () => {
     });
   });
 
+  it('rejects a response for a partial refund request type', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(signedResponse({ vnp_TransactionType: '03' })),
+    );
+    await expect(client.requestRefund(refundInput)).rejects.toMatchObject({
+      reason: 'INVALID_RESPONSE',
+    });
+  });
+
+  it('rejects a validly signed response for a different amount', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(signedResponse({ vnp_Amount: '4500001' })),
+    );
+    await expect(client.requestRefund(refundInput)).rejects.toMatchObject({
+      reason: 'INVALID_RESPONSE',
+    });
+  });
+
   it('reports a timeout as uncertain, never as failure', async () => {
     fetchMock.mockRejectedValue(
       Object.assign(new Error('aborted'), { name: 'AbortError' }),
@@ -186,17 +209,73 @@ describe('VnpayRefundClient', () => {
     });
   });
 
+  it('only treats a successful query for the original payment as proof no refund started', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        signedResponse(
+          {
+            vnp_Command: 'querydr',
+            vnp_TransactionType: '01',
+            vnp_TransactionStatus: '00',
+          },
+          QUERY_RESPONSE_ORDER,
+        ),
+      ),
+    );
+
+    const result = await client.queryTransaction({
+      requestId: 'Q0001',
+      txnRef: 'BL123',
+      expectedAmount: 45000,
+      transactionDate: '20261111100000',
+      orderInfo: 'Hoan tien don 1',
+      ipAddress: '127.0.0.1',
+    });
+
+    expect(result.outcome).toBe('NOT_STARTED');
+  });
+
+  it('does not use a query with a mismatched amount to authorize a retry', async () => {
+    fetchMock.mockResolvedValue(
+      jsonResponse(
+        signedResponse(
+          {
+            vnp_Command: 'querydr',
+            vnp_TransactionType: '01',
+            vnp_Amount: '4499900',
+          },
+          QUERY_RESPONSE_ORDER,
+        ),
+      ),
+    );
+
+    await expect(
+      client.queryTransaction({
+        requestId: 'Q0001',
+        txnRef: 'BL123',
+        expectedAmount: 45000,
+        transactionDate: '20261111100000',
+        orderInfo: 'Hoan tien don 1',
+        ipAddress: '127.0.0.1',
+      }),
+    ).rejects.toMatchObject({ reason: 'INVALID_RESPONSE' });
+  });
+
   it('classifies querydr results', () => {
     expect(classifyQueryResponse('00', '06', '02')).toBe('ACCEPTED');
     expect(classifyQueryResponse('00', '00', '02')).toBe('COMPLETED');
     expect(classifyQueryResponse('00', '00', '01')).toBe('NOT_STARTED');
     expect(classifyQueryResponse('00', '09', '02')).toBe('REJECTED');
+    expect(classifyQueryResponse('00', '00', '03')).toBe('UNKNOWN');
     expect(classifyQueryResponse('99', '', '')).toBe('UNKNOWN');
+    expect(classifyQueryResponse('91', '', '')).toBe('UNKNOWN');
+    expect(classifyQueryResponse('00', '05', '01')).toBe('UNKNOWN');
   });
 
   it('classifies refund response codes', () => {
     expect(classifyRefundResponse('00', '00')).toBe('COMPLETED');
     expect(classifyRefundResponse('00', '09')).toBe('REJECTED');
+    expect(classifyRefundResponse('00', 'unknown')).toBe('UNKNOWN');
     expect(classifyRefundResponse('91', '')).toBe('REJECTED');
     expect(classifyRefundResponse('99', '')).toBe('UNKNOWN');
   });
