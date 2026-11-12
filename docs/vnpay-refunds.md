@@ -3,10 +3,12 @@
 ## Scope
 
 BrewLite creates one full-refund request for a paid VNPay payment when:
+- A customer cancels a paid order before preparation.
 - A staff member cancels a paid order before preparation.
-- A customer cancels a paid order while cancellation is allowed.
-- VNPay confirms a payment after the order has expired or already been cancelled.
+- VNPay confirms a payment after the customer cancelled the pending order.
+- VNPay confirms a payment after the order has expired.
 - VNPay confirms a payment but the order cannot be fulfilled because stock is insufficient.
+- A second, distinct VNPay payment succeeds for an order that is already paid.
 
 Wallet and simulated-card payments are not sent to VNPay.
 
@@ -18,12 +20,12 @@ Wallet and simulated-card payments are not sent to VNPay.
 | `PROCESSING` | A worker claimed the refund and is calling VNPay or checking its result. |
 | `SUCCEEDED` | A verified VNPay refund response confirms transaction type `02` and transaction status `00`. |
 | `FAILED` | QueryDR confirms that VNPay rejected the refund. No staff retry endpoint is available. |
-| `NEEDS_REVIEW` | The outcome is ambiguous. The worker continues QueryDR reconciliation and never blindly resends the refund. |
+| `NEEDS_REVIEW` | The outcome is ambiguous. The worker continues QueryDR reconciliation and does not resend based only on the original payment result. |
 
 An HTTP success or an accepted request is not sufficient to set `SUCCEEDED`.
-A QueryDR result describing only the original payment (transaction type `01`) is not proof of a refund. It permits another submission only when QueryDR also confirms the original payment succeeded and confirms that no refund has started.
+A QueryDR result describing only the original payment (transaction type `01`) confirms that payment, but does not prove that no refund request exists. It is not sufficient evidence to resend a refund. Automatic resubmission remains disabled unless VNPay documents or Sandbox evidence confirms a response that unambiguously proves the previous refund was not created.
 VNPay response code `94` means a duplicate refund request is already being processed, so it is reconciled rather than immediately retried. Transaction status `05`/`06` remains in review while VNPay processes the refund; status `09` is an explicit refund rejection and can become `FAILED`.
-Timeouts, network errors, invalid signatures, and response code `99` are reconciled before any retry because VNPay may already have processed the refund. Automatic submissions are limited to three; after that, staff must resolve the case outside the application.
+Timeouts, network errors, invalid signatures, and response code `99` remain in reconciliation because VNPay may already have processed the refund. No automatic resend occurs for an uncertain outcome.
 
 ## Database and audit history
 
@@ -54,7 +56,7 @@ The Sandbox merchant must be explicitly enabled for the Refund API. A payment in
 ## Staff operations
 
 The staff order page shows the Refund record, current state, amount, reason, completion timestamp, and the ten most recent Refund/QueryDR attempts with response metadata and the user/system that initiated each attempt. Staff can inspect the status but cannot trigger a refund retry from the application.
-The worker checks pending and review-needed refunds at least once per minute. It resubmits only after a valid QueryDR response confirms the original payment succeeded and no refund exists, and only while fewer than three Refund submissions have been made. Uncertain QueryDR results remain in reconciliation; they are never treated as permission to resend.
+The worker checks pending and review-needed refunds at least once per minute. A valid QueryDR response can confirm a completed full refund or an explicit rejection. A response that only confirms the original payment leaves the refund in `NEEDS_REVIEW`; it does not authorize another submission. Staff can inspect the status but cannot trigger a refund retry from the application.
 
 ## Validation
 
@@ -62,8 +64,8 @@ Automated tests cover:
 - Full refund success requires a verified VNPay refund response.
 - Ambiguous response moves to `NEEDS_REVIEW`.
 - QueryDR of the original payment does not falsely mark a refund successful.
-- A confirmed QueryDR result showing no refund safely requeues an automatic submission and preserves prior attempt history.
-- Automatic refund submissions are capped, and uncertain QueryDR results do not trigger a retry.
+- QueryDR confirming only the original payment keeps the refund in `NEEDS_REVIEW` and does not trigger a second Refund request.
+- Uncertain QueryDR results do not trigger a retry.
 - A competing worker cannot claim the same request twice.
 - Paid VNPay order cancellation queues a refund in the same database transaction.
 - A late successful VNPay callback for a cancelled order queues a refund.
@@ -73,7 +75,9 @@ The CI workflow runs Prisma migration deployment against PostgreSQL, backend uni
 
 ## Sandbox evidence and remaining external check
 
-No live Refund API request is made as part of GitHub source editing. After deployment to a reachable Sandbox callback environment, perform one low-value test payment, cancel the paid order as staff, and capture:
+**Sandbox verification: NOT VERIFIED.** No live Refund API request has been made; merchant Refund permission and QueryDR behavior after a Refund have not been verified. A dedicated Sandbox payment, valid merchant credentials, and a reachable Sandbox callback environment are required before testing. Do not claim a Sandbox refund succeeded until the signed provider response and resulting Refund record have been checked.
+
+After those prerequisites are available, perform one low-value test payment, cancel the paid order as staff, and capture:
 1. The original VNPay transaction reference and transaction number (mask personal data).
 2. The outgoing Refund request metadata without the hash secret.
 3. VNPay's signed Refund response with transaction type `02`, response code `00`, and transaction status `00`.

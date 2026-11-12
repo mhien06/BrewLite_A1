@@ -55,7 +55,12 @@ describe('VnpayRefundService', () => {
   let service: VnpayRefundService;
 
   const response = (
-    outcome: 'ACCEPTED' | 'COMPLETED' | 'REJECTED' | 'NOT_STARTED' | 'UNKNOWN',
+    outcome:
+      | 'ACCEPTED'
+      | 'COMPLETED'
+      | 'REJECTED'
+      | 'ORIGINAL_PAYMENT_CONFIRMED'
+      | 'UNKNOWN',
     overrides: Record<string, string> = {},
   ) => ({
     outcome,
@@ -148,7 +153,7 @@ describe('VnpayRefundService', () => {
     });
   });
 
-  it('reconciles a provider rejection before deciding whether a safe retry is possible', async () => {
+  it('keeps a rejected submission in review when QueryDR only confirms the original payment', async () => {
     const firstCheck = new Date('2026-11-11T04:00:00.000Z');
     const secondCheck = new Date('2026-11-11T04:02:00.000Z');
     gateway.requestRefund.mockResolvedValue(
@@ -168,7 +173,7 @@ describe('VnpayRefundService', () => {
       .mockResolvedValueOnce(1);
     tx.refundAttempt.count.mockResolvedValueOnce(1);
     gateway.queryTransaction.mockResolvedValue(
-      response('NOT_STARTED', { transactionType: '01' }),
+      response('ORIGINAL_PAYMENT_CONFIRMED', { transactionType: '01' }),
     );
 
     await service.processRefunds(firstCheck);
@@ -192,22 +197,22 @@ describe('VnpayRefundService', () => {
     expect(tx.refund.updateMany).toHaveBeenLastCalledWith({
       where: { id: 30, status: 'PROCESSING', checkedAt: secondCheck },
       data: expect.objectContaining({
-        status: 'PENDING',
+        status: 'NEEDS_REVIEW',
         completedAt: null,
-        lastError: null,
+        lastError: expect.stringContaining('không chứng minh chưa có Refund'),
       }),
     });
   });
 
-  it('reconciles an uncertain timeout and retries only after querydr confirms no refund', async () => {
+  it('keeps an uncertain refund in review when QueryDR only confirms the original payment', async () => {
     const firstCheck = new Date('2026-11-11T04:00:00.000Z');
     const secondCheck = new Date('2026-11-11T04:02:00.000Z');
     const thirdCheck = new Date('2026-11-11T04:04:00.000Z');
     gateway.requestRefund.mockRejectedValueOnce(new Error('timeout'));
     gateway.queryTransaction.mockResolvedValue(
-      response('NOT_STARTED', {
+      response('ORIGINAL_PAYMENT_CONFIRMED', {
         transactionType: '01',
-        message: 'Original payment is successful; no refund found.',
+        message: 'Original payment is successful.',
       }),
     );
     prisma.refund.findMany
@@ -223,17 +228,11 @@ describe('VnpayRefundService', () => {
       .mockResolvedValueOnce([
         {
           ...refund,
-          status: 'PENDING',
+          status: 'NEEDS_REVIEW',
           requestId: 'existing-refund-request',
           checkedAt: secondCheck,
         },
       ]);
-    prisma.refundAttempt.count
-      .mockResolvedValueOnce(0)
-      .mockResolvedValueOnce(1)
-      .mockResolvedValueOnce(2);
-    tx.refundAttempt.count.mockResolvedValueOnce(1);
-
     await service.processRefunds(firstCheck);
     expect(tx.refund.updateMany).toHaveBeenLastCalledWith({
       where: {
@@ -256,24 +255,20 @@ describe('VnpayRefundService', () => {
       }),
     );
     expect(gateway.requestRefund).toHaveBeenCalledTimes(1);
-    expect(tx.refund.updateMany).toHaveBeenLastCalledWith({
-      where: { id: 30, status: 'PROCESSING', checkedAt: secondCheck },
-      data: expect.objectContaining({
-        status: 'PENDING',
-        completedAt: null,
-        lastError: null,
+    expect(tx.refund.updateMany).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({
+          status: 'NEEDS_REVIEW',
+          completedAt: null,
+          lastError: expect.stringContaining('không chứng minh chưa có Refund'),
+        }),
       }),
-    });
+    );
 
     await service.processRefunds(thirdCheck);
-    expect(gateway.requestRefund).toHaveBeenCalledTimes(2);
-    expect(prisma.refundAttempt.create).toHaveBeenLastCalledWith({
-      data: expect.objectContaining({
-        type: 'REFUND',
-        attemptNumber: 3,
-      }),
-      select: { id: true },
-    });
+    expect(gateway.queryTransaction).toHaveBeenCalledTimes(2);
+    expect(gateway.requestRefund).toHaveBeenCalledTimes(1);
+    expect(tx.refundAttempt.count).not.toHaveBeenCalled();
   });
 
   it('marks a refund failed when QueryDR confirms the provider rejected it', async () => {
@@ -297,23 +292,23 @@ describe('VnpayRefundService', () => {
     });
   });
 
-  it('stops automatic submissions after the configured safe retry limit', async () => {
+  it('never resubmits based solely on a successful query of the original payment', async () => {
     prisma.refund.findMany.mockResolvedValue([
       { ...refund, status: 'NEEDS_REVIEW', checkedAt: new Date(0) },
     ]);
-    tx.refundAttempt.count.mockResolvedValue(3);
     gateway.queryTransaction.mockResolvedValue(
-      response('NOT_STARTED', { transactionType: '01' }),
+      response('ORIGINAL_PAYMENT_CONFIRMED', { transactionType: '01' }),
     );
 
     await service.processRefunds(new Date('2026-11-11T04:00:00.000Z'));
 
     expect(gateway.requestRefund).not.toHaveBeenCalled();
+    expect(tx.refundAttempt.count).not.toHaveBeenCalled();
     expect(tx.refund.updateMany).toHaveBeenLastCalledWith({
       where: { id: 30, status: 'PROCESSING', checkedAt: expect.any(Date) },
       data: expect.objectContaining({
         status: 'NEEDS_REVIEW',
-        lastError: expect.stringContaining('giới hạn'),
+        lastError: expect.stringContaining('không chứng minh chưa có Refund'),
       }),
     });
   });

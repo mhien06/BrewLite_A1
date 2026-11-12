@@ -12,11 +12,16 @@ const VIETNAM_OFFSET_MS = 7 * 60 * 60 * 1000;
  * - ACCEPTED: VNPAY đã tiếp nhận, CHƯA phải tiền đã hoàn xong.
  * - COMPLETED: VNPAY xác nhận giao dịch hoàn đã hoàn tất.
  * - REJECTED: VNPAY từ chối chắc chắn, không có tiền nào được hoàn.
- * - NOT_STARTED: (chỉ khi tra cứu) giao dịch gốc chưa có yêu cầu hoàn nào.
+ * - ORIGINAL_PAYMENT_CONFIRMED: QueryDR xác nhận giao dịch gốc, không chứng minh
+ *   rằng chưa có yêu cầu hoàn tiền riêng.
  * - UNKNOWN: chưa đủ cơ sở kết luận; giữ trạng thái đối soát và tiếp tục QueryDR.
  */
 export type VnpayRefundOutcome =
-  'ACCEPTED' | 'COMPLETED' | 'REJECTED' | 'NOT_STARTED' | 'UNKNOWN';
+  | 'ACCEPTED'
+  | 'COMPLETED'
+  | 'REJECTED'
+  | 'ORIGINAL_PAYMENT_CONFIRMED'
+  | 'UNKNOWN';
 
 export interface VnpayRefundResult {
   outcome: VnpayRefundOutcome;
@@ -174,7 +179,9 @@ export function classifyQueryResponse(
   }
   if (transactionStatus === '00') {
     if (isFullRefund) return 'COMPLETED';
-    return transactionType === '01' ? 'NOT_STARTED' : 'UNKNOWN';
+    return transactionType === '01'
+      ? 'ORIGINAL_PAYMENT_CONFIRMED'
+      : 'UNKNOWN';
   }
   return 'UNKNOWN';
 }

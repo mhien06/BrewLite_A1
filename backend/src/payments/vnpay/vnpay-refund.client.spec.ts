@@ -209,7 +209,7 @@ describe('VnpayRefundClient', () => {
     });
   });
 
-  it('only treats a successful query for the original payment as proof no refund started', async () => {
+  it('reports the original payment without claiming that no refund exists', async () => {
     fetchMock.mockResolvedValue(
       jsonResponse(
         signedResponse(
@@ -232,7 +232,7 @@ describe('VnpayRefundClient', () => {
       ipAddress: '127.0.0.1',
     });
 
-    expect(result.outcome).toBe('NOT_STARTED');
+    expect(result.outcome).toBe('ORIGINAL_PAYMENT_CONFIRMED');
   });
 
   it('does not use a query with a mismatched amount to authorize a retry', async () => {
@@ -264,7 +264,9 @@ describe('VnpayRefundClient', () => {
   it('classifies querydr results', () => {
     expect(classifyQueryResponse('00', '06', '02')).toBe('ACCEPTED');
     expect(classifyQueryResponse('00', '00', '02')).toBe('COMPLETED');
-    expect(classifyQueryResponse('00', '00', '01')).toBe('NOT_STARTED');
+    expect(classifyQueryResponse('00', '00', '01')).toBe(
+      'ORIGINAL_PAYMENT_CONFIRMED',
+    );
     expect(classifyQueryResponse('00', '09', '02')).toBe('REJECTED');
     expect(classifyQueryResponse('00', '00', '03')).toBe('UNKNOWN');
     expect(classifyQueryResponse('99', '', '')).toBe('UNKNOWN');

@@ -9,7 +9,6 @@ import {
 } from './vnpay-refund.client.js';
 
 const CHECK_INTERVAL_MS = 60_000;
-const MAX_AUTOMATIC_REFUND_SUBMISSIONS = 3;
 
 @Injectable()
 export class VnpayRefundService {
@@ -145,23 +144,9 @@ export class VnpayRefundService {
     const confirmed = result.outcome === 'COMPLETED';
 
     await this.prisma.$transaction(async (tx) => {
-      const safeToRetry =
-        !submitted && result.outcome === 'NOT_STARTED';
-      const submissionCount = safeToRetry
-        ? await tx.refundAttempt.count({
-            where: { refundId, type: 'REFUND' },
-          })
-        : 0;
-      const retryAutomatically =
-        safeToRetry && submissionCount < MAX_AUTOMATIC_REFUND_SUBMISSIONS;
-      const status = this.refundStatus(
-        result.outcome,
-        retryAutomatically,
-        submitted,
-      );
+      const status = this.refundStatus(result.outcome, submitted);
       const errorMessage = this.errorMessage(
         result.outcome,
-        retryAutomatically,
         submitted,
         result.message,
       );
@@ -193,13 +178,11 @@ export class VnpayRefundService {
 
   private refundStatus(
     outcome: VnpayRefundOutcome,
-    retryAutomatically: boolean,
     submitted: boolean,
-  ): 'PENDING' | 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'NEEDS_REVIEW' {
+  ): 'PROCESSING' | 'SUCCEEDED' | 'FAILED' | 'NEEDS_REVIEW' {
     if (outcome === 'COMPLETED') return 'SUCCEEDED';
     if (outcome === 'REJECTED') return submitted ? 'NEEDS_REVIEW' : 'FAILED';
     if (outcome === 'ACCEPTED') return 'PROCESSING';
-    if (outcome === 'NOT_STARTED' && retryAutomatically) return 'PENDING';
     return 'NEEDS_REVIEW';
   }
 
@@ -213,7 +196,6 @@ export class VnpayRefundService {
 
   private errorMessage(
     outcome: VnpayRefundOutcome,
-    retryAutomatically: boolean,
     submitted: boolean,
     providerMessage: string,
   ): string | null {
@@ -226,9 +208,8 @@ export class VnpayRefundService {
           : 'VNPay xác nhận từ chối yêu cầu hoàn tiền.')
       );
     }
-    if (outcome === 'NOT_STARTED' && retryAutomatically) return null;
-    if (outcome === 'NOT_STARTED') {
-      return 'Đã đạt giới hạn thử lại tự động; cần kiểm tra thủ công.';
+    if (outcome === 'ORIGINAL_PAYMENT_CONFIRMED') {
+      return 'QueryDR chỉ xác nhận giao dịch thanh toán gốc, không chứng minh chưa có Refund; hệ thống không tự gửi lại để tránh hoàn trùng.';
     }
     return (
       providerMessage ||

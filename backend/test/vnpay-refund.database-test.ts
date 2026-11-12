@@ -155,7 +155,7 @@ describe('VNPay refund queue and audit history on PostgreSQL', () => {
     });
   });
 
-  it('safely requeues after QueryDR confirms only the original payment succeeded', async () => {
+  it('does not requeue after QueryDR confirms only the original payment', async () => {
     const firstCheck = new Date();
     const checkedAt = new Date(firstCheck.getTime() - 120000);
     await db.refund.update({
@@ -169,13 +169,13 @@ describe('VNPay refund queue and audit history on PostgreSQL', () => {
 
     const adapter = gateway();
     adapter.queryTransaction.mockResolvedValue({
-      outcome: 'NOT_STARTED',
+      outcome: 'ORIGINAL_PAYMENT_CONFIRMED',
       responseId: 'query-response-integration',
       responseCode: '00',
       transactionStatus: '00',
       transactionNo: '123456',
       payDate: '20261111100000',
-      message: 'Original payment succeeded; no refund exists.',
+      message: 'Original payment succeeded.',
     });
 
     await service(db, adapter).processRefunds(firstCheck);
@@ -183,8 +183,9 @@ describe('VNPay refund queue and audit history on PostgreSQL', () => {
     expect(adapter.requestRefund).not.toHaveBeenCalled();
     expect(adapter.queryTransaction).toHaveBeenCalledTimes(1);
     const queued = await refund();
-    expect(queued.status).toBe('PENDING');
+    expect(queued.status).toBe('NEEDS_REVIEW');
     expect(queued.completedAt).toBeNull();
+    expect(queued.lastError).toContain('không chứng minh chưa có Refund');
     expect(queued.attempts).toHaveLength(1);
     expect(queued.attempts[0]).toMatchObject({
       type: 'QUERY',
@@ -196,11 +197,12 @@ describe('VNPay refund queue and audit history on PostgreSQL', () => {
     await service(db, adapter).processRefunds(
       new Date(firstCheck.getTime() + 61_000),
     );
-    expect(adapter.requestRefund).toHaveBeenCalledTimes(1);
-    expect((await refund()).status).toBe('SUCCEEDED');
+    expect(adapter.queryTransaction).toHaveBeenCalledTimes(2);
+    expect(adapter.requestRefund).not.toHaveBeenCalled();
+    expect((await refund()).status).toBe('NEEDS_REVIEW');
   });
 
-  it('preserves rejected history and retries automatically only after QueryDR confirms no refund', async () => {
+  it('preserves rejected history and does not resend from an original-payment QueryDR result', async () => {
     const adapter = gateway();
     adapter.requestRefund.mockResolvedValueOnce({
       outcome: 'REJECTED',
@@ -212,13 +214,13 @@ describe('VNPay refund queue and audit history on PostgreSQL', () => {
       message: 'Refund rejected',
     });
     adapter.queryTransaction.mockResolvedValue({
-      outcome: 'NOT_STARTED',
+      outcome: 'ORIGINAL_PAYMENT_CONFIRMED',
       responseId: 'query-response-integration',
       responseCode: '00',
       transactionStatus: '00',
       transactionNo: '123456',
       payDate: '20261111100000',
-      message: 'Original payment succeeded; no refund exists.',
+      message: 'Original payment succeeded.',
     });
     const firstCheck = new Date();
 
@@ -232,7 +234,7 @@ describe('VNPay refund queue and audit history on PostgreSQL', () => {
       new Date(firstCheck.getTime() + 61_000),
     );
     const queued = await refund();
-    expect(queued.status).toBe('PENDING');
+    expect(queued.status).toBe('NEEDS_REVIEW');
     expect(queued.attempts).toHaveLength(2);
     expect(queued.attempts[1]).toMatchObject({
       type: 'QUERY',
@@ -242,16 +244,15 @@ describe('VNPay refund queue and audit history on PostgreSQL', () => {
     await service(db, adapter).processRefunds(
       new Date(firstCheck.getTime() + 122_000),
     );
-    const completed = await refund();
-    expect(completed.status).toBe('SUCCEEDED');
-    expect(completed.attempts).toHaveLength(3);
-    expect(completed.attempts[2]).toMatchObject({
+    const stillNeedsReview = await refund();
+    expect(stillNeedsReview.status).toBe('NEEDS_REVIEW');
+    expect(stillNeedsReview.attempts).toHaveLength(3);
+    expect(stillNeedsReview.attempts[2]).toMatchObject({
       attemptNumber: 3,
-      type: 'REFUND',
+      type: 'QUERY',
       status: 'CONFIRMED',
-      initiatedById: null,
     });
-    expect(adapter.queryTransaction).toHaveBeenCalledTimes(1);
-    expect(adapter.requestRefund).toHaveBeenCalledTimes(2);
+    expect(adapter.queryTransaction).toHaveBeenCalledTimes(2);
+    expect(adapter.requestRefund).toHaveBeenCalledTimes(1);
   });
 });
