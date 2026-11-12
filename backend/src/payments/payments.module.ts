@@ -2,6 +2,7 @@ import { OrderExpiryService } from './order-expiry.service.js';
 import { PaymentMaintenanceService } from './payment-maintenance.service.js';
 import { VnpayRefundController } from './vnpay/vnpay-refund.controller.js';
 import { VnpayRefundService } from './vnpay/vnpay-refund.service.js';
+import { VnpayRefundClient } from './vnpay/vnpay-refund.client.js';
 import { VnpayTransactionApiService } from './vnpay/vnpay-transaction-api.service.js';
 import { Module } from '@nestjs/common';
 import { InventoryModule } from '../inventory/inventory.module.js';
@@ -25,6 +26,7 @@ import { VnpayReturnService } from './vnpay/vnpay-return.service.js';
     OrderExpiryService,
     PaymentMaintenanceService,
     VnpayRefundService,
+    VnpayRefundClient,
     VnpayTransactionApiService,
     StaffGuard,
     VnpayService,
