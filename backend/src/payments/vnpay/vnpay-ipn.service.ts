@@ -330,6 +330,7 @@ export class VnpayIpnService {
           orderId: payment.orderId,
           amount: payment.amount,
           reason: refundReason.slice(0, 500),
+          source: 'SYSTEM',
           status: 'PENDING',
           requestedAt: now,
         },

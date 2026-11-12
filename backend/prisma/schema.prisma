@@ -189,6 +189,7 @@ model Refund {
   requestId    String?
   amount       Int
   reason       String
+  source       CancellationSource
   status       RefundStatus @default(PENDING)
   requestedAt  DateTime     @default(now())
   submittedAt  DateTime?

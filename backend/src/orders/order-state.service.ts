@@ -181,12 +181,20 @@ export class OrderStateService {
           select: { id: true },
         });
         if (!existingRefund) {
+          const cancellationSource = extraData.cancellationSource;
+          const source =
+            cancellationSource === 'CUSTOMER' ||
+            cancellationSource === 'STAFF' ||
+            cancellationSource === 'SYSTEM'
+              ? cancellationSource
+              : 'SYSTEM';
           await db.refund.create({
             data: {
               paymentId: payment.id,
               orderId,
               amount: payment.amount,
               reason,
+              source,
               status: 'PENDING',
               requestedAt: new Date(),
               requestedById: actorId ?? null,

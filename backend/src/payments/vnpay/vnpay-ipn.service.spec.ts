@@ -298,6 +298,7 @@ describe('VnpayIpnService', () => {
         orderId: 10,
         amount: 172_800,
         reason: 'VNPay xác nhận thanh toán sau khi đơn hàng đã bị hủy.',
+        source: 'SYSTEM',
         status: 'PENDING',
         requestedAt: expect.any(Date),
       },

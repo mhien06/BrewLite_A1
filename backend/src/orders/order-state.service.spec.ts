@@ -185,7 +185,10 @@ describe('OrderStateService', () => {
       8,
       OrderStatus.CANCELLED,
       undefined,
-      { cancellationReason: 'Khách yêu cầu hủy' },
+      {
+        cancellationSource: 'CUSTOMER',
+        cancellationReason: 'Khách yêu cầu hủy',
+      },
       99,
     );
 
@@ -195,6 +198,7 @@ describe('OrderStateService', () => {
         orderId: 8,
         amount: 125000,
         reason: 'Khách yêu cầu hủy',
+        source: 'CUSTOMER',
         status: 'PENDING',
         requestedAt: expect.any(Date),
         requestedById: 99,
