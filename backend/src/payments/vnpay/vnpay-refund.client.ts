@@ -67,6 +67,7 @@ export interface VnpayRefundRequestInput {
 export interface VnpayQueryInput {
   requestId: string;
   txnRef: string;
+  transactionNo?: string | null;
   expectedAmount: number;
   transactionDate: string;
   orderInfo: string;
@@ -257,6 +258,9 @@ export class VnpayRefundClient {
       vnp_Command: 'querydr',
       vnp_TmnCode: config.tmnCode,
       vnp_TxnRef: input.txnRef,
+      ...(input.transactionNo
+        ? { vnp_TransactionNo: input.transactionNo }
+        : {}),
       vnp_OrderInfo: input.orderInfo,
       vnp_TransactionDate: input.transactionDate,
       vnp_CreateDate: formatVnpayDate(input.now ?? new Date()),

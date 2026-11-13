@@ -116,6 +116,7 @@ export class VnpayRefundService {
               })
             : await this.gateway.queryTransaction({
                 ...common,
+                transactionNo: payment.providerTransactionNo,
                 expectedAmount: payment.amount,
               });
 
