@@ -5,10 +5,14 @@ import {
   normalizeVnpayQuery,
   verifyVnpaySignature,
 } from './vnpay-signature.js';
+import { VnpayIpnService } from './vnpay-ipn.service.js';
 
 @Injectable()
 export class VnpayReturnService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ipn: VnpayIpnService,
+  ) {}
 
   async buildFrontendRedirect(
     rawQuery: Record<string, unknown>,
@@ -41,6 +45,15 @@ export class VnpayReturnService {
     }
 
     if (!this.hasValidAmount(params.vnp_Amount, payment.amount)) {
+      redirectUrl.searchParams.set('valid', 'false');
+      return redirectUrl.toString();
+    }
+
+    // The browser return carries the same signed payment result as IPN. Apply
+    // it through the one settlement path so a temporarily missed IPN does not
+    // leave the customer waiting. A later IPN remains idempotent (RspCode 02).
+    const settlement = await this.ipn.handle(rawQuery);
+    if (settlement.RspCode !== '00' && settlement.RspCode !== '02') {
       redirectUrl.searchParams.set('valid', 'false');
       return redirectUrl.toString();
     }

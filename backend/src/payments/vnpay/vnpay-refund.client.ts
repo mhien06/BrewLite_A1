@@ -403,6 +403,18 @@ export class VnpayRefundClient {
     );
 
     if (!validSignature) {
+      const signature = response.vnp_SecureHash ? 'PRESENT' : 'MISSING';
+      const responseCode = /^\d{2}$/.test(response.vnp_ResponseCode ?? '')
+        ? response.vnp_ResponseCode
+        : 'UNKNOWN';
+      const message = (response.vnp_Message ?? '')
+        .replace(/[^\p{L}\p{N} .,_:;()-]/gu, '')
+        .trim()
+        .slice(0, 160) || 'EMPTY';
+      this.logger.warn(
+        `VNPay refund diagnostic: signature=${signature}, ` +
+          `unverifiedResponseCode=${responseCode}, unverifiedMessage=${message}`,
+      );
       throw new VnpayUncertainOutcomeError(
         'INVALID_SIGNATURE',
         'Chữ ký phản hồi VNPAY không hợp lệ.',
