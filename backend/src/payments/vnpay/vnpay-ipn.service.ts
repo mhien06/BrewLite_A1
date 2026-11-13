@@ -138,7 +138,12 @@ export class VnpayIpnService {
           },
         );
       }
-      await this.recordReceivedPayment(transaction, payment.id, params);
+      await this.recordReceivedPayment(
+        transaction,
+        payment.id,
+        params,
+        'Thanh toán VNPay đến sau thời hạn thanh toán của đơn hàng.',
+      );
       return this.response('00', 'Confirm Success');
     }
 
@@ -180,7 +185,14 @@ export class VnpayIpnService {
 
     if (currentStatus !== OrderStatus.PENDING) {
       // Đơn hủy hoặc đã được trả bằng giao dịch khác: lưu khoản tiền đến trễ để đối soát.
-      await this.recordReceivedPayment(transaction, payment.id, params);
+      await this.recordReceivedPayment(
+        transaction,
+        payment.id,
+        params,
+        currentStatus === OrderStatus.CANCELLED
+          ? 'VNPay xác nhận thanh toán sau khi đơn hàng đã bị hủy.'
+          : 'VNPay xác nhận khoản thanh toán trùng hoặc không còn gắn với đơn đang xử lý.',
+      );
       return this.response('00', 'Confirm Success');
     }
 
@@ -211,7 +223,12 @@ export class VnpayIpnService {
             'Đã nhận thanh toán nhưng nguyên liệu không còn đủ. Cần đối soát thủ công.',
         },
       );
-      await this.recordReceivedPayment(transaction, payment.id, params);
+      await this.recordReceivedPayment(
+        transaction,
+        payment.id,
+        params,
+        'Đã nhận thanh toán VNPay nhưng nguyên liệu không còn đủ để thực hiện đơn.',
+      );
       return this.response('00', 'Confirm Success');
     }
     if (hasSavepoint)
@@ -290,8 +307,11 @@ export class VnpayIpnService {
     tx: Prisma.TransactionClient,
     id: number,
     params: VnpayParams,
+    refundReason?: string,
   ) {
     const now = new Date();
+    const payment = await tx.payment.findUnique({ where: { id } });
+    if (!payment) return;
     await tx.payment.update({
       where: { id },
       data: {
@@ -300,6 +320,23 @@ export class VnpayIpnService {
         ...this.providerResult(params),
       },
     });
+    if (refundReason && payment.method === PaymentMethod.VNPAY) {
+      // The refund is a separate business record; Payment keeps only the
+      // original successful payment result and remains immutable for audit.
+      await tx.refund.upsert({
+        where: { paymentId: payment.id },
+        create: {
+          paymentId: payment.id,
+          orderId: payment.orderId,
+          amount: payment.amount,
+          reason: refundReason.slice(0, 500),
+          source: 'SYSTEM',
+          status: 'PENDING',
+          requestedAt: now,
+        },
+        update: {},
+      });
+    }
   }
 
   private providerResult(params: VnpayParams) {

@@ -157,6 +157,51 @@ export class OrderStateService {
     this.assertTransition(order.status, to);
     if (to === OrderStatus.CANCELLED && order.status === OrderStatus.PAID) {
       await this.restorePaidOrder(db, order, actorId ?? order.userId);
+      if (order.paymentMethod === 'VNPAY') {
+        const reason =
+          typeof extraData.cancellationReason === 'string' &&
+          extraData.cancellationReason.trim()
+            ? extraData.cancellationReason.trim().slice(0, 500)
+            : 'Đơn hàng VNPay đã thanh toán được hủy.';
+        const payment = await db.payment.findFirst({
+          where: { orderId, method: 'VNPAY', status: OrderStatus.PAID },
+          orderBy: { id: 'desc' },
+        });
+        if (
+          !payment ||
+          !payment.providerTxnRef ||
+          payment.amount !== order.total
+        ) {
+          throw new ConflictException(
+            'Không tìm thấy giao dịch VNPay hợp lệ khớp với tổng tiền đơn hàng; không thể hủy tự động.',
+          );
+        }
+        const existingRefund = await db.refund.findUnique({
+          where: { paymentId: payment.id },
+          select: { id: true },
+        });
+        if (!existingRefund) {
+          const cancellationSource = extraData.cancellationSource;
+          const source =
+            cancellationSource === 'CUSTOMER' ||
+            cancellationSource === 'STAFF' ||
+            cancellationSource === 'SYSTEM'
+              ? cancellationSource
+              : 'SYSTEM';
+          await db.refund.create({
+            data: {
+              paymentId: payment.id,
+              orderId,
+              amount: payment.amount,
+              reason,
+              source,
+              status: 'PENDING',
+              requestedAt: new Date(),
+              requestedById: actorId ?? null,
+            },
+          });
+        }
+      }
     }
     const result = await db.order.updateMany({
       where: { id: orderId, status: order.status },

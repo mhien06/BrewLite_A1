@@ -17,6 +17,21 @@ export type OrderStatus =
   | "COMPLETED"
   | "CANCELLED";
 
+export type RefundStatus =
+  | "PENDING"
+  | "PROCESSING"
+  | "SUCCEEDED"
+  | "FAILED"
+  | "NEEDS_REVIEW";
+
+export interface OrderRefund {
+  id: number;
+  amount: number;
+  status: RefundStatus;
+  requestedAt: string;
+  completedAt: string | null;
+}
+
 export interface OrderItemProduct {
   id: number;
   name: string;
@@ -38,6 +53,7 @@ export interface Order {
   cancellationReason?: string | null;
   cancellationSource?: string | null;
   payments?: OrderPayment[];
+  refunds?: OrderRefund[];
   id: number;
   userId: number;
   status: OrderStatus;

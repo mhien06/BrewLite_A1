@@ -94,6 +94,34 @@ export class StaffService {
         },
       },
       include: {
+        refunds: {
+          orderBy: { id: 'desc' },
+          include: {
+            payment: {
+              select: { id: true, amount: true, method: true },
+            },
+            attempts: {
+              orderBy: { attemptNumber: 'desc' },
+              take: 10,
+              select: {
+                id: true,
+                attemptNumber: true,
+                type: true,
+                status: true,
+                requestId: true,
+                responseCode: true,
+                responseMessage: true,
+                responseTransactionNo: true,
+                responsePayDate: true,
+                responseTransactionStatus: true,
+                errorMessage: true,
+                startedAt: true,
+                completedAt: true,
+                initiatedBy: { select: { name: true } },
+              },
+            },
+          },
+        },
         user: { select: { name: true } },
         items: { include: { product: { select: { name: true } } } },
       },

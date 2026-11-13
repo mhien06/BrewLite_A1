@@ -107,6 +107,18 @@ describe('OrdersService - History and Detail (T09A)', () => {
       expect(prisma.order.findFirst).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 101, userId: 1 },
+          select: expect.objectContaining({
+            refunds: {
+              orderBy: { requestedAt: 'desc' },
+              select: {
+                id: true,
+                amount: true,
+                status: true,
+                requestedAt: true,
+                completedAt: true,
+              },
+            },
+          }),
         }),
       );
     });

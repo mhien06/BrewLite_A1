@@ -137,6 +137,16 @@ export class OrdersService {
         cancelledAt: true,
         cancellationReason: true,
         cancellationSource: true,
+        refunds: {
+          orderBy: { requestedAt: 'desc' },
+          select: {
+            id: true,
+            amount: true,
+            status: true,
+            requestedAt: true,
+            completedAt: true,
+          },
+        },
         payments: {
           orderBy: { id: 'desc' },
           select: {
@@ -187,6 +197,16 @@ export class OrdersService {
         cancelledAt: true,
         cancellationReason: true,
         cancellationSource: true,
+        refunds: {
+          orderBy: { requestedAt: 'desc' },
+          select: {
+            id: true,
+            amount: true,
+            status: true,
+            requestedAt: true,
+            completedAt: true,
+          },
+        },
         payments: {
           orderBy: { id: 'desc' },
           select: {

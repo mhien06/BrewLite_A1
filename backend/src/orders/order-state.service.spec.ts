@@ -14,7 +14,8 @@ describe('OrderStateService', () => {
     ingredient: { update: vi.fn() },
     inventoryMovement: { create: vi.fn() },
     loyaltyTransaction: { findUnique: vi.fn() },
-    payment: { updateMany: vi.fn() },
+    payment: { findFirst: vi.fn(), updateMany: vi.fn() },
+    refund: { findUnique: vi.fn(), create: vi.fn() },
   };
   let service: OrderStateService;
 
@@ -84,14 +85,16 @@ describe('OrderStateService', () => {
     expect(prisma.order.updateMany).not.toHaveBeenCalled();
   });
 
-  it('allows customers to cancel a paid order before the shop confirms', async () => {
+  it.each(['WALLET', 'CARD'])(
+    'allows customers to cancel a paid simulated %s order without VNPay refund',
+    async (paymentMethod) => {
     const paid = {
       id: 8,
       userId: 7,
       status: OrderStatus.PAID,
       inventoryDeducted: true,
       inventorySnapshot: [{ ingredientId: 1, amount: 10 }],
-      paymentMethod: 'WALLET',
+      paymentMethod,
     };
     const cancelled = { ...paid, status: OrderStatus.CANCELLED };
     prisma.order.findUnique
@@ -108,7 +111,108 @@ describe('OrderStateService', () => {
       where: { id: 8, status: OrderStatus.PAID },
       data: { status: OrderStatus.CANCELLED },
     });
+    expect(prisma.payment.updateMany).not.toHaveBeenCalled();
+    expect(prisma.refund.create).not.toHaveBeenCalled();
   });
+
+  it('does not create a refund when a pending VNPay checkout is cancelled', async () => {
+    prisma.order.findUnique.mockResolvedValue({
+      id: 8,
+      userId: 7,
+      status: OrderStatus.PENDING,
+      paymentMethod: 'VNPAY',
+    });
+    prisma.order.updateMany.mockResolvedValue({ count: 1 });
+    await service.transition(8, OrderStatus.CANCELLED);
+    expect(prisma.payment.findFirst).not.toHaveBeenCalled();
+    expect(prisma.refund.create).not.toHaveBeenCalled();
+  });
+
+  it('does not create a second Refund for an already tracked VNPay payment', async () => {
+    const paid = {
+      id: 8,
+      userId: 7,
+      status: OrderStatus.PAID,
+      paymentMethod: 'VNPAY',
+      total: 125000,
+      inventoryDeducted: true,
+      inventorySnapshot: [{ ingredientId: 1, amount: 10 }],
+    };
+    prisma.order.findUnique
+      .mockResolvedValueOnce(paid)
+      .mockResolvedValueOnce({ ...paid, status: OrderStatus.CANCELLED });
+    prisma.ingredient.update.mockResolvedValue({ stock: 20 });
+    prisma.loyaltyTransaction.findUnique.mockResolvedValue(null);
+    prisma.order.updateMany.mockResolvedValue({ count: 1 });
+    prisma.payment.findFirst.mockResolvedValue({
+      id: 55,
+      amount: 125000,
+      providerTxnRef: 'BL-8',
+    });
+    prisma.refund.findUnique.mockResolvedValue({ id: 100 });
+
+    await service.transition(8, OrderStatus.CANCELLED);
+
+    expect(prisma.refund.create).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    { source: 'CUSTOMER' as const, actorId: 7, customerId: 7 },
+    { source: 'STAFF' as const, actorId: 99, customerId: undefined },
+  ])(
+    'queues one full refund when $source cancels an unaccepted paid VNPay order',
+    async ({ source, actorId, customerId }) => {
+      const paid = {
+        id: 8,
+        userId: 7,
+        status: OrderStatus.PAID,
+        paymentMethod: 'VNPAY',
+        total: 125000,
+        inventoryDeducted: true,
+        inventorySnapshot: [{ ingredientId: 1, amount: 10 }],
+      };
+      const cancelled = { ...paid, status: OrderStatus.CANCELLED };
+      prisma.order.findUnique
+        .mockResolvedValueOnce(paid)
+        .mockResolvedValueOnce(cancelled);
+      prisma.ingredient.update.mockResolvedValue({ stock: 20 });
+      prisma.loyaltyTransaction.findUnique.mockResolvedValue(null);
+      prisma.order.updateMany.mockResolvedValue({ count: 1 });
+      prisma.payment.findFirst.mockResolvedValue({
+        id: 55,
+        orderId: 8,
+        amount: 125000,
+        providerTxnRef: 'BL-8',
+      });
+      prisma.refund.findUnique.mockResolvedValue(null);
+
+      await service.transition(
+        8,
+        OrderStatus.CANCELLED,
+        undefined,
+        {
+          cancellationSource: source,
+          cancellationReason: 'Khách yêu cầu hủy',
+        },
+        actorId,
+        customerId,
+      );
+
+      expect(prisma.refund.create).toHaveBeenCalledWith({
+        data: {
+          paymentId: 55,
+          orderId: 8,
+          amount: 125000,
+          reason: 'Khách yêu cầu hủy',
+          source,
+          status: 'PENDING',
+          requestedAt: expect.any(Date),
+          requestedById: actorId,
+        },
+      });
+      expect(prisma.payment.updateMany).not.toHaveBeenCalled();
+    },
+  );
 
   it('blocks customers from cancelling after the shop starts preparing', async () => {
     prisma.order.findUnique.mockResolvedValue({

@@ -119,6 +119,7 @@ describe('Expiry and late IPN on PostgreSQL', () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await db.inventoryMovement.deleteMany({ where: { ingredientId } });
+    await db.refund.deleteMany({ where: { paymentId } });
     await db.payment.deleteMany({ where: { userId } });
     await db.loyaltyTransaction.deleteMany({ where: { userId } });
     await db.order.deleteMany({ where: { userId } });
@@ -240,8 +241,14 @@ describe('Expiry and late IPN on PostgreSQL', () => {
       status: 'PAID',
       providerTransactionNo: '123456',
     });
+    expect(await db.refund.findUnique({ where: { paymentId } })).toMatchObject({
+      status: 'PENDING',
+      amount: 30000,
+      reason: 'Thanh toán VNPay đến sau thời hạn thanh toán của đơn hàng.',
+    });
     expect(await stock()).toBe(100);
     expect((await ipn.handle(query())).RspCode).toBe('02');
+    expect(await db.refund.count({ where: { paymentId } })).toBe(1);
   });
   it('customer cannot cancel another customer order', async () => {
     await expect(
@@ -292,6 +299,7 @@ describe('Expiry and late IPN on PostgreSQL', () => {
       providerTransactionNo: '123456',
     });
     expect(await stock()).toBe(100);
+    expect(await db.refund.count({ where: { paymentId } })).toBe(1);
   });
   it('paid cancellation and callback cannot deadlock or restore twice', async () => {
     await ipn.handle(query());
@@ -305,10 +313,15 @@ describe('Expiry and late IPN on PostgreSQL', () => {
       (await db.user.findUniqueOrThrow({ where: { id: userId } }))
         .loyaltyPoints,
     ).toBe(0);
-    expect((await payment()).status).toBe('PAID');
+    expect(await payment()).toMatchObject({ status: 'PAID' });
+    expect(await db.refund.findUnique({ where: { paymentId } })).toMatchObject({
+      status: 'PENDING',
+      amount: 30000,
+    });
     expect(await db.inventoryMovement.count({ where: { ingredientId } })).toBe(
       1,
     );
+    expect(await db.refund.count({ where: { paymentId } })).toBe(1);
   });
   it('cannot cancel once preparation has started', async () => {
     await ipn.handle(query());
@@ -325,6 +338,11 @@ describe('Expiry and late IPN on PostgreSQL', () => {
     expect((await ipn.handle(query())).RspCode).toBe('00');
     expect((await order()).status).toBe('CANCELLED');
     expect(await payment()).toMatchObject({ status: 'PAID' });
+    expect(await db.refund.findUnique({ where: { paymentId } })).toMatchObject({
+      status: 'PENDING',
+      amount: 30000,
+      reason: 'Đã nhận thanh toán VNPay nhưng nguyên liệu không còn đủ để thực hiện đơn.',
+    });
     expect(await stock()).toBe(0);
   });
   it('rolls back partial stock deduction before recording payment', async () => {
