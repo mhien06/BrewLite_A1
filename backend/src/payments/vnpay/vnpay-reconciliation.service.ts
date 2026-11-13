@@ -2,7 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { VnpayIpnService } from './vnpay-ipn.service.js';
-import { VnpayTransactionApiService } from './vnpay-transaction-api.service.js';
+import { VnpayApiError, VnpayTransactionApiService } from './vnpay-transaction-api.service.js';
 
 export const MAX_RECONCILIATION_ATTEMPTS = 12;
 const MISSING_IPN_AGE_MS = 5 * 60_000;
@@ -103,12 +103,11 @@ export class VnpayReconciliationService {
             : settled.RspCode === '02'
               ? 'ALREADY_PROCESSED'
               : 'UNRESOLVED';
-      } catch {
+      } catch (error) {
         // Never log raw responses/errors: they may include credentials/payloads.
         result = 'ERROR';
-        this.logger.warn(
-          `Payment #${payment.id}: QueryDR chưa xác minh được kết quả.`,
-        );
+        const reason = error instanceof VnpayApiError ? error.reason : 'CONFIG_OR_PROCESSING_ERROR';
+        this.logger.warn(`Payment #${payment.id}: QueryDR chưa xác minh được kết quả (${reason}).`);
       }
       await this.prisma.payment.updateMany({
         where: { id: payment.id, reconciliationToken: token },
