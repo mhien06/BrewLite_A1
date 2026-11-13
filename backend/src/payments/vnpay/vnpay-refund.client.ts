@@ -1,4 +1,5 @@
-import { Injectable } from '@nestjs/common';
+
+import { Injectable, Logger } from '@nestjs/common';
 import { getVnpayConfig, type VnpayConfig } from './vnpay-config.js';
 import { signVnpayData, verifyVnpayDataSignature } from './vnpay-signature.js';
 
@@ -157,11 +158,13 @@ export function classifyRefundResponse(
     if (transactionStatus === '00') return 'COMPLETED';
     if (['05', '06'].includes(transactionStatus)) return 'ACCEPTED';
   }
+
   // Từ chối chắc chắn: không tồn tại, sai số tiền, giao dịch gốc không thành
   // công, sai TmnCode/định dạng/chữ ký của yêu cầu.
   if (['91', '93', '95', '02', '03', '97'].includes(responseCode)) {
     return 'REJECTED';
   }
+
   // 94 (đã gửi yêu cầu trước đó), 99 (lỗi khác) và mã lạ: có thể tiền đã hoàn.
   return 'UNKNOWN';
 }
@@ -172,26 +175,35 @@ export function classifyQueryResponse(
   transactionType: string,
 ): VnpayRefundOutcome {
   if (responseCode !== '00') return 'UNKNOWN';
+
   const isFullRefund = transactionType === FULL_REFUND_TYPE;
+
   if (transactionStatus === '09' && isFullRefund) return 'REJECTED';
+
   if (['05', '06'].includes(transactionStatus) && isFullRefund) {
     return 'ACCEPTED';
   }
+
   if (transactionStatus === '00') {
     if (isFullRefund) return 'COMPLETED';
+
     return transactionType === '01'
       ? 'ORIGINAL_PAYMENT_CONFIRMED'
       : 'UNKNOWN';
   }
+
   return 'UNKNOWN';
 }
 
 @Injectable()
 export class VnpayRefundClient {
+  private readonly logger = new Logger(VnpayRefundClient.name);
+
   async requestRefund(
     input: VnpayRefundRequestInput,
   ): Promise<VnpayRefundResult> {
     const config = getVnpayConfig();
+
     const body: VnpayJson = {
       vnp_RequestId: input.requestId,
       vnp_Version: VNPAY_VERSION,
@@ -207,12 +219,14 @@ export class VnpayRefundClient {
       vnp_IpAddr: input.ipAddress,
       vnp_OrderInfo: input.orderInfo,
     };
+
     body.vnp_SecureHash = signVnpayData(
       joinFields(body, REFUND_REQUEST_FIELDS),
       config.hashSecret,
     );
 
     const response = await this.post(body, config);
+
     this.assertValidResponse(response, REFUND_RESPONSE_FIELDS, config, {
       txnRef: input.txnRef,
       command: 'refund',
@@ -222,6 +236,7 @@ export class VnpayRefundClient {
 
     const responseCode = response.vnp_ResponseCode ?? '';
     const transactionStatus = response.vnp_TransactionStatus ?? '';
+
     return {
       outcome: classifyRefundResponse(responseCode, transactionStatus),
       responseId: response.vnp_ResponseId ?? '',
@@ -235,6 +250,7 @@ export class VnpayRefundClient {
 
   async queryTransaction(input: VnpayQueryInput): Promise<VnpayRefundResult> {
     const config = getVnpayConfig();
+
     const body: VnpayJson = {
       vnp_RequestId: input.requestId,
       vnp_Version: VNPAY_VERSION,
@@ -246,12 +262,14 @@ export class VnpayRefundClient {
       vnp_CreateDate: formatVnpayDate(input.now ?? new Date()),
       vnp_IpAddr: input.ipAddress,
     };
+
     body.vnp_SecureHash = signVnpayData(
       joinFields(body, QUERY_REQUEST_FIELDS),
       config.hashSecret,
     );
 
     const response = await this.post(body, config);
+
     this.assertValidResponse(response, QUERY_RESPONSE_FIELDS, config, {
       txnRef: input.txnRef,
       command: 'querydr',
@@ -260,6 +278,7 @@ export class VnpayRefundClient {
 
     const responseCode = response.vnp_ResponseCode ?? '';
     const transactionStatus = response.vnp_TransactionStatus ?? '';
+
     return {
       outcome: classifyQueryResponse(
         responseCode,
@@ -295,6 +314,7 @@ export class VnpayRefundClient {
       }
 
       const parsed: unknown = await httpResponse.json();
+
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
         throw new VnpayUncertainOutcomeError(
           'INVALID_RESPONSE',
@@ -303,27 +323,59 @@ export class VnpayRefundClient {
       }
 
       const result: VnpayJson = {};
+
       for (const [key, value] of Object.entries(parsed)) {
         result[key] =
           typeof value === 'string' || typeof value === 'number'
             ? String(value)
             : undefined;
       }
+
       return result;
     } catch (error) {
       if (error instanceof VnpayUncertainOutcomeError) throw error;
+
+      // Chỉ ghi loại lỗi và mã kỹ thuật.
+      // Không ghi payload, giao dịch hoặc khóa bí mật VNPay.
+      const cause = error instanceof Error ? error.cause : undefined;
+
+      const rawCode =
+        cause !== null && typeof cause === 'object' && 'code' in cause
+          ? cause.code
+          : undefined;
+
+      const causeCode =
+        typeof rawCode === 'string' && /^[A-Z0-9_]+$/.test(rawCode)
+          ? rawCode
+          : 'UNKNOWN';
+
+      const errorName =
+        error instanceof SyntaxError
+          ? 'SyntaxError'
+          : error instanceof TypeError
+            ? 'TypeError'
+            : error instanceof Error && error.name === 'AbortError'
+              ? 'AbortError'
+              : 'UNKNOWN';
+
+      this.logger.error(
+        `VNPay API diagnostic: error=${errorName}, causeCode=${causeCode}`,
+      );
+
       if (error instanceof SyntaxError) {
         throw new VnpayUncertainOutcomeError(
           'INVALID_RESPONSE',
           'Phản hồi VNPAY không phải JSON hợp lệ.',
         );
       }
+
       if (error instanceof Error && error.name === 'AbortError') {
         throw new VnpayUncertainOutcomeError(
           'TIMEOUT',
           'Hết thời gian chờ VNPAY.',
         );
       }
+
       throw new VnpayUncertainOutcomeError(
         'NETWORK',
         'Không kết nối được VNPAY.',
@@ -374,6 +426,9 @@ export class VnpayRefundClient {
 
   private timeoutMs(): number {
     const raw = Number(process.env.VNPAY_REFUND_TIMEOUT_MS);
-    return Number.isSafeInteger(raw) && raw > 0 ? raw : DEFAULT_TIMEOUT_MS;
+
+    return Number.isSafeInteger(raw) && raw > 0
+      ? raw
+      : DEFAULT_TIMEOUT_MS;
   }
 }
