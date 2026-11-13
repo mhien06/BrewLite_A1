@@ -1,4 +1,5 @@
 import { OrderExpiryService } from './order-expiry.service.js';
+import { VnpayReconciliationService } from './vnpay/vnpay-reconciliation.service.js';
 import { PaymentMaintenanceService } from './payment-maintenance.service.js';
 import { VnpayRefundService } from './vnpay/vnpay-refund.service.js';
 import { VnpayRefundClient } from './vnpay/vnpay-refund.client.js';
@@ -23,6 +24,7 @@ import { VnpayReturnService } from './vnpay/vnpay-return.service.js';
     PaymentsService,
     OrderExpiryService,
     PaymentMaintenanceService,
+    VnpayReconciliationService,
     VnpayRefundService,
     VnpayRefundClient,
     VnpayTransactionApiService,

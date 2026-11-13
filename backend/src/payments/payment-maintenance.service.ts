@@ -6,6 +6,7 @@ import {
 } from '@nestjs/common';
 import { OrderExpiryService } from './order-expiry.service.js';
 import { VnpayRefundService } from './vnpay/vnpay-refund.service.js';
+import { VnpayReconciliationService } from './vnpay/vnpay-reconciliation.service.js';
 
 @Injectable()
 export class PaymentMaintenanceService
@@ -17,6 +18,7 @@ export class PaymentMaintenanceService
   constructor(
     private readonly expiry: OrderExpiryService,
     private readonly refunds: VnpayRefundService,
+    private readonly reconciliation: VnpayReconciliationService,
   ) {}
   onApplicationBootstrap() {
     // Đọc lại database ngay khi khởi động, kể cả đơn hết hạn lúc server tắt.
@@ -40,6 +42,11 @@ export class PaymentMaintenanceService
         await this.refunds.processRefunds();
       } catch {
         this.logger.error('Chưa xử lý được hàng đợi hoàn tiền; sẽ thử lại ở lượt tiếp theo.');
+      }
+      try {
+        await this.reconciliation.reconcilePendingPayments();
+      } catch {
+        this.logger.error('Chưa đối soát được thanh toán VNPay; sẽ kiểm tra lại ở lượt tiếp theo.');
       }
     } catch {
       this.logger.error(
