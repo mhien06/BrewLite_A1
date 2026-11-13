@@ -254,34 +254,109 @@ describe('VnpayTransactionApiService - QueryDR', () => {
   });
 
   it.each(['TimeoutError', 'AbortError', 'TypeError'])(
-    'reports a safe category for %s without exposing the original error', async (name) => {
-      fetchMock.mockRejectedValue(Object.assign(new Error('secret-payload-do-not-log'), { name }));
-      await expect(service.queryTransaction({ txnRef: 'BL123', expectedAmount: 172_800,
-        transactionDate: new Date(), ipAddress: '127.0.0.1' })).rejects.toMatchObject({
-          reason: name === 'TypeError' ? 'NETWORK' : 'TIMEOUT',
-          message: name === 'TypeError' ? 'VNPay API: NETWORK' : 'VNPay API: TIMEOUT',
-        });
+    'reports a safe category for %s without exposing the original error',
+    async (name) => {
+      fetchMock.mockRejectedValue(
+        Object.assign(new Error('secret-payload-do-not-log'), { name }),
+      );
+      await expect(
+        service.queryTransaction({
+          txnRef: 'BL123',
+          expectedAmount: 172_800,
+          transactionDate: new Date(),
+          ipAddress: '127.0.0.1',
+        }),
+      ).rejects.toMatchObject({
+        reason: name === 'TypeError' ? 'NETWORK' : 'TIMEOUT',
+        message:
+          name === 'TypeError' ? 'VNPay API: NETWORK' : 'VNPay API: TIMEOUT',
+      });
     },
   );
 
   it('distinguishes invalid signatures from mismatched signed data', async () => {
-    const input = { txnRef: 'BL123', expectedAmount: 170_000, transactionDate: new Date(), ipAddress: '127.0.0.1' };
-    await expect(service.queryTransaction(input)).rejects.toMatchObject({ reason: 'MISMATCHED_RESPONSE' });
-    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ ...validResponse(), vnp_SecureHash: '0'.repeat(128) }) });
-    await expect(service.queryTransaction(input)).rejects.toMatchObject({ reason: 'INVALID_SIGNATURE' });
+    const input = {
+      txnRef: 'BL123',
+      expectedAmount: 170_000,
+      transactionDate: new Date(),
+      ipAddress: '127.0.0.1',
+    };
+    await expect(service.queryTransaction(input)).rejects.toMatchObject({
+      reason: 'MISMATCHED_RESPONSE',
+    });
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ...validResponse(),
+        vnp_SecureHash: '0'.repeat(128),
+      }),
+    });
+    await expect(service.queryTransaction(input)).rejects.toMatchObject({
+      reason: 'INVALID_SIGNATURE',
+    });
   });
 
   it.each([
     { hash: '', code: '94', signature: 'MISSING', safeCode: '94' },
-    { hash: 'secret-payload', code: 'secret-payload', signature: 'MALFORMED', safeCode: 'UNKNOWN' },
-    { hash: '0'.repeat(128), code: '00', signature: 'MISMATCH', safeCode: '00' },
-  ])('reports safe diagnostic metadata without trusting $signature responses', async ({ hash, code, signature, safeCode }) => {
-    fetchMock.mockResolvedValue({ ok: true, json: async () => ({
-      ...validResponse(), vnp_SecureHash: hash, vnp_ResponseCode: code,
-    }) });
-    await expect(service.queryTransaction({ txnRef: 'BL123', expectedAmount: 172800,
-      transactionDate: new Date(), ipAddress: '127.0.0.1' })).rejects.toMatchObject({
-        reason: 'INVALID_SIGNATURE', diagnostic: { signature, unverifiedResponseCode: safeCode },
+    {
+      hash: 'secret-payload',
+      code: 'secret-payload',
+      signature: 'MALFORMED',
+      safeCode: 'UNKNOWN',
+    },
+    {
+      hash: '0'.repeat(128),
+      code: '00',
+      signature: 'MISMATCH',
+      safeCode: '00',
+    },
+  ])(
+    'reports safe diagnostic metadata without trusting $signature responses',
+    async ({ hash, code, signature, safeCode }) => {
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          ...validResponse(),
+          vnp_SecureHash: hash,
+          vnp_ResponseCode: code,
+        }),
       });
+      await expect(
+        service.queryTransaction({
+          txnRef: 'BL123',
+          expectedAmount: 172800,
+          transactionDate: new Date(),
+          ipAddress: '127.0.0.1',
+        }),
+      ).rejects.toMatchObject({
+        reason: 'INVALID_SIGNATURE',
+        diagnostic: {
+          signature,
+          unverifiedResponseCode: safeCode,
+          unverifiedMessage: 'Success',
+        },
+      });
+    },
+  );
+
+  it('sanitizes and truncates unverified provider messages used for diagnostics', async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ...validResponse(),
+        vnp_SecureHash: '',
+        vnp_Message: `provider\r\nmessage\t${'x'.repeat(200)}`,
+      }),
+    });
+    await expect(
+      service.queryTransaction({
+        txnRef: 'BL123',
+        expectedAmount: 172800,
+        transactionDate: new Date(),
+        ipAddress: '127.0.0.1',
+      }),
+    ).rejects.toMatchObject({
+      diagnostic: { unverifiedMessage: expect.not.stringMatching(/[\r\n\t]/) },
+    });
   });
 });

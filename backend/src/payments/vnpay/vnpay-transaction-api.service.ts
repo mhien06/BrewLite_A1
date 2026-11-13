@@ -17,8 +17,20 @@ import { formatVnpayDate } from './vnpay-url.js';
 const VNPAY_API_TIMEOUT_MS = 10_000;
 
 export class VnpayApiError extends BadGatewayException {
-  constructor(readonly reason: 'NETWORK' | 'TIMEOUT' | 'HTTP_ERROR' | 'INVALID_JSON' | 'INVALID_RESPONSE' | 'INVALID_SIGNATURE' | 'MISMATCHED_RESPONSE',
-    readonly diagnostic?: { signature: 'MISSING' | 'MALFORMED' | 'MISMATCH'; unverifiedResponseCode: string },
+  constructor(
+    readonly reason:
+      | 'NETWORK'
+      | 'TIMEOUT'
+      | 'HTTP_ERROR'
+      | 'INVALID_JSON'
+      | 'INVALID_RESPONSE'
+      | 'INVALID_SIGNATURE'
+      | 'MISMATCHED_RESPONSE',
+    readonly diagnostic?: {
+      signature: 'MISSING' | 'MALFORMED' | 'MISMATCH';
+      unverifiedResponseCode: string;
+      unverifiedMessage: string;
+    },
   ) {
     super(`VNPay API: ${reason}`);
   }
@@ -83,10 +95,15 @@ export class VnpayTransactionApiService {
       // Only bounded, non-sensitive metadata. An unsigned response code is
       // diagnostic evidence, never authoritative payment/refund evidence.
       throw new VnpayApiError('INVALID_SIGNATURE', {
-        signature: !result.vnp_SecureHash ? 'MISSING'
-          : /^[0-9a-fA-F]{128}$/.test(result.vnp_SecureHash) ? 'MISMATCH' : 'MALFORMED',
+        signature: !result.vnp_SecureHash
+          ? 'MISSING'
+          : /^[0-9a-fA-F]{128}$/.test(result.vnp_SecureHash)
+            ? 'MISMATCH'
+            : 'MALFORMED',
         unverifiedResponseCode: /^\d{2}$/.test(result.vnp_ResponseCode ?? '')
-          ? result.vnp_ResponseCode : 'UNKNOWN',
+          ? result.vnp_ResponseCode
+          : 'UNKNOWN',
+        unverifiedMessage: this.safeDiagnosticMessage(result.vnp_Message),
       });
     }
     if (
@@ -168,8 +185,10 @@ export class VnpayTransactionApiService {
       });
     } catch (error) {
       throw new VnpayApiError(
-        error instanceof Error && ['TimeoutError', 'AbortError'].includes(error.name)
-          ? 'TIMEOUT' : 'NETWORK',
+        error instanceof Error &&
+          ['TimeoutError', 'AbortError'].includes(error.name)
+          ? 'TIMEOUT'
+          : 'NETWORK',
       );
     }
 
@@ -200,6 +219,15 @@ export class VnpayTransactionApiService {
     }
 
     return normalizeVnpayQuery(value as Record<string, unknown>);
+  }
+
+  private safeDiagnosticMessage(value: string | undefined): string {
+    if (!value) return 'MISSING';
+    const normalized = value
+      .replace(/[\r\n\t]+/g, ' ')
+      .trim()
+      .slice(0, 160);
+    return normalized || 'EMPTY';
   }
 
   private normalizeIpAddress(rawIpAddress: string): string {

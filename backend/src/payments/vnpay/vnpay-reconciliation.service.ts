@@ -2,7 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { VnpayIpnService } from './vnpay-ipn.service.js';
-import { VnpayApiError, VnpayTransactionApiService } from './vnpay-transaction-api.service.js';
+import {
+  VnpayApiError,
+  VnpayTransactionApiService,
+} from './vnpay-transaction-api.service.js';
 
 export const MAX_RECONCILIATION_ATTEMPTS = 12;
 const MISSING_IPN_AGE_MS = 5 * 60_000;
@@ -107,10 +110,19 @@ export class VnpayReconciliationService {
       } catch (error) {
         // Never log raw responses/errors: they may include credentials/payloads.
         result = 'ERROR';
-        const reason = error instanceof VnpayApiError ? error.reason : 'CONFIG_OR_PROCESSING_ERROR';
-        this.logger.warn(`Payment #${payment.id}: QueryDR chưa xác minh được kết quả (${reason}).`);
+        const reason =
+          error instanceof VnpayApiError
+            ? error.reason
+            : 'CONFIG_OR_PROCESSING_ERROR';
+        this.logger.warn(
+          `Payment #${payment.id}: QueryDR chưa xác minh được kết quả (${reason}).`,
+        );
         if (error instanceof VnpayApiError && error.diagnostic) {
-          this.logger.warn(`QueryDR diagnostic: signature=${error.diagnostic.signature}, unverifiedResponseCode=${error.diagnostic.unverifiedResponseCode}`);
+          this.logger.warn(
+            `QueryDR diagnostic: signature=${error.diagnostic.signature}, ` +
+              `unverifiedResponseCode=${error.diagnostic.unverifiedResponseCode}, ` +
+              `unverifiedMessage=${error.diagnostic.unverifiedMessage}`,
+          );
         }
       }
       await this.prisma.payment.updateMany({
