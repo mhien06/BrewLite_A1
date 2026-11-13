@@ -270,4 +270,18 @@ describe('VnpayTransactionApiService - QueryDR', () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ ...validResponse(), vnp_SecureHash: '0'.repeat(128) }) });
     await expect(service.queryTransaction(input)).rejects.toMatchObject({ reason: 'INVALID_SIGNATURE' });
   });
+
+  it.each([
+    { hash: '', code: '94', signature: 'MISSING', safeCode: '94' },
+    { hash: 'secret-payload', code: 'secret-payload', signature: 'MALFORMED', safeCode: 'UNKNOWN' },
+    { hash: '0'.repeat(128), code: '00', signature: 'MISMATCH', safeCode: '00' },
+  ])('reports safe diagnostic metadata without trusting $signature responses', async ({ hash, code, signature, safeCode }) => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => ({
+      ...validResponse(), vnp_SecureHash: hash, vnp_ResponseCode: code,
+    }) });
+    await expect(service.queryTransaction({ txnRef: 'BL123', expectedAmount: 172800,
+      transactionDate: new Date(), ipAddress: '127.0.0.1' })).rejects.toMatchObject({
+        reason: 'INVALID_SIGNATURE', diagnostic: { signature, unverifiedResponseCode: safeCode },
+      });
+  });
 });

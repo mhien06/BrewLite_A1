@@ -59,9 +59,10 @@ export class VnpayReconciliationService {
       const token = randomUUID();
       // Persist the budget BEFORE network I/O. CAS prevents two workers claiming
       // the same snapshot. Backoff also serves as a crash-recoverable lease.
-      // Minimum 60s exceeds the API timeout (10s) + settlement wait/timeout (35s).
+      // At least 5 minutes between queries, matching VNPay's duplicate-query
+      // window (code 94), and exceeding API + settlement timeouts.
       const delay = Math.min(
-        60_000 * 2 ** payment.reconciliationAttempts,
+        300_000 * 2 ** payment.reconciliationAttempts,
         3_600_000,
       );
       const claimed = await this.prisma.payment.updateMany({
@@ -108,6 +109,9 @@ export class VnpayReconciliationService {
         result = 'ERROR';
         const reason = error instanceof VnpayApiError ? error.reason : 'CONFIG_OR_PROCESSING_ERROR';
         this.logger.warn(`Payment #${payment.id}: QueryDR chưa xác minh được kết quả (${reason}).`);
+        if (error instanceof VnpayApiError && error.diagnostic) {
+          this.logger.warn(`QueryDR diagnostic: signature=${error.diagnostic.signature}, unverifiedResponseCode=${error.diagnostic.unverifiedResponseCode}`);
+        }
       }
       await this.prisma.payment.updateMany({
         where: { id: payment.id, reconciliationToken: token },

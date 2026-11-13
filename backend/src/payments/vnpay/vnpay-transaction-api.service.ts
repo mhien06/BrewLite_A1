@@ -17,7 +17,9 @@ import { formatVnpayDate } from './vnpay-url.js';
 const VNPAY_API_TIMEOUT_MS = 10_000;
 
 export class VnpayApiError extends BadGatewayException {
-  constructor(readonly reason: 'NETWORK' | 'TIMEOUT' | 'HTTP_ERROR' | 'INVALID_JSON' | 'INVALID_RESPONSE' | 'INVALID_SIGNATURE' | 'MISMATCHED_RESPONSE') {
+  constructor(readonly reason: 'NETWORK' | 'TIMEOUT' | 'HTTP_ERROR' | 'INVALID_JSON' | 'INVALID_RESPONSE' | 'INVALID_SIGNATURE' | 'MISMATCHED_RESPONSE',
+    readonly diagnostic?: { signature: 'MISSING' | 'MALFORMED' | 'MISMATCH'; unverifiedResponseCode: string },
+  ) {
     super(`VNPay API: ${reason}`);
   }
 }
@@ -78,7 +80,14 @@ export class VnpayTransactionApiService {
     const result = await this.post(config.apiUrl, params);
 
     if (!verifyVnpayQueryResponse(result, config.hashSecret)) {
-      throw new VnpayApiError('INVALID_SIGNATURE');
+      // Only bounded, non-sensitive metadata. An unsigned response code is
+      // diagnostic evidence, never authoritative payment/refund evidence.
+      throw new VnpayApiError('INVALID_SIGNATURE', {
+        signature: !result.vnp_SecureHash ? 'MISSING'
+          : /^[0-9a-fA-F]{128}$/.test(result.vnp_SecureHash) ? 'MISMATCH' : 'MALFORMED',
+        unverifiedResponseCode: /^\d{2}$/.test(result.vnp_ResponseCode ?? '')
+          ? result.vnp_ResponseCode : 'UNKNOWN',
+      });
     }
     if (
       result.vnp_Command !== 'querydr' ||

@@ -6,7 +6,7 @@ Nhánh: `fix/vnpay-missing-ipn-reconciliation`, từ `main` của `mhien06/BrewL
 
 - `PaymentMaintenanceService` chạy khi khởi động và mỗi 30 giây; một tiến trình không chạy chồng vòng maintenance.
 - Sau expiry và hàng đợi refund hiện có, job mới lấy tối đa 20 Payment VNPay `PENDING` đã hết hạn hoặc được tạo ít nhất 5 phút trước. Không phụ thuộc trạng thái Order, nên tìm được cả đơn đã `CANCELLED`.
-- Mỗi Payment có tối đa 12 lần QueryDR tự động. Khoảng chờ tăng 1, 2, 4, 8, 16, 32 phút rồi tối đa 60 phút. Bộ đếm được ghi trước khi gọi mạng, kể cả lần lỗi/worker chết cũng tính vào giới hạn.
+- Mỗi Payment có tối đa 12 lần QueryDR tự động. Khoảng chờ tăng 5, 10, 20, 40 phút rồi tối đa 60 phút, phù hợp cửa sổ giới hạn truy vấn 5 phút của VNPay (mã 94). Bộ đếm được ghi trước khi gọi mạng, kể cả lần lỗi/worker chết cũng tính vào giới hạn.
 - Cập nhật có điều kiện theo bộ đếm/lịch/token giành quyền xử lý giữa các worker. Token ngăn kết quả worker cũ ghi đè metadata của lượt mới; lịch thử lại cho phép phục hồi sau khi worker chết. Không giữ khóa database trong lúc gọi VNPay.
 - Dùng nguyên `VnpayTransactionApiService.queryTransaction()`. Chữ ký, command, merchant, txnRef và số tiền được kiểm tra tại client; `handleQueryResult()` xác minh lại chữ ký/binding, chỉ cho giao dịch gốc type `01`, ResponseCode `00`, TransactionStatus `00` đi vào `processCallback()` hiện có của IPN.
 - `processCallback()` khóa Order trước Payment, đọc lại dữ liệu và kiểm tra số tiền trong transaction. Kho, điểm, Payment và Refund cùng commit/rollback. IPN và QueryDR dùng cùng logic cho đơn hợp lệ, hết hạn, thiếu kho, đã hủy hoặc thanh toán trùng.
@@ -91,3 +91,9 @@ Các file thay đổi:
 - `docs/vnpay-missing-ipn-reconciliation.md`
 
 Chưa gọi VNPay thật, chưa kiểm chứng/sửa trực tiếp Order #4 / Payment #3 trên database A1 của Hiển. Chưa áp dụng migration ở môi trường đó. Chỉ kiểm thử backend vì thay đổi nằm ở backend; frontend/A2 không thay đổi. Không push, merge hoặc deploy.
+
+## Chẩn đoán QueryDR không xác minh được chữ ký
+
+Log bổ sung chỉ ghi `signature=MISSING/MALFORMED/MISMATCH` và `unverifiedResponseCode` (hai chữ số hoặc UNKNOWN). Mã phản hồi chưa được xác minh chỉ dùng chẩn đoán, không thay đổi quyết định thanh toán. Không log hash, secret, merchant hoặc payload. Không bỏ qua xác minh chữ ký.
+
+Đã đối chiếu thứ tự trường checksum với tài liệu chính thức: https://sandbox.vnpayment.vn/apis/docs/truy-van-hoan-tien/querydr%26refund.html ; giới hạn truy vấn: https://sandbox.vnpayment.vn/apis/docs/bang-ma-loi/ . Chưa xác định nguyên nhân phản hồi lỗi thực tế nếu chưa có metadata mới.

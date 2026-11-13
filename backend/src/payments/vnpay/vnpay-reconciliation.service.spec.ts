@@ -62,6 +62,13 @@ describe('Pending VNPay reconciliation', () => {
     expect(gateway.queryTransaction).not.toHaveBeenCalled();
   });
 
+  it('waits at least five minutes between QueryDR attempts', async () => {
+    const now = new Date();
+    await service.reconcilePendingPayments(now);
+    const claim = prisma.payment.updateMany.mock.calls[0][0];
+    expect(claim.data.reconciliationNextAt.getTime() - now.getTime()).toBeGreaterThanOrEqual(300_000);
+  });
+
   it.each(['timeout', 'network error', 'invalid signature'])(
     'does not settle after %s',
     async (message) => {
