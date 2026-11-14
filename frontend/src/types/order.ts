@@ -32,6 +32,16 @@ export interface OrderRefund {
   completedAt: string | null;
 }
 
+export interface PointCompensation {
+  id: number;
+  paymentId: number | null;
+  type: "RESTORE" | "REFUND_CREDIT";
+  points: number;
+  amount: number | null;
+  note: string;
+  createdAt: string;
+}
+
 export interface OrderItemProduct {
   id: number;
   name: string;
@@ -52,8 +62,10 @@ export interface OrderItem {
 export interface Order {
   cancellationReason?: string | null;
   cancellationSource?: string | null;
+  cancelledAt?: string | null;
   payments?: OrderPayment[];
   refunds?: OrderRefund[];
+  pointCompensations?: PointCompensation[];
   id: number;
   userId: number;
   status: OrderStatus;

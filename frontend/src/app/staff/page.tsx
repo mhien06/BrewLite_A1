@@ -532,6 +532,53 @@ export default function StaffPage() {
                       <RefundNotice
                         refunds={order.refunds}
                       />
+                      {order.status === "CANCELLED" && (
+                        <section className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm text-stone-700">
+                          <h4 className="font-bold text-emerald-900">
+                            {order.pointCompensations?.some(
+                              (entry) => entry.type === "REFUND_CREDIT",
+                            )
+                              ? "Đã hoàn bằng điểm BrewLite"
+                              : "Thông tin bù trừ đơn đã hủy"}
+                          </h4>
+                          <p className="mt-2">
+                            VNPay thực nhận: {(
+                              order.payments?.reduce(
+                                (total, payment) =>
+                                  payment.method === "VNPAY"
+                                    ? total + payment.amount
+                                    : total,
+                                0,
+                              ) ?? 0
+                            ).toLocaleString("vi-VN")} đ
+                          </p>
+                          <p>
+                            Điểm hoàn giá trị: {(
+                              order.pointCompensations
+                                ?.filter((entry) => entry.type === "REFUND_CREDIT")
+                                .reduce((total, entry) => total + entry.points, 0) ?? 0
+                            ).toLocaleString("vi-VN")} điểm ({(
+                              order.pointCompensations
+                                ?.filter((entry) => entry.type === "REFUND_CREDIT")
+                                .reduce((total, entry) => total + entry.points * 100, 0) ?? 0
+                            ).toLocaleString("vi-VN")} đ)
+                          </p>
+                          <p className="mt-1">
+                            Nguồn hủy: {order.cancellationSource === "CUSTOMER"
+                              ? "Khách hàng"
+                              : order.cancellationSource === "STAFF"
+                                ? "Nhân viên"
+                                : "Hệ thống"}
+                            {order.cancelledBy?.name ? ` · ${order.cancelledBy.name}` : ""}
+                          </p>
+                          {order.cancelledAt && (
+                            <p>Thời gian hủy: {new Date(order.cancelledAt).toLocaleString("vi-VN")}</p>
+                          )}
+                          {order.cancellationReason && (
+                            <p>Lý do: {order.cancellationReason}</p>
+                          )}
+                        </section>
+                      )}
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <p className="font-bold">
                           {order.total.toLocaleString("vi-VN")} đ
@@ -635,7 +682,7 @@ export default function StaffPage() {
               {tab === 3 && (
                 <div className="space-y-4">
                   <p className="text-sm text-stone-500">
-                    Chọn khách hàng để xem lịch sử cộng điểm.
+                    Chọn khách hàng để xem lịch sử điểm thưởng và bù trừ.
                   </p>
 
                   {data.customers.length === 0 && (
@@ -658,9 +705,10 @@ export default function StaffPage() {
                       </summary>
 
                       <div className="border-t border-stone-100 px-5 pb-4">
-                        {customer.loyaltyTransactions.length === 0 && (
+                        {customer.loyaltyTransactions.length === 0 &&
+                          customer.pointCompensations.length === 0 && (
                           <p className="py-4 text-sm text-stone-500">
-                            Chưa có lịch sử cộng điểm.
+                            Chưa có lịch sử điểm.
                           </p>
                         )}
 
@@ -682,6 +730,29 @@ export default function StaffPage() {
                               {transaction.reversed
                                 ? `Đã thu hồi ${transaction.points} điểm`
                                 : `+${transaction.points} điểm`}
+                            </span>
+                          </div>
+                        ))}
+                        {customer.pointCompensations.map((compensation) => (
+                          <div
+                            key={`compensation-${compensation.id}`}
+                            className="flex flex-wrap justify-between gap-2 border-b border-stone-100 py-3 text-sm last:border-0"
+                          >
+                            <div>
+                              <p>
+                                Đơn #{compensation.orderId}
+                                {compensation.paymentId
+                                  ? ` · Payment #${compensation.paymentId}`
+                                  : ""}
+                              </p>
+                              <p className="mt-1 text-xs text-stone-500">
+                                {compensation.note} · {new Date(compensation.createdAt).toLocaleString("vi-VN")}
+                              </p>
+                            </div>
+                            <span className="font-semibold text-emerald-700">
+                              {compensation.type === "REFUND_CREDIT"
+                                ? `Hoàn ${compensation.points} điểm (${(compensation.points * 100).toLocaleString("vi-VN")} đ)`
+                                : `Trả lại ${compensation.points} điểm đã dùng`}
                             </span>
                           </div>
                         ))}

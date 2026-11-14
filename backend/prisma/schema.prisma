@@ -27,6 +27,8 @@ model User {
   retryRequestedRefunds Refund[]            @relation("RefundRetryRequestedBy")
   refundAttempts      RefundAttempt[]       @relation("RefundAttemptInitiatedBy")
   loyaltyTransactions LoyaltyTransaction[]
+  pointCompensations  PointCompensation[]
+  cancelledOrders     Order[]               @relation("OrderCancelledBy")
 }
 
 model Product {
@@ -85,12 +87,14 @@ model Order {
   cancelledAt        DateTime?
   cancellationSource CancellationSource?
   cancelledById      Int?
+  cancelledBy        User?               @relation("OrderCancelledBy", fields: [cancelledById], references: [id], onDelete: SetNull)
   cancellationReason String?
   createdAt          DateTime            @default(now())
   items              OrderItem[]
   payments           Payment[]
   refunds            Refund[]
   loyaltyTransaction LoyaltyTransaction?
+  pointCompensations PointCompensation[]
 
   @@index([userId])
 }
@@ -137,6 +141,30 @@ model LoyaltyTransaction {
   @@index([userId])
 }
 
+enum PointCompensationType {
+  RESTORE
+  REFUND_CREDIT
+}
+
+model PointCompensation {
+  id             Int                    @id @default(autoincrement())
+  userId         Int
+  orderId        Int
+  paymentId      Int?                   @unique
+  type           PointCompensationType
+  points         Int
+  amount         Int?
+  note           String
+  idempotencyKey String                 @unique
+  createdAt      DateTime               @default(now())
+  user           User                   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  order          Order                  @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  payment        Payment?               @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+
+  @@index([userId, createdAt])
+  @@index([orderId, createdAt])
+  @@index([type, createdAt])
+}
 enum RefundStatus {
   PENDING
   PROCESSING
@@ -184,6 +212,7 @@ model Payment {
   user                      User          @relation(fields: [userId], references: [id], onDelete: Restrict)
   order                     Order         @relation(fields: [orderId], references: [id], onDelete: Restrict)
   refund                    Refund?
+  pointCompensation         PointCompensation?
 
   @@unique([userId, idempotencyKey])
   @@index([orderId])
