@@ -67,7 +67,6 @@ export interface VnpayRefundRequestInput {
 export interface VnpayQueryInput {
   requestId: string;
   txnRef: string;
-  transactionNo?: string | null;
   expectedAmount: number;
   transactionDate: string;
   orderInfo: string;
@@ -258,9 +257,6 @@ export class VnpayRefundClient {
       vnp_Command: 'querydr',
       vnp_TmnCode: config.tmnCode,
       vnp_TxnRef: input.txnRef,
-      ...(input.transactionNo
-        ? { vnp_TransactionNo: input.transactionNo }
-        : {}),
       vnp_OrderInfo: input.orderInfo,
       vnp_TransactionDate: input.transactionDate,
       vnp_CreateDate: formatVnpayDate(input.now ?? new Date()),
@@ -407,18 +403,6 @@ export class VnpayRefundClient {
     );
 
     if (!validSignature) {
-      const signature = response.vnp_SecureHash ? 'PRESENT' : 'MISSING';
-      const responseCode = /^\d{2}$/.test(response.vnp_ResponseCode ?? '')
-        ? response.vnp_ResponseCode
-        : 'UNKNOWN';
-      const message = (response.vnp_Message ?? '')
-        .replace(/[^\p{L}\p{N} .,_:;()-]/gu, '')
-        .trim()
-        .slice(0, 160) || 'EMPTY';
-      this.logger.warn(
-        `VNPay refund diagnostic: signature=${signature}, ` +
-          `unverifiedResponseCode=${responseCode}, unverifiedMessage=${message}`,
-      );
       throw new VnpayUncertainOutcomeError(
         'INVALID_SIGNATURE',
         'Chữ ký phản hồi VNPAY không hợp lệ.',
