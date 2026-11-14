@@ -353,7 +353,7 @@ export class VnpayIpnService {
     const now = new Date();
     const payment = await tx.payment.findUnique({
       where: { id },
-      include: { refund: { select: { id: true } } },
+      include: { refund: { select: { id: true, status: true } } },
     });
     if (!payment) return;
     await tx.payment.update({
@@ -367,10 +367,10 @@ export class VnpayIpnService {
     if (
       compensationNote &&
       payment.method === PaymentMethod.VNPAY &&
-      !payment.refund
+      (!payment.refund || payment.refund.status === 'FAILED')
     ) {
-      // Existing legacy Refund rows remain authoritative and readable. New
-      // compensation is only written when no cash-refund record exists.
+      // Active/succeeded legacy refunds remain authoritative. A terminal
+      // failed cash refund may safely be converted to points.
       await this.pointCompensation.creditPaidVnpayPayment(tx, {
         ...payment,
         status: OrderStatus.PAID,

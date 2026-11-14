@@ -112,9 +112,12 @@ export class OrderStateService {
       // Keep any legacy cash refund readable and prevent dual compensation.
       const legacyRefund = await tx.refund.findUnique({
         where: { paymentId: payment.id },
-        select: { id: true },
+        select: { id: true, status: true },
       });
-      if (legacyRefund) continue;
+      // Keep an active/succeeded legacy cash refund authoritative. A terminal
+      // FAILED refund is safe to compensate as points because no cash refund
+      // succeeded and its old queue will not retry it.
+      if (legacyRefund && legacyRefund.status !== 'FAILED') continue;
       await this.pointCompensation.creditPaidVnpayPayment(tx, payment);
     }
 

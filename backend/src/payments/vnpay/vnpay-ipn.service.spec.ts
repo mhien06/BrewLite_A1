@@ -404,7 +404,7 @@ describe('VnpayIpnService', () => {
       amount: 172_800,
       method: PaymentMethod.VNPAY,
       status: OrderStatus.PENDING,
-      refund: { id: 99 },
+      refund: { id: 99, status: 'PENDING' },
     });
     transaction.order.findUnique.mockResolvedValue({
       id: 10,
@@ -421,6 +421,36 @@ describe('VnpayIpnService', () => {
       }),
     );
     expect(transaction.pointCompensation.create).not.toHaveBeenCalled();
+    expect(transaction.refund.upsert).not.toHaveBeenCalled();
+  });
+
+  it('converts a definitively failed legacy Refund into points on late payment', async () => {
+    transaction.payment.findUnique.mockResolvedValue({
+      id: 5,
+      userId: 7,
+      orderId: 10,
+      amount: 172_800,
+      method: PaymentMethod.VNPAY,
+      status: OrderStatus.PENDING,
+      refund: { id: 99, status: 'FAILED' },
+    });
+    transaction.order.findUnique.mockResolvedValue({
+      id: 10,
+      userId: 7,
+      total: 172_800,
+      status: OrderStatus.CANCELLED,
+    });
+
+    await service.handle(signedQuery());
+
+    expect(transaction.pointCompensation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        paymentId: 5,
+        type: 'REFUND_CREDIT',
+        points: 1_728,
+        amount: 172_800,
+      }),
+    });
     expect(transaction.refund.upsert).not.toHaveBeenCalled();
   });
 
