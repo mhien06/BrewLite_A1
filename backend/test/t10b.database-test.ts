@@ -253,9 +253,19 @@ describe('T10B với PostgreSQL thật', () => {
   });
 
   it('hai phần topping tính đủ giá, trừ đủ kho và hủy hoàn đúng', async () => {
-    await db.toppingIngredient.create({ data: { toppingCode: 'jelly', ingredientId, amount: 5 } });
-    const orders = new OrdersService(db, new PromotionsService(db), new InventoryService(db));
-    const order = await orders.create(userId, { items: [{ productId, size: 'S', quantity: 2, toppings: ['jelly', 'jelly'] }] });
+    await db.toppingIngredient.create({
+      data: { toppingCode: 'jelly', ingredientId, amount: 5 },
+    });
+    const orders = new OrdersService(
+      db,
+      new PromotionsService(db),
+      new InventoryService(db),
+    );
+    const order = await orders.create(userId, {
+      items: [
+        { productId, size: 'S', quantity: 2, toppings: ['jelly', 'jelly'] },
+      ],
+    });
     expect(order.total).toBe(88000);
     expect(order.items[0].toppings).toEqual(['jelly', 'jelly']);
     await pay(order.id, 'double-topping');
@@ -315,6 +325,47 @@ describe('T10B với PostgreSQL thật', () => {
       (await db.order.findUniqueOrThrow({ where: { id: order.id } })).status,
     ).toBe('CANCELLED');
     expect(await stock()).toBe(100);
+  });
+  it('hủy đơn có điểm checkout trả lại điểm đã dùng đúng một lần', async () => {
+    await db.user.update({
+      where: { id: userId },
+      data: { loyaltyPoints: 10 },
+    });
+    const orders = new OrdersService(
+      db,
+      new PromotionsService(db),
+      new InventoryService(db),
+    );
+    const order = await orders.create(userId, {
+      items: [{ productId, size: 'S', quantity: 1, toppings: [] }],
+      loyaltyPointsToUse: 5,
+    });
+    expect(order.total).toBe(29_500);
+    expect(
+      (await db.user.findUniqueOrThrow({ where: { id: userId } }))
+        .loyaltyPoints,
+    ).toBe(5);
+    await pay(order.id, 'cancel-redeemed-points');
+    await new OrderStateService(db).transition(order.id, 'CANCELLED');
+    await new OrderStateService(db).transition(order.id, 'CANCELLED');
+
+    expect(
+      (await db.user.findUniqueOrThrow({ where: { id: userId } }))
+        .loyaltyPoints,
+    ).toBe(10);
+    expect(
+      await db.pointCompensation.count({
+        where: { orderId: order.id, type: 'RESTORE' },
+      }),
+    ).toBe(1);
+    expect(
+      await db.pointCompensation.findUnique({
+        where: { idempotencyKey: `RESTORE:${order.id}` },
+      }),
+    ).toMatchObject({
+      points: 5,
+      orderId: order.id,
+    });
   });
   it('hai kết nối cùng hủy chỉ hoàn một lần', async () => {
     const order = await createOrder();
@@ -390,6 +441,9 @@ describe('T10B với PostgreSQL thật', () => {
     // Chỉ xóa các bản ghi do bài test này tạo, không reset database.
     await db.inventoryMovement.deleteMany({
       where: { actorId: { in: createdUsers } },
+    });
+    await db.pointCompensation.deleteMany({
+      where: { userId: { in: createdUsers } },
     });
     await db.payment.deleteMany({ where: { userId: { in: createdUsers } } });
     await db.loyaltyTransaction.deleteMany({

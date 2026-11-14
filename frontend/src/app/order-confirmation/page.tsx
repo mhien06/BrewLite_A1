@@ -93,6 +93,15 @@ const getStatusConfig = (status: OrderStatus) => {
         badgeClass: "bg-rose-50 text-rose-700 border-rose-200",
         badgeLabel: "PAYMENT_FAILED (Thất bại)",
       };
+    case "CANCELLED":
+      return {
+        icon: "×",
+        iconColor: "text-stone-600",
+        title: "Đơn hàng đã hủy",
+        subtitle: "Thông tin hoàn điểm sẽ hiển thị bên dưới nếu có.",
+        badgeClass: "bg-stone-50 text-stone-700 border-stone-200",
+        badgeLabel: "CANCELLED (Đã hủy)",
+      };
     default:
       return {
         icon: "📋",
@@ -160,7 +169,7 @@ function OrderConfirmationContent() {
     if (
       !window.confirm(
         waitingConfirm
-          ? "Quán chưa xác nhận đơn này. Bạn muốn hủy?"
+          ? "Quán chưa xác nhận đơn này. Hủy đơn sẽ hoàn kho, thu hồi điểm thưởng, trả lại điểm đã dùng và quy đổi tiền VNPay thực trả thành điểm BrewLite. Bạn muốn tiếp tục?"
           : "Bạn muốn hủy đơn này?",
       )
     )
@@ -615,6 +624,43 @@ function OrderConfirmationContent() {
           <p className="mt-5 text-center text-sm text-stone-600">
             {order.cancellationReason}
           </p>
+        )}
+        {order.pointCompensations && order.pointCompensations.length > 0 && (
+          <section
+            className="mx-auto mt-6 max-w-2xl rounded-2xl border border-emerald-200 bg-emerald-50/70 p-5"
+            aria-live="polite"
+          >
+            <h2 className="font-extrabold text-emerald-900">
+              Hoàn điểm BrewLite
+            </h2>
+            <ul className="mt-3 space-y-3">
+              {order.pointCompensations.map((compensation) => (
+                <li
+                  key={compensation.id}
+                  className="border-t border-emerald-900/10 pt-3 text-sm text-emerald-950"
+                >
+                  <p className="font-semibold">
+                    {compensation.type === "REFUND_CREDIT"
+                      ? `Đã hoàn ${compensation.points.toLocaleString("vi-VN")} điểm BrewLite`
+                      : `Đã trả lại ${compensation.points.toLocaleString("vi-VN")} điểm đã dùng`}
+                  </p>
+                  {compensation.type === "REFUND_CREDIT" && (
+                    <p className="mt-1">
+                      Tương đương {formatPrice(compensation.points * 100)}
+                      {compensation.amount !== null &&
+                        ` · VNPay thực trả ${formatPrice(compensation.amount)}`}
+                    </p>
+                  )}
+                  <p className="mt-1 text-xs text-emerald-800">
+                    Thời gian: {formatDate(compensation.createdAt)}
+                  </p>
+                  <p className="mt-1 text-xs text-emerald-800">
+                    {compensation.note}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </section>
         )}
         {order.refunds && order.refunds.length > 0 && (
           <section

@@ -112,8 +112,7 @@ export class OrdersService {
           throw new BadRequestException('Bạn không có đủ điểm để sử dụng.');
         }
       }
-      const loyaltyDiscountAmount =
-        loyaltyPointsUsed * VND_PER_REDEEMED_POINT;
+      const loyaltyDiscountAmount = loyaltyPointsUsed * VND_PER_REDEEMED_POINT;
       const total = afterPromotion - loyaltyDiscountAmount;
 
       return transaction.order.create({
@@ -164,6 +163,18 @@ export class OrdersService {
         cancelledAt: true,
         cancellationReason: true,
         cancellationSource: true,
+        pointCompensations: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            paymentId: true,
+            type: true,
+            points: true,
+            amount: true,
+            note: true,
+            createdAt: true,
+          },
+        },
         refunds: {
           orderBy: { requestedAt: 'desc' },
           select: {
@@ -226,6 +237,18 @@ export class OrdersService {
         cancelledAt: true,
         cancellationReason: true,
         cancellationSource: true,
+        pointCompensations: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            paymentId: true,
+            type: true,
+            points: true,
+            amount: true,
+            note: true,
+            createdAt: true,
+          },
+        },
         refunds: {
           orderBy: { requestedAt: 'desc' },
           select: {

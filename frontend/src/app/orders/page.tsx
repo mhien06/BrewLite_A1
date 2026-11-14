@@ -42,6 +42,11 @@ const getStatusBadge = (status: OrderStatus) => {
         label: 'Thanh toán thất bại',
         className: 'bg-rose-50 text-rose-700 border-rose-200',
       };
+    case 'CANCELLED':
+      return {
+        label: 'Đã hủy',
+        className: 'bg-stone-50 text-stone-700 border-stone-200',
+      };
     default:
       return {
         label: status,

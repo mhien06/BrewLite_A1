@@ -2,8 +2,10 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
+  Optional,
 } from '@nestjs/common';
 import { OrderStatus, Prisma } from '../generated/prisma/client.js';
+import { PointCompensationService } from '../loyalty/point-compensation.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 const VALID_TRANSITIONS: Record<OrderStatus, readonly OrderStatus[]> = {
@@ -28,7 +30,15 @@ const CUSTOMER_CANCELLABLE: readonly OrderStatus[] = [
 
 @Injectable()
 export class OrderStateService {
-  constructor(private readonly prisma: PrismaService) {}
+  private readonly pointCompensation: PointCompensationService;
+
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() pointCompensation?: PointCompensationService,
+  ) {
+    this.pointCompensation =
+      pointCompensation ?? new PointCompensationService();
+  }
 
   assertTransition(from: OrderStatus, to: OrderStatus): void {
     if (!VALID_TRANSITIONS[from].includes(to)) {
@@ -87,53 +97,41 @@ export class OrderStateService {
         },
       });
     }
-    const earned = await tx.loyaltyTransaction.findUnique({
-      where: { orderId: order.id },
+    await this.pointCompensation.reverseEarnedPoints(tx, order);
+    await this.pointCompensation.restoreRedeemedPoints(tx, order);
+
+    const paidPayments = await tx.payment.findMany({
+      where: {
+        orderId: order.id,
+        method: 'VNPAY',
+        status: OrderStatus.PAID,
+      },
+      orderBy: { id: 'asc' },
     });
-    if (earned && !earned.reversed) {
-      await tx.loyaltyTransaction.update({
-        where: { orderId: order.id },
-        data: { reversed: true },
+    for (const payment of paidPayments) {
+      // Keep any legacy cash refund readable and prevent dual compensation.
+      const legacyRefund = await tx.refund.findUnique({
+        where: { paymentId: payment.id },
+        select: { id: true, status: true },
       });
-      await tx.user.update({
-        where: { id: order.userId },
-        data: { loyaltyPoints: { decrement: earned.points } },
-      });
+      // Keep an active/succeeded legacy cash refund authoritative. A terminal
+      // FAILED refund is safe to compensate as points because no cash refund
+      // succeeded and its old queue will not retry it.
+      if (legacyRefund && legacyRefund.status !== 'FAILED') continue;
+      await this.pointCompensation.creditPaidVnpayPayment(tx, payment);
     }
+
     await tx.order.update({
       where: { id: order.id },
       data: { inventoryDeducted: false },
     });
-    // Payment giữ kết quả gốc cho idempotency; hủy đơn không khẳng định đã hoàn tiền.
-  }
-
-  private async restoreRedeemedPoints(
-    tx: Prisma.TransactionClient,
-    order: Prisma.OrderGetPayload<object>,
-  ) {
-    if (
-      !Number.isSafeInteger(order.loyaltyPointsUsed) ||
-      order.loyaltyPointsUsed <= 0 ||
-      order.loyaltyPointsRestored
-    )
-      return;
-    const restored = await tx.order.updateMany({
-      where: { id: order.id, loyaltyPointsRestored: false },
-      data: { loyaltyPointsRestored: true },
-    });
-    if (restored.count) {
-      await tx.user.update({
-        where: { id: order.userId },
-        data: { loyaltyPoints: { increment: order.loyaltyPointsUsed } },
-      });
-    }
   }
 
   async transition(
     orderId: number,
     to: OrderStatus,
     tx?: Prisma.TransactionClient,
-    extraData: Omit<Prisma.OrderUpdateManyMutationInput, 'status'> = {},
+    extraData: Omit<Prisma.OrderUncheckedUpdateManyInput, 'status'> = {},
     actorId?: number,
     customerId?: number,
   ): Promise<Prisma.OrderGetPayload<object>> {
@@ -177,56 +175,10 @@ export class OrderStateService {
     }
 
     this.assertTransition(order.status, to);
-    if (to === OrderStatus.CANCELLED) {
-      await this.restoreRedeemedPoints(db, order);
-    }
     if (to === OrderStatus.CANCELLED && order.status === OrderStatus.PAID) {
       await this.restorePaidOrder(db, order, actorId ?? order.userId);
-      if (order.paymentMethod === 'VNPAY') {
-        const reason =
-          typeof extraData.cancellationReason === 'string' &&
-          extraData.cancellationReason.trim()
-            ? extraData.cancellationReason.trim().slice(0, 500)
-            : 'Đơn hàng VNPay đã thanh toán được hủy.';
-        const payment = await db.payment.findFirst({
-          where: { orderId, method: 'VNPAY', status: OrderStatus.PAID },
-          orderBy: { id: 'desc' },
-        });
-        if (
-          !payment ||
-          !payment.providerTxnRef ||
-          payment.amount !== order.total
-        ) {
-          throw new ConflictException(
-            'Không tìm thấy giao dịch VNPay hợp lệ khớp với tổng tiền đơn hàng; không thể hủy tự động.',
-          );
-        }
-        const existingRefund = await db.refund.findUnique({
-          where: { paymentId: payment.id },
-          select: { id: true },
-        });
-        if (!existingRefund) {
-          const cancellationSource = extraData.cancellationSource;
-          const source =
-            cancellationSource === 'CUSTOMER' ||
-            cancellationSource === 'STAFF' ||
-            cancellationSource === 'SYSTEM'
-              ? cancellationSource
-              : 'SYSTEM';
-          await db.refund.create({
-            data: {
-              paymentId: payment.id,
-              orderId,
-              amount: payment.amount,
-              reason,
-              source,
-              status: 'PENDING',
-              requestedAt: new Date(),
-              requestedById: actorId ?? null,
-            },
-          });
-        }
-      }
+    } else if (to === OrderStatus.CANCELLED) {
+      await this.pointCompensation.restoreRedeemedPoints(db, order);
     }
     const result = await db.order.updateMany({
       where: { id: orderId, status: order.status },

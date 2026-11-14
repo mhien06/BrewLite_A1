@@ -1,4 +1,7 @@
-import type { RefundStatus as OrderRefundStatus } from "@/types/order";
+import type {
+  PointCompensation,
+  RefundStatus as OrderRefundStatus,
+} from "@/types/order";
 
 export type Ingredient = {
   id: number;
@@ -59,6 +62,12 @@ export type OrderRefund = {
 };
 export type Order = {
   refunds?: OrderRefund[];
+  payments?: { id: number; amount: number; method: "WALLET" | "CARD" | "VNPAY"; status: "PAID"; paidAt: string | null }[];
+  pointCompensations?: PointCompensation[];
+  cancelledAt?: string | null;
+  cancellationReason?: string | null;
+  cancellationSource?: "CUSTOMER" | "STAFF" | "SYSTEM" | null;
+  cancelledBy?: { name: string } | null;
   id: number;
   status: string;
   total: number;
@@ -82,6 +91,7 @@ export type Customer = {
     reversed?: boolean;
     createdAt: string;
   }[];
+  pointCompensations: (PointCompensation & { orderId: number })[];
 };
 export type Movement = {
   id: number;

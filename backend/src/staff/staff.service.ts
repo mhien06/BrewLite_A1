@@ -94,6 +94,30 @@ export class StaffService {
         },
       },
       include: {
+        payments: {
+          where: { status: 'PAID' },
+          select: {
+            id: true,
+            amount: true,
+            method: true,
+            status: true,
+            paidAt: true,
+          },
+          orderBy: { id: 'asc' },
+        },
+        pointCompensations: {
+          orderBy: { createdAt: 'asc' },
+          select: {
+            id: true,
+            paymentId: true,
+            type: true,
+            points: true,
+            amount: true,
+            note: true,
+            createdAt: true,
+          },
+        },
+        cancelledBy: { select: { name: true } },
         refunds: {
           orderBy: { id: 'desc' },
           include: {
@@ -165,6 +189,20 @@ export class StaffService {
             orderId: true,
             points: true,
             reversed: true,
+            createdAt: true,
+          },
+        },
+        pointCompensations: {
+          take: 30,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            orderId: true,
+            paymentId: true,
+            type: true,
+            points: true,
+            amount: true,
+            note: true,
             createdAt: true,
           },
         },

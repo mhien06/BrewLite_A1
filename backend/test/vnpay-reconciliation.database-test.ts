@@ -139,6 +139,7 @@ describe('Missing IPN reconciliation on PostgreSQL', () => {
     vi.restoreAllMocks();
     vi.unstubAllGlobals();
     await db.inventoryMovement.deleteMany({ where: { ingredientId } });
+    await db.pointCompensation.deleteMany({ where: { orderId } });
     await db.refund.deleteMany({ where: { paymentId } });
     await db.payment.deleteMany({ where: { userId } });
     await db.loyaltyTransaction.deleteMany({ where: { userId } });
@@ -215,7 +216,9 @@ describe('Missing IPN reconciliation on PostgreSQL', () => {
       else {
         expect((await payment()).status).toBe('PAID');
         expect((await order()).status).toBe('CANCELLED');
-        expect(await db.refund.count({ where: { paymentId } })).toBe(1);
+        expect(await db.pointCompensation.count({ where: { paymentId } })).toBe(
+          1,
+        );
         expect(await stock()).toBe(100);
         expect(await db.loyaltyTransaction.count({ where: { orderId } })).toBe(
           0,
@@ -224,7 +227,7 @@ describe('Missing IPN reconciliation on PostgreSQL', () => {
     },
   );
 
-  it('records late money for a cancelled order and creates exactly one pending refund', async () => {
+  it('records late money for a cancelled order and credits points exactly once', async () => {
     await db.order.update({
       where: { id: orderId },
       data: { status: 'CANCELLED' },
@@ -234,17 +237,110 @@ describe('Missing IPN reconciliation on PostgreSQL', () => {
     await worker(db2).reconcilePendingPayments();
     expect((await payment()).status).toBe('PAID');
     expect((await order()).status).toBe('CANCELLED');
-    expect(await db.refund.findUnique({ where: { paymentId } })).toMatchObject({
-      status: 'PENDING',
+    expect(await db.refund.findUnique({ where: { paymentId } })).toBeNull();
+    expect(
+      await db.pointCompensation.findUnique({ where: { paymentId } }),
+    ).toMatchObject({
+      type: 'REFUND_CREDIT',
+      points: 300,
       amount: 30000,
+      idempotencyKey: `REFUND_CREDIT:${paymentId}`,
     });
-    expect(await db.refund.count({ where: { paymentId } })).toBe(1);
+    expect(await db.pointCompensation.count({ where: { paymentId } })).toBe(1);
+    expect(
+      (await db.user.findUniqueOrThrow({ where: { id: userId } }))
+        .loyaltyPoints,
+    ).toBe(300);
     expect(await stock()).toBe(100);
     expect(await db.loyaltyTransaction.count({ where: { orderId } })).toBe(0);
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('uses the existing expired-payment cancellation and refund rule', async () => {
+  it('cancels a paid VNPay order atomically, restores stock and credits its actual payment once', async () => {
+    await ipn.handle(query());
+    const paid = await payment();
+    expect(paid.status).toBe('PAID');
+    expect(
+      (await db.user.findUniqueOrThrow({ where: { id: userId } }))
+        .loyaltyPoints,
+    ).toBe(3);
+
+    const states = new OrderStateService(db);
+    const cancellation = {
+      cancelledAt: new Date(),
+      cancellationSource: 'CUSTOMER' as const,
+      cancelledById: userId,
+      cancellationReason: 'Khách đổi ý.',
+    };
+    await states.transition(
+      orderId,
+      'CANCELLED',
+      undefined,
+      cancellation,
+      userId,
+      userId,
+    );
+    await states.transition(
+      orderId,
+      'CANCELLED',
+      undefined,
+      cancellation,
+      userId,
+      userId,
+    );
+
+    expect((await order()).status).toBe('CANCELLED');
+    expect((await payment()).status).toBe('PAID');
+    expect(await stock()).toBe(100);
+    expect(
+      await db.pointCompensation.count({
+        where: { orderId, type: 'REFUND_CREDIT' },
+      }),
+    ).toBe(1);
+    expect(
+      await db.pointCompensation.findUnique({ where: { paymentId } }),
+    ).toMatchObject({
+      paymentId,
+      points: 300,
+      amount: 30000,
+      idempotencyKey: `REFUND_CREDIT:${paymentId}`,
+    });
+    expect(
+      (await db.user.findUniqueOrThrow({ where: { id: userId } }))
+        .loyaltyPoints,
+    ).toBe(300);
+    expect(await db.refund.count({ where: { paymentId } })).toBe(0);
+  });
+
+  it('rolls cancellation, stock and point credits back together on transaction failure', async () => {
+    await ipn.handle(query());
+    await expect(
+      db.$transaction(async (tx) => {
+        await new OrderStateService(db).transition(orderId, 'CANCELLED', tx);
+        throw new Error('rollback cancellation test');
+      }),
+    ).rejects.toThrow('rollback cancellation test');
+
+    expect((await order()).status).toBe('PAID');
+    expect((await payment()).status).toBe('PAID');
+    expect(await stock()).toBe(80);
+    expect(await db.pointCompensation.count({ where: { orderId } })).toBe(0);
+    expect(
+      (await db.user.findUniqueOrThrow({ where: { id: userId } }))
+        .loyaltyPoints,
+    ).toBe(3);
+
+    await new OrderStateService(db).transition(orderId, 'CANCELLED');
+    expect((await order()).status).toBe('CANCELLED');
+    expect(await stock()).toBe(100);
+    expect(
+      await db.pointCompensation.count({
+        where: { orderId, type: 'REFUND_CREDIT' },
+      }),
+    ).toBe(1);
+  });
+
+  it('credits late payment for the existing expired-payment cancellation path', async () => {
     await db.payment.update({
       where: { id: paymentId },
       data: { expiresAt: past() },
@@ -252,13 +348,17 @@ describe('Missing IPN reconciliation on PostgreSQL', () => {
     await worker().reconcilePendingPayments();
     expect((await order()).status).toBe('CANCELLED');
     expect((await payment()).status).toBe('PAID');
-    expect(await db.refund.findUnique({ where: { paymentId } })).toMatchObject({
-      status: 'PENDING',
+    expect(await db.refund.findUnique({ where: { paymentId } })).toBeNull();
+    expect(
+      await db.pointCompensation.findUnique({ where: { paymentId } }),
+    ).toMatchObject({
+      type: 'REFUND_CREDIT',
+      points: 300,
     });
     expect(await stock()).toBe(100);
   });
 
-  it('queues a refund when inventory is insufficient', async () => {
+  it('credits the real paid amount when inventory is insufficient', async () => {
     await db.ingredient.update({
       where: { id: ingredientId },
       data: { stock: 0 },
@@ -266,7 +366,14 @@ describe('Missing IPN reconciliation on PostgreSQL', () => {
     await worker().reconcilePendingPayments();
     expect((await order()).status).toBe('CANCELLED');
     expect((await payment()).status).toBe('PAID');
-    expect(await db.refund.count({ where: { paymentId } })).toBe(1);
+    expect(await db.refund.count({ where: { paymentId } })).toBe(0);
+    expect(
+      await db.pointCompensation.findUnique({ where: { paymentId } }),
+    ).toMatchObject({
+      type: 'REFUND_CREDIT',
+      points: 300,
+      amount: 30000,
+    });
     expect(await stock()).toBe(0);
     expect(await db.loyaltyTransaction.count({ where: { orderId } })).toBe(0);
   });
@@ -382,7 +489,7 @@ describe('Missing IPN reconciliation on PostgreSQL', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('refunds a second distinct payment without consuming inventory or awarding points again', async () => {
+  it('credits a second distinct payment without consuming inventory or earning twice', async () => {
     const firstRef = txnRef;
     await ipn.handle(query());
     const extra = await db.payment.create({
@@ -408,18 +515,33 @@ describe('Missing IPN reconciliation on PostgreSQL', () => {
           .status,
       ).toBe('PAID');
       expect(
-        await db.refund.findUnique({ where: { paymentId: extra.id } }),
-      ).toMatchObject({ status: 'PENDING', amount: 30000 });
-      expect(await db.refund.count({ where: { orderId } })).toBe(1);
+        await db.pointCompensation.findUnique({
+          where: { paymentId: extra.id },
+        }),
+      ).toMatchObject({ type: 'REFUND_CREDIT', points: 300, amount: 30000 });
+      expect(await db.pointCompensation.count({ where: { orderId } })).toBe(1);
       expect(await stock()).toBe(80);
       expect(
         (await db.user.findUniqueOrThrow({ where: { id: userId } }))
           .loyaltyPoints,
-      ).toBe(3);
+      ).toBe(303);
       expect(await db.loyaltyTransaction.count({ where: { orderId } })).toBe(1);
+
+      await new OrderStateService(db).transition(orderId, 'CANCELLED');
+      expect((await order()).status).toBe('CANCELLED');
+      expect(await stock()).toBe(100);
+      expect(
+        await db.pointCompensation.count({
+          where: { orderId, type: 'REFUND_CREDIT' },
+        }),
+      ).toBe(2);
+      expect(
+        (await db.user.findUniqueOrThrow({ where: { id: userId } }))
+          .loyaltyPoints,
+      ).toBe(600);
     } finally {
       txnRef = firstRef;
-      await db.refund.deleteMany({ where: { paymentId: extra.id } });
+      await db.pointCompensation.deleteMany({ where: { paymentId: extra.id } });
     }
   });
 

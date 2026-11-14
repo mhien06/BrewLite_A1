@@ -22,6 +22,11 @@ describe('VnpayIpnService', () => {
     refund: {
       upsert: vi.fn(),
     },
+    pointCompensation: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      create: vi.fn(),
+    },
+    user: { update: vi.fn() },
   };
 
   const prisma = {
@@ -125,26 +130,45 @@ describe('VnpayIpnService', () => {
 
   it('accepts QueryDR signatures and applies the same settlement rules', async () => {
     const result = signedQueryResult({ vnp_Amount: '17280000' });
-    expect((await service.handleQueryResult(result, 'BLTEST123')).RspCode).toBe('00');
+    expect((await service.handleQueryResult(result, 'BLTEST123')).RspCode).toBe(
+      '00',
+    );
     expect(inventory.deductForPaidOrder).toHaveBeenCalledTimes(1);
     expect(loyalty.awardPointsForPaidOrder).toHaveBeenCalledTimes(1);
   });
 
   it.each([
-    { vnp_TmnCode: 'WRONG' }, { vnp_TxnRef: 'WRONG' }, { vnp_Command: 'refund' },
-    { vnp_ResponseCode: '99' }, { vnp_TransactionStatus: '01' }, { vnp_TransactionType: '02' },
-  ])('rejects untrusted or unresolved QueryDR before settlement: %j', async (overrides) => {
-    const result = signedQueryResult({ vnp_Amount: '17280000', ...overrides });
-    expect((await service.handleQueryResult(result, 'BLTEST123')).RspCode).not.toBe('00');
-    expect(prisma.$transaction).not.toHaveBeenCalled();
-  });
+    { vnp_TmnCode: 'WRONG' },
+    { vnp_TxnRef: 'WRONG' },
+    { vnp_Command: 'refund' },
+    { vnp_ResponseCode: '99' },
+    { vnp_TransactionStatus: '01' },
+    { vnp_TransactionType: '02' },
+  ])(
+    'rejects untrusted or unresolved QueryDR before settlement: %j',
+    async (overrides) => {
+      const result = signedQueryResult({
+        vnp_Amount: '17280000',
+        ...overrides,
+      });
+      expect(
+        (await service.handleQueryResult(result, 'BLTEST123')).RspCode,
+      ).not.toBe('00');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
+    },
+  );
 
   it('rejects a tampered QueryDR signature and a signed amount mismatch', async () => {
     const result = signedQueryResult({ vnp_Amount: '17280000' });
     result.vnp_SecureHash = '0'.repeat(128);
-    expect((await service.handleQueryResult(result, 'BLTEST123')).RspCode).toBe('97');
+    expect((await service.handleQueryResult(result, 'BLTEST123')).RspCode).toBe(
+      '97',
+    );
     expect(prisma.$transaction).not.toHaveBeenCalled();
-    expect((await service.handleQueryResult(signedQueryResult(), 'BLTEST123')).RspCode).toBe('04');
+    expect(
+      (await service.handleQueryResult(signedQueryResult(), 'BLTEST123'))
+        .RspCode,
+    ).toBe('04');
     expect(transaction.payment.update).not.toHaveBeenCalled();
   });
 
@@ -291,7 +315,7 @@ describe('VnpayIpnService', () => {
     },
   );
 
-  it('queues an automatic refund when payment arrives after the customer cancelled a pending order', async () => {
+  it('credits points when payment arrives after the customer cancelled a pending order', async () => {
     const latePayment = {
       id: 5,
       userId: 7,
@@ -320,24 +344,117 @@ describe('VnpayIpnService', () => {
         providerTransactionNo: '14567890',
       }),
     });
-    expect(transaction.refund.upsert).toHaveBeenCalledWith({
-      where: { paymentId: 5 },
-      create: {
+    expect(transaction.pointCompensation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
         paymentId: 5,
         orderId: 10,
         amount: 172_800,
-        reason: 'VNPay xác nhận thanh toán sau khi đơn hàng đã bị hủy.',
-        source: 'SYSTEM',
-        status: 'PENDING',
-        requestedAt: expect.any(Date),
-      },
-      update: {},
+        points: 1_728,
+        type: 'REFUND_CREDIT',
+        idempotencyKey: 'REFUND_CREDIT:5',
+      }),
+    });
+    expect(transaction.refund.upsert).not.toHaveBeenCalled();
+    expect(inventory.deductForPaidOrder).not.toHaveBeenCalled();
+    expect(loyalty.awardPointsForPaidOrder).not.toHaveBeenCalled();
+  });
+
+  it('records verified success after a failed callback for a cancelled order', async () => {
+    transaction.payment.findUnique.mockResolvedValue({
+      id: 5,
+      userId: 7,
+      orderId: 10,
+      amount: 172_800,
+      method: PaymentMethod.VNPAY,
+      status: OrderStatus.PAYMENT_FAILED,
+    });
+    transaction.order.findUnique.mockResolvedValue({
+      id: 10,
+      userId: 7,
+      total: 172_800,
+      status: OrderStatus.CANCELLED,
+    });
+
+    await expect(service.handle(signedQuery())).resolves.toEqual({
+      RspCode: '00',
+      Message: 'Confirm Success',
+    });
+
+    expect(transaction.payment.update).toHaveBeenCalledWith({
+      where: { id: 5 },
+      data: expect.objectContaining({ status: OrderStatus.PAID }),
+    });
+    expect(transaction.pointCompensation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        paymentId: 5,
+        type: 'REFUND_CREDIT',
+        points: 1_728,
+        amount: 172_800,
+      }),
     });
     expect(inventory.deductForPaidOrder).not.toHaveBeenCalled();
     expect(loyalty.awardPointsForPaidOrder).not.toHaveBeenCalled();
   });
 
-  it('queues a refund when an expired order is cancelled before a successful callback arrives', async () => {
+  it('does not add point credit on top of an existing legacy cash Refund', async () => {
+    transaction.payment.findUnique.mockResolvedValue({
+      id: 5,
+      userId: 7,
+      orderId: 10,
+      amount: 172_800,
+      method: PaymentMethod.VNPAY,
+      status: OrderStatus.PENDING,
+      refund: { id: 99, status: 'PENDING' },
+    });
+    transaction.order.findUnique.mockResolvedValue({
+      id: 10,
+      userId: 7,
+      total: 172_800,
+      status: OrderStatus.CANCELLED,
+    });
+
+    await service.handle(signedQuery());
+
+    expect(transaction.payment.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ status: OrderStatus.PAID }),
+      }),
+    );
+    expect(transaction.pointCompensation.create).not.toHaveBeenCalled();
+    expect(transaction.refund.upsert).not.toHaveBeenCalled();
+  });
+
+  it('converts a definitively failed legacy Refund into points on late payment', async () => {
+    transaction.payment.findUnique.mockResolvedValue({
+      id: 5,
+      userId: 7,
+      orderId: 10,
+      amount: 172_800,
+      method: PaymentMethod.VNPAY,
+      status: OrderStatus.PENDING,
+      refund: { id: 99, status: 'FAILED' },
+    });
+    transaction.order.findUnique.mockResolvedValue({
+      id: 10,
+      userId: 7,
+      total: 172_800,
+      status: OrderStatus.CANCELLED,
+    });
+
+    await service.handle(signedQuery());
+
+    expect(transaction.pointCompensation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        paymentId: 5,
+        type: 'REFUND_CREDIT',
+        points: 1_728,
+        amount: 172_800,
+      }),
+    });
+    expect(transaction.refund.upsert).not.toHaveBeenCalled();
+  });
+
+  it('credits late payment after an expired order was cancelled', async () => {
     const expiredPayment = {
       id: 5,
       userId: 7,
@@ -367,21 +484,20 @@ describe('VnpayIpnService', () => {
       transaction,
       expect.objectContaining({ cancellationSource: 'SYSTEM' }),
     );
-    expect(transaction.refund.upsert).toHaveBeenCalledWith({
-      where: { paymentId: 5 },
-      create: expect.objectContaining({
+    expect(transaction.pointCompensation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
         paymentId: 5,
         amount: 172_800,
-        source: 'SYSTEM',
-        status: 'PENDING',
+        points: 1_728,
+        idempotencyKey: 'REFUND_CREDIT:5',
       }),
-      update: {},
     });
+    expect(transaction.refund.upsert).not.toHaveBeenCalled();
     expect(inventory.deductForPaidOrder).not.toHaveBeenCalled();
     expect(loyalty.awardPointsForPaidOrder).not.toHaveBeenCalled();
   });
 
-  it('queues a refund when the successful payment cannot be fulfilled for lack of ingredients', async () => {
+  it('credits a successful payment when stock is insufficient', async () => {
     transaction.payment.findUnique.mockResolvedValue({
       id: 5,
       userId: 7,
@@ -418,19 +534,19 @@ describe('VnpayIpnService', () => {
       where: { id: 5 },
       data: expect.objectContaining({ status: OrderStatus.PAID }),
     });
-    expect(transaction.refund.upsert).toHaveBeenCalledWith({
-      where: { paymentId: 5 },
-      create: expect.objectContaining({
-        source: 'SYSTEM',
-        status: 'PENDING',
-        reason: expect.stringContaining('nguyên liệu'),
+    expect(transaction.pointCompensation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        paymentId: 5,
+        type: 'REFUND_CREDIT',
+        points: 1_728,
+        note: 'Hoàn giá trị đơn hàng #10',
       }),
-      update: {},
     });
+    expect(transaction.refund.upsert).not.toHaveBeenCalled();
     expect(loyalty.awardPointsForPaidOrder).not.toHaveBeenCalled();
   });
 
-  it('queues a full refund for a second distinct VNPay payment after the order is paid', async () => {
+  it('credits a second distinct VNPay payment without processing inventory again', async () => {
     const extraPayment = {
       id: 6,
       userId: 7,
@@ -459,17 +575,16 @@ describe('VnpayIpnService', () => {
       where: { id: 6 },
       data: expect.objectContaining({ status: OrderStatus.PAID }),
     });
-    expect(transaction.refund.upsert).toHaveBeenCalledWith({
-      where: { paymentId: 6 },
-      create: expect.objectContaining({
+    expect(transaction.pointCompensation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
         paymentId: 6,
         amount: 172_800,
-        source: 'SYSTEM',
-        status: 'PENDING',
-        reason: expect.stringContaining('trùng'),
+        points: 1_728,
+        type: 'REFUND_CREDIT',
+        note: 'Hoàn giá trị đơn hàng #10',
       }),
-      update: {},
     });
+    expect(transaction.refund.upsert).not.toHaveBeenCalled();
     expect(inventory.deductForPaidOrder).not.toHaveBeenCalled();
     expect(loyalty.awardPointsForPaidOrder).not.toHaveBeenCalled();
   });

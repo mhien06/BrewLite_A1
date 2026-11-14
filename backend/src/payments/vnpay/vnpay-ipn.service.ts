@@ -3,6 +3,7 @@ import {
   ConflictException,
   Injectable,
   Logger,
+  Optional,
 } from '@nestjs/common';
 import {
   OrderStatus,
@@ -11,6 +12,7 @@ import {
 } from '../../generated/prisma/client.js';
 import { InventoryService } from '../../inventory/inventory.service.js';
 import { LoyaltyService } from '../../loyalty/loyalty.service.js';
+import { PointCompensationService } from '../../loyalty/point-compensation.service.js';
 import { OrderStateService } from '../../orders/order-state.service.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { getVnpayConfig } from './vnpay-config.js';
@@ -35,6 +37,8 @@ export class VnpayIpnService {
     private readonly orderState: OrderStateService,
     private readonly inventory: InventoryService,
     private readonly loyalty: LoyaltyService,
+    @Optional()
+    private readonly pointCompensation = new PointCompensationService(),
   ) {}
 
   /** QueryDR has a different signature format, but shares all settlement rules with IPN. */
@@ -49,7 +53,8 @@ export class VnpayIpnService {
       params.vnp_Command !== 'querydr' ||
       !expectedTxnRef ||
       params.vnp_TxnRef !== expectedTxnRef
-    ) return this.response('97', 'Invalid QueryDR response');
+    )
+      return this.response('97', 'Invalid QueryDR response');
 
     // A query error, pending/unknown status, or a refund is not payment evidence.
     // Leave PENDING so a later verified IPN/query can still settle the payment.
@@ -57,7 +62,8 @@ export class VnpayIpnService {
       params.vnp_ResponseCode !== '00' ||
       params.vnp_TransactionStatus !== '00' ||
       params.vnp_TransactionType !== '01'
-    ) return this.response('99', 'Unresolved QueryDR result');
+    )
+      return this.response('99', 'Unresolved QueryDR result');
 
     return this.prisma.$transaction(
       (tx) => this.processCallback(tx, params, expectedTxnRef),
@@ -123,7 +129,16 @@ export class VnpayIpnService {
       return this.response('04', 'Invalid Amount');
     }
 
-    if (payment.status !== OrderStatus.PENDING) {
+    const successful =
+      params.vnp_ResponseCode === '00' && params.vnp_TransactionStatus === '00';
+
+    // A verified success may arrive after a failed callback marked this
+    // Payment failed. Let reconciliation settle that late money, especially
+    // for a cancelled order; duplicate failure callbacks remain idempotent.
+    if (
+      payment.status !== OrderStatus.PENDING &&
+      !(payment.status === OrderStatus.PAYMENT_FAILED && successful)
+    ) {
       return this.response('02', 'Order already confirmed');
     }
 
@@ -138,9 +153,6 @@ export class VnpayIpnService {
     if (order.total !== payment.amount) {
       return this.response('04', 'Invalid Amount');
     }
-
-    const successful =
-      params.vnp_ResponseCode === '00' && params.vnp_TransactionStatus === '00';
 
     if (
       successful &&
@@ -336,10 +348,13 @@ export class VnpayIpnService {
     tx: Prisma.TransactionClient,
     id: number,
     params: VnpayParams,
-    refundReason?: string,
+    compensationNote?: string,
   ) {
     const now = new Date();
-    const payment = await tx.payment.findUnique({ where: { id } });
+    const payment = await tx.payment.findUnique({
+      where: { id },
+      include: { refund: { select: { id: true, status: true } } },
+    });
     if (!payment) return;
     await tx.payment.update({
       where: { id },
@@ -349,21 +364,16 @@ export class VnpayIpnService {
         ...this.providerResult(params),
       },
     });
-    if (refundReason && payment.method === PaymentMethod.VNPAY) {
-      // The refund is a separate business record; Payment keeps only the
-      // original successful payment result and remains immutable for audit.
-      await tx.refund.upsert({
-        where: { paymentId: payment.id },
-        create: {
-          paymentId: payment.id,
-          orderId: payment.orderId,
-          amount: payment.amount,
-          reason: refundReason.slice(0, 500),
-          source: 'SYSTEM',
-          status: 'PENDING',
-          requestedAt: now,
-        },
-        update: {},
+    if (
+      compensationNote &&
+      payment.method === PaymentMethod.VNPAY &&
+      (!payment.refund || payment.refund.status === 'FAILED')
+    ) {
+      // Active/succeeded legacy refunds remain authoritative. A terminal
+      // failed cash refund may safely be converted to points.
+      await this.pointCompensation.creditPaidVnpayPayment(tx, {
+        ...payment,
+        status: OrderStatus.PAID,
       });
     }
   }

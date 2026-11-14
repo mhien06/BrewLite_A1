@@ -39,9 +39,11 @@ export class PaymentMaintenanceService
         this.logger.error('Chưa xử lý được đơn quá hạn; sẽ thử lại ở lượt tiếp theo.');
       }
       try {
+        // Only historical Refund rows are queued: the point-compensation
+        // cancellation flow never creates a new Refund record.
         await this.refunds.processRefunds();
       } catch {
-        this.logger.error('Chưa xử lý được hàng đợi hoàn tiền; sẽ thử lại ở lượt tiếp theo.');
+        this.logger.error('Chưa xử lý được hàng đợi Refund cũ; sẽ thử lại ở lượt tiếp theo.');
       }
       try {
         await this.reconciliation.reconcilePendingPayments();
