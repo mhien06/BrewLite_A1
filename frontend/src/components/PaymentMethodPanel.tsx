@@ -5,6 +5,7 @@ interface PaymentMethodPanelProps {
   method: PaymentMethod;
   subtotal?: number;
   discountAmount?: number;
+  loyaltyDiscountAmount?: number;
   total: number;
   isSubmitting: boolean;
   error: string;
@@ -28,6 +29,7 @@ export default function PaymentMethodPanel({
   method,
   subtotal,
   discountAmount = 0,
+  loyaltyDiscountAmount = 0,
   total,
   isSubmitting,
   error,
@@ -82,7 +84,7 @@ export default function PaymentMethodPanel({
         </div>
         <div className="flex justify-between gap-4">
           <dt className="text-[#9a7c6b]">Điểm</dt>
-          <dd className="font-extrabold text-[#40241b]">{formatPrice(0)}</dd>
+          <dd className="font-extrabold text-[#6f9b68]">{loyaltyDiscountAmount > 0 ? `-${formatPrice(loyaltyDiscountAmount)}` : formatPrice(0)}</dd>
         </div>
         <div className="flex justify-between gap-4">
           <dt className="font-extrabold text-[#40241b]">Tổng cộng</dt>

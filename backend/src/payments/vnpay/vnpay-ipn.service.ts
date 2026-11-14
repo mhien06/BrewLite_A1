@@ -14,6 +14,7 @@ import { LoyaltyService } from '../../loyalty/loyalty.service.js';
 import { OrderStateService } from '../../orders/order-state.service.js';
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { getVnpayConfig } from './vnpay-config.js';
+import { verifyVnpayQueryResponse } from './vnpay-transaction-signature.js';
 import {
   normalizeVnpayQuery,
   verifyVnpaySignature,
@@ -35,6 +36,34 @@ export class VnpayIpnService {
     private readonly inventory: InventoryService,
     private readonly loyalty: LoyaltyService,
   ) {}
+
+  /** QueryDR has a different signature format, but shares all settlement rules with IPN. */
+  async handleQueryResult(
+    params: VnpayParams,
+    expectedTxnRef: string,
+  ): Promise<VnpayIpnResponse> {
+    const config = getVnpayConfig();
+    if (
+      !verifyVnpayQueryResponse(params, config.hashSecret) ||
+      params.vnp_TmnCode !== config.tmnCode ||
+      params.vnp_Command !== 'querydr' ||
+      !expectedTxnRef ||
+      params.vnp_TxnRef !== expectedTxnRef
+    ) return this.response('97', 'Invalid QueryDR response');
+
+    // A query error, pending/unknown status, or a refund is not payment evidence.
+    // Leave PENDING so a later verified IPN/query can still settle the payment.
+    if (
+      params.vnp_ResponseCode !== '00' ||
+      params.vnp_TransactionStatus !== '00' ||
+      params.vnp_TransactionType !== '01'
+    ) return this.response('99', 'Unresolved QueryDR result');
+
+    return this.prisma.$transaction(
+      (tx) => this.processCallback(tx, params, expectedTxnRef),
+      { maxWait: 15_000, timeout: 20_000 },
+    );
+  }
 
   async handle(rawQuery: Record<string, unknown>): Promise<VnpayIpnResponse> {
     try {

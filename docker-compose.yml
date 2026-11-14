@@ -34,6 +34,7 @@ services:
       VNPAY_HASH_SECRET: ${VNPAY_HASH_SECRET:-}
       VNPAY_PAYMENT_URL: ${VNPAY_PAYMENT_URL:-https://sandbox.vnpayment.vn/paymentv2/vpcpay.html}
       VNPAY_API_URL: ${VNPAY_API_URL:-https://sandbox.vnpayment.vn/merchant_webapi/api/transaction}
+      VNPAY_SERVER_IP: ${VNPAY_SERVER_IP:-127.0.0.1}
       VNPAY_PAYMENT_EXPIRY_MINUTES: ${VNPAY_PAYMENT_EXPIRY_MINUTES:-15}
       VNPAY_RETURN_URL: ${VNPAY_RETURN_URL:-}
     ports:

@@ -16,6 +16,26 @@ import { formatVnpayDate } from './vnpay-url.js';
 
 const VNPAY_API_TIMEOUT_MS = 10_000;
 
+export class VnpayApiError extends BadGatewayException {
+  constructor(
+    readonly reason:
+      | 'NETWORK'
+      | 'TIMEOUT'
+      | 'HTTP_ERROR'
+      | 'INVALID_JSON'
+      | 'INVALID_RESPONSE'
+      | 'INVALID_SIGNATURE'
+      | 'MISMATCHED_RESPONSE',
+    readonly diagnostic?: {
+      signature: 'MISSING' | 'MALFORMED' | 'MISMATCH';
+      unverifiedResponseCode: string;
+      unverifiedMessage: string;
+    },
+  ) {
+    super(`VNPay API: ${reason}`);
+  }
+}
+
 export interface QueryVnpayTransactionInput {
   txnRef: string;
   transactionDate: Date;
@@ -71,14 +91,28 @@ export class VnpayTransactionApiService {
 
     const result = await this.post(config.apiUrl, params);
 
+    if (!verifyVnpayQueryResponse(result, config.hashSecret)) {
+      // Only bounded, non-sensitive metadata. An unsigned response code is
+      // diagnostic evidence, never authoritative payment/refund evidence.
+      throw new VnpayApiError('INVALID_SIGNATURE', {
+        signature: !result.vnp_SecureHash
+          ? 'MISSING'
+          : /^[0-9a-fA-F]{128}$/.test(result.vnp_SecureHash)
+            ? 'MISMATCH'
+            : 'MALFORMED',
+        unverifiedResponseCode: /^\d{2}$/.test(result.vnp_ResponseCode ?? '')
+          ? result.vnp_ResponseCode
+          : 'UNKNOWN',
+        unverifiedMessage: this.safeDiagnosticMessage(result.vnp_Message),
+      });
+    }
     if (
-      !verifyVnpayQueryResponse(result, config.hashSecret) ||
       result.vnp_Command !== 'querydr' ||
       result.vnp_TmnCode !== config.tmnCode ||
       result.vnp_TxnRef !== input.txnRef ||
       result.vnp_Amount !== String(input.expectedAmount * 100)
     ) {
-      throw new BadGatewayException('Phản hồi QueryDR từ VNPAY không hợp lệ.');
+      throw new VnpayApiError('MISMATCHED_RESPONSE');
     }
 
     return result;
@@ -149,12 +183,17 @@ export class VnpayTransactionApiService {
         body: JSON.stringify(params),
         signal: AbortSignal.timeout(VNPAY_API_TIMEOUT_MS),
       });
-    } catch {
-      throw new BadGatewayException('Không thể kết nối VNPAY.');
+    } catch (error) {
+      throw new VnpayApiError(
+        error instanceof Error &&
+          ['TimeoutError', 'AbortError'].includes(error.name)
+          ? 'TIMEOUT'
+          : 'NETWORK',
+      );
     }
 
     if (!response.ok) {
-      throw new BadGatewayException(`VNPAY trả HTTP ${response.status}.`);
+      throw new VnpayApiError('HTTP_ERROR');
     }
 
     let body: unknown;
@@ -162,13 +201,13 @@ export class VnpayTransactionApiService {
     try {
       body = await response.json();
     } catch {
-      throw new BadGatewayException('VNPAY trả dữ liệu không hợp lệ.');
+      throw new VnpayApiError('INVALID_JSON');
     }
 
     const normalized = this.normalizeResponse(body);
 
     if (!normalized) {
-      throw new BadGatewayException('VNPAY trả dữ liệu không hợp lệ.');
+      throw new VnpayApiError('INVALID_RESPONSE');
     }
 
     return normalized;
@@ -180,6 +219,15 @@ export class VnpayTransactionApiService {
     }
 
     return normalizeVnpayQuery(value as Record<string, unknown>);
+  }
+
+  private safeDiagnosticMessage(value: string | undefined): string {
+    if (!value) return 'MISSING';
+    const normalized = value
+      .replace(/[\r\n\t]+/g, ' ')
+      .trim()
+      .slice(0, 160);
+    return normalized || 'EMPTY';
   }
 
   private normalizeIpAddress(rawIpAddress: string): string {

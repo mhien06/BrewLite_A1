@@ -2,6 +2,9 @@ import {
   ArrayMinSize,
   IsArray,
   IsOptional,
+  IsInt,
+  Min,
+  Max,
   IsString,
   MaxLength,
   ValidateNested,
@@ -11,6 +14,13 @@ import { CreateOrderItemDto } from './create-order-item.dto.js';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateOrderDto {
+  @ApiPropertyOptional({ minimum: 0, maximum: 1000000, default: 0 })
+  @IsOptional()
+  @IsInt({ message: 'Số điểm sử dụng phải là số nguyên.' })
+  @Min(0, { message: 'Số điểm sử dụng không được âm.' })
+  @Max(1000000, { message: 'Số điểm sử dụng vượt quá giới hạn.' })
+  loyaltyPointsToUse?: number;
+
   @ApiPropertyOptional({ maxLength: 50, example: 'SUMMER10' })
   @IsOptional()
   @IsString({ message: 'Mã khuyến mãi phải là chuỗi ký tự.' })

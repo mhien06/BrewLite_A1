@@ -7,6 +7,7 @@ import { PrismaService } from '../../prisma/prisma.service.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { VnpayIpnService } from './vnpay-ipn.service.js';
 import { signVnpayParams, type VnpayParams } from './vnpay-signature.js';
+import { signedQueryResult } from '../../../test/vnpay-query-fixture.js';
 
 describe('VnpayIpnService', () => {
   const transaction = {
@@ -120,6 +121,31 @@ describe('VnpayIpnService', () => {
     });
 
     expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('accepts QueryDR signatures and applies the same settlement rules', async () => {
+    const result = signedQueryResult({ vnp_Amount: '17280000' });
+    expect((await service.handleQueryResult(result, 'BLTEST123')).RspCode).toBe('00');
+    expect(inventory.deductForPaidOrder).toHaveBeenCalledTimes(1);
+    expect(loyalty.awardPointsForPaidOrder).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    { vnp_TmnCode: 'WRONG' }, { vnp_TxnRef: 'WRONG' }, { vnp_Command: 'refund' },
+    { vnp_ResponseCode: '99' }, { vnp_TransactionStatus: '01' }, { vnp_TransactionType: '02' },
+  ])('rejects untrusted or unresolved QueryDR before settlement: %j', async (overrides) => {
+    const result = signedQueryResult({ vnp_Amount: '17280000', ...overrides });
+    expect((await service.handleQueryResult(result, 'BLTEST123')).RspCode).not.toBe('00');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+  });
+
+  it('rejects a tampered QueryDR signature and a signed amount mismatch', async () => {
+    const result = signedQueryResult({ vnp_Amount: '17280000' });
+    result.vnp_SecureHash = '0'.repeat(128);
+    expect((await service.handleQueryResult(result, 'BLTEST123')).RspCode).toBe('97');
+    expect(prisma.$transaction).not.toHaveBeenCalled();
+    expect((await service.handleQueryResult(signedQueryResult(), 'BLTEST123')).RspCode).toBe('04');
+    expect(transaction.payment.update).not.toHaveBeenCalled();
   });
 
   it('returns 01 when the transaction reference does not exist', async () => {

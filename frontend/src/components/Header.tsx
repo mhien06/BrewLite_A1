@@ -52,6 +52,12 @@ export default function Header() {
           </div>
         </Link>
 
+        <nav className="hidden items-center gap-1 rounded-full border border-amber-900/10 bg-white/70 p-1 lg:flex" aria-label="Điều hướng chính">
+          <Link href="/" className="rounded-full px-4 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100">Thực đơn</Link>
+          <Link href="/orders" className="rounded-full px-4 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100">Đơn của tôi</Link>
+          <Link href="/checkout" className="rounded-full px-4 py-2 text-sm font-bold text-amber-950 transition hover:bg-amber-100">Thanh toán</Link>
+        </nav>
+
         <div className="flex items-center gap-2 sm:gap-3">
           {isAuthenticated && user ? (
             <div className="flex items-center gap-2">

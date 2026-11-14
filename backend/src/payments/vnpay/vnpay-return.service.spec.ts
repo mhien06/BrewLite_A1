@@ -1,6 +1,7 @@
 import { PrismaService } from '../../prisma/prisma.service.js';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { VnpayReturnService } from './vnpay-return.service.js';
+import { VnpayIpnService } from './vnpay-ipn.service.js';
 import { signVnpayParams, type VnpayParams } from './vnpay-signature.js';
 
 describe('VnpayReturnService', () => {
@@ -8,6 +9,9 @@ describe('VnpayReturnService', () => {
     payment: {
       findUnique: vi.fn(),
     },
+  };
+  const ipn = {
+    handle: vi.fn(),
   };
 
   let service: VnpayReturnService;
@@ -42,8 +46,12 @@ describe('VnpayReturnService', () => {
       orderId: 10,
       amount: 172_800,
     });
+    ipn.handle.mockResolvedValue({ RspCode: '00', Message: 'Confirm Success' });
 
-    service = new VnpayReturnService(prisma as unknown as PrismaService);
+    service = new VnpayReturnService(
+      prisma as unknown as PrismaService,
+      ipn as unknown as VnpayIpnService,
+    );
   });
 
   it('redirects a valid response with the related order ID', async () => {
@@ -54,6 +62,7 @@ describe('VnpayReturnService', () => {
     expect(result.searchParams.get('valid')).toBe('true');
     expect(result.searchParams.get('orderId')).toBe('10');
     expect(result.searchParams.get('txnRef')).toBe('BLRETURN123');
+    expect(ipn.handle).toHaveBeenCalledOnce();
   });
 
   it('rejects a modified response without querying the database', async () => {
@@ -64,6 +73,7 @@ describe('VnpayReturnService', () => {
 
     expect(result.searchParams.get('valid')).toBe('false');
     expect(prisma.payment.findUnique).not.toHaveBeenCalled();
+    expect(ipn.handle).not.toHaveBeenCalled();
   });
 
   it('rejects a signed response when the amount differs from the database', async () => {
@@ -75,10 +85,21 @@ describe('VnpayReturnService', () => {
 
     expect(result.searchParams.get('valid')).toBe('false');
     expect(result.searchParams.has('orderId')).toBe(false);
+    expect(ipn.handle).not.toHaveBeenCalled();
   });
 
   it('does not expose an unknown transaction reference', async () => {
     prisma.payment.findUnique.mockResolvedValue(null);
+
+    const result = new URL(await service.buildFrontendRedirect(signedQuery()));
+
+    expect(result.searchParams.get('valid')).toBe('false');
+    expect(result.searchParams.has('orderId')).toBe(false);
+    expect(ipn.handle).not.toHaveBeenCalled();
+  });
+
+  it('rejects a callback that the shared settlement path cannot accept', async () => {
+    ipn.handle.mockResolvedValue({ RspCode: '99', Message: 'Unknown error' });
 
     const result = new URL(await service.buildFrontendRedirect(signedQuery()));
 

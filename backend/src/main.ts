@@ -70,8 +70,18 @@ async function bootstrap() {
   );
 
   // CORS configuration
+  const allowedOrigins = new Set([
+    process.env.FRONTEND_URL ?? 'http://localhost:3000',
+    'http://localhost:3004',
+  ]);
   app.enableCors({
-    origin: process.env.FRONTEND_URL ?? 'http://localhost:3000',
+    origin(
+      origin: string | undefined,
+      callback: (error: Error | null, allow?: boolean) => void,
+    ) {
+      // Requests without Origin are server-to-server/health checks.
+      callback(null, !origin || allowedOrigins.has(origin));
+    },
   });
 
   // Swagger configuration
