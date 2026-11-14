@@ -76,6 +76,9 @@ model Order {
   promotionCode      String?
   subtotal           Int                 @default(0)
   discountAmount     Int                 @default(0)
+  loyaltyPointsUsed  Int                 @default(0)
+  loyaltyDiscountAmount Int              @default(0)
+  loyaltyPointsRestored Boolean           @default(false)
   total              Int
   inventoryDeducted  Boolean             @default(false)
   inventorySnapshot  Json?

@@ -10,6 +10,7 @@ export interface CreateOrderItemRequest {
 export interface CreateOrderRequest {
   items: CreateOrderItemRequest[];
   promotionCode?: string;
+  loyaltyPointsToUse?: number;
 }
 
 export interface OrderResponse {
@@ -19,6 +20,8 @@ export interface OrderResponse {
   promotionCode?: string | null;
   subtotal?: number;
   discountAmount?: number;
+  loyaltyPointsUsed?: number;
+  loyaltyDiscountAmount?: number;
   total: number;
   createdAt: string;
 }

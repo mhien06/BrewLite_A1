@@ -21,6 +21,8 @@ const TOPPING_PRICE: Record<string, number> = {
   jelly: 7_000,
 };
 
+const VND_PER_REDEEMED_POINT = 100;
+
 @Injectable()
 export class OrdersService {
   constructor(
@@ -91,7 +93,28 @@ export class OrdersService {
           )
         : null;
       const discountAmount = promotion?.discountAmount ?? 0;
-      const total = subtotal - discountAmount;
+      const afterPromotion = subtotal - discountAmount;
+      const loyaltyPointsUsed = dto.loyaltyPointsToUse ?? 0;
+      const maxUsablePoints = Math.floor(
+        afterPromotion / VND_PER_REDEEMED_POINT,
+      );
+      if (loyaltyPointsUsed > maxUsablePoints) {
+        throw new BadRequestException(
+          `Đơn hàng chỉ có thể dùng tối đa ${maxUsablePoints} điểm.`,
+        );
+      }
+      if (loyaltyPointsUsed > 0) {
+        const reserved = await transaction.user.updateMany({
+          where: { id: userId, loyaltyPoints: { gte: loyaltyPointsUsed } },
+          data: { loyaltyPoints: { decrement: loyaltyPointsUsed } },
+        });
+        if (!reserved.count) {
+          throw new BadRequestException('Bạn không có đủ điểm để sử dụng.');
+        }
+      }
+      const loyaltyDiscountAmount =
+        loyaltyPointsUsed * VND_PER_REDEEMED_POINT;
+      const total = afterPromotion - loyaltyDiscountAmount;
 
       return transaction.order.create({
         data: {
@@ -100,6 +123,8 @@ export class OrdersService {
           promotionCode: promotion?.code ?? null,
           subtotal,
           discountAmount,
+          loyaltyPointsUsed,
+          loyaltyDiscountAmount,
           total,
           items: { create: orderItems },
         },
@@ -110,6 +135,8 @@ export class OrdersService {
           promotionCode: true,
           subtotal: true,
           discountAmount: true,
+          loyaltyPointsUsed: true,
+          loyaltyDiscountAmount: true,
           total: true,
           createdAt: true,
           items: {
@@ -160,6 +187,8 @@ export class OrdersService {
         paymentMethod: true,
         paidAt: true,
         total: true,
+        loyaltyPointsUsed: true,
+        loyaltyDiscountAmount: true,
         createdAt: true,
         items: {
           select: {
@@ -220,6 +249,8 @@ export class OrdersService {
         paymentMethod: true,
         paidAt: true,
         total: true,
+        loyaltyPointsUsed: true,
+        loyaltyDiscountAmount: true,
         createdAt: true,
         items: {
           select: {

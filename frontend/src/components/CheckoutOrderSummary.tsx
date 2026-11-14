@@ -7,6 +7,9 @@ interface CheckoutOrderSummaryProps {
   promotionCode?: string;
   disabled?: boolean;
   onPromotionCodeChange?: (code: string) => void;
+  pointsToUse?: number;
+  maxPointsToUse?: number;
+  onPointsToUseChange?: (points: number) => void;
 }
 
 const formatPrice = (price: number) =>
@@ -21,6 +24,9 @@ export default function CheckoutOrderSummary({
   promotionCode = '',
   disabled = false,
   onPromotionCodeChange,
+  pointsToUse = 0,
+  maxPointsToUse = 0,
+  onPointsToUseChange,
 }: CheckoutOrderSummaryProps) {
   return (
     <section className="rounded-[22px] border border-[#ead8c7] bg-white p-5 sm:p-6">
@@ -85,6 +91,18 @@ export default function CheckoutOrderSummary({
         <p className="mt-2 text-xs text-[#9a7c6b]">
           Mỗi 10.000đ thanh toán thành công sẽ tích lũy thêm 1 điểm thưởng.
         </p>
+        <div className="mt-4 flex items-center gap-3">
+          <button type="button" disabled={disabled || pointsToUse <= 0} onClick={() => onPointsToUseChange?.(Math.max(0, pointsToUse - 1))} className="h-10 w-10 rounded-full border border-[#ead8c7] bg-white font-extrabold disabled:opacity-40">−</button>
+          <label className="min-w-0 flex-1 text-xs font-bold text-[#492214]">
+            Điểm muốn dùng
+            <input type="number" min={0} max={maxPointsToUse} value={pointsToUse} disabled={disabled} onChange={(event) => onPointsToUseChange?.(Math.min(maxPointsToUse, Math.max(0, Number.parseInt(event.target.value || '0', 10) || 0)))} className="mt-2 w-full rounded-xl border border-[#ead8c7] bg-white px-4 py-3 text-center text-base font-extrabold text-[#40241b] focus:border-[#f6a14a] focus:outline-none" />
+          </label>
+          <button type="button" disabled={disabled || pointsToUse >= maxPointsToUse} onClick={() => onPointsToUseChange?.(Math.min(maxPointsToUse, pointsToUse + 1))} className="h-10 w-10 rounded-full border border-[#ead8c7] bg-white font-extrabold disabled:opacity-40">+</button>
+        </div>
+        <div className="mt-3 flex items-center justify-between text-xs">
+          <span className="text-[#9a7c6b]">1 điểm = 100đ</span>
+          <button type="button" disabled={disabled || maxPointsToUse === 0} onClick={() => onPointsToUseChange?.(maxPointsToUse)} className="font-extrabold text-[#b85f24] disabled:opacity-40">Dùng tối đa</button>
+        </div>
       </div>
     </section>
   );

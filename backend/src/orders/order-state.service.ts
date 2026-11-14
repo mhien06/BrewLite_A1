@@ -107,6 +107,28 @@ export class OrderStateService {
     // Payment giữ kết quả gốc cho idempotency; hủy đơn không khẳng định đã hoàn tiền.
   }
 
+  private async restoreRedeemedPoints(
+    tx: Prisma.TransactionClient,
+    order: Prisma.OrderGetPayload<object>,
+  ) {
+    if (
+      !Number.isSafeInteger(order.loyaltyPointsUsed) ||
+      order.loyaltyPointsUsed <= 0 ||
+      order.loyaltyPointsRestored
+    )
+      return;
+    const restored = await tx.order.updateMany({
+      where: { id: order.id, loyaltyPointsRestored: false },
+      data: { loyaltyPointsRestored: true },
+    });
+    if (restored.count) {
+      await tx.user.update({
+        where: { id: order.userId },
+        data: { loyaltyPoints: { increment: order.loyaltyPointsUsed } },
+      });
+    }
+  }
+
   async transition(
     orderId: number,
     to: OrderStatus,
@@ -155,6 +177,9 @@ export class OrderStateService {
     }
 
     this.assertTransition(order.status, to);
+    if (to === OrderStatus.CANCELLED) {
+      await this.restoreRedeemedPoints(db, order);
+    }
     if (to === OrderStatus.CANCELLED && order.status === OrderStatus.PAID) {
       await this.restorePaidOrder(db, order, actorId ?? order.userId);
       if (order.paymentMethod === 'VNPAY') {

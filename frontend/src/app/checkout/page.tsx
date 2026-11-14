@@ -86,6 +86,7 @@ export default function CheckoutPage() {
   const [promotionCode, setPromotionCode] = useState(
     retrySession?.promotionCode ?? "",
   );
+  const [pointsToUse, setPointsToUse] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [paymentFailed, setPaymentFailed] = useState(false);
   const [paymentSuccess, setPaymentSuccess] = useState<PaymentResponse | null>(
@@ -104,7 +105,7 @@ export default function CheckoutPage() {
     () => createCartFingerprint(items),
     [items],
   );
-  const cartFingerprint = useMemo(
+  const promotionFingerprint = useMemo(
     () =>
       normalizedPromo
         ? `${baseCartFingerprint}|promo:${normalizedPromo}`
@@ -115,6 +116,16 @@ export default function CheckoutPage() {
   const previewDiscount = useMemo(
     () => calculatePreviewDiscount(promotionCode, totalPrice),
     [promotionCode, totalPrice],
+  );
+  const maxPointsToUse = Math.min(
+    user?.loyaltyPoints ?? 0,
+    Math.floor(Math.max(0, totalPrice - previewDiscount) / 100),
+  );
+  const safePointsToUse = Math.min(pointsToUse, maxPointsToUse);
+  const loyaltyDiscountAmount = safePointsToUse * 100;
+  const cartFingerprint = useMemo(
+    () => `${promotionFingerprint}|points:${safePointsToUse}`,
+    [promotionFingerprint, safePointsToUse],
   );
 
   const isPendingOrderCurrent =
@@ -130,7 +141,7 @@ export default function CheckoutPage() {
   const displayTotal =
     isPendingOrderCurrent && serverTotal !== null
       ? serverTotal
-      : Math.max(0, totalPrice - previewDiscount);
+      : Math.max(0, totalPrice - previewDiscount - loyaltyDiscountAmount);
 
   const handlePayment = async (simulateSuccess: boolean) => {
     if (submittingRef.current) return;
@@ -199,6 +210,9 @@ export default function CheckoutPage() {
             toppings: item.toppings.map((topping) => topping.id),
           })),
           ...(trimmedPromo ? { promotionCode: trimmedPromo } : {}),
+          ...(safePointsToUse > 0
+            ? { loyaltyPointsToUse: safePointsToUse }
+            : {}),
         });
 
         if (!isCurrentSubmission()) return;
@@ -394,12 +408,19 @@ export default function CheckoutPage() {
             setPromotionCode(nextCode);
             setError("");
           }}
+          pointsToUse={safePointsToUse}
+          maxPointsToUse={maxPointsToUse}
+          onPointsToUseChange={(points) => {
+            setPointsToUse(points);
+            setError("");
+          }}
         />
 
         <PaymentMethodPanel
           method={method}
           subtotal={totalPrice}
           discountAmount={displayDiscount}
+          loyaltyDiscountAmount={loyaltyDiscountAmount}
           total={displayTotal}
           isSubmitting={isSubmitting}
           error={error}
